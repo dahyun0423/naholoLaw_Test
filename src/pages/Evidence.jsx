@@ -1,0 +1,510 @@
+import { useState } from 'react'
+import { Card, Badge, Button, Progress, Field, Input, cx } from '../components/ui.jsx'
+import Modal from '../components/Modal.jsx'
+import {
+  evidenceList, evidenceAi, activeCase, courtUrl,
+  evidenceFolders, evidenceStorage, evidenceRecent, evidenceTips,
+} from '../data/mock.js'
+import {
+  Upload, Folder, FileText, Image, AlertTriangle, Sparkles, Check, Plus, Eye,
+  ArrowLeft, ExternalLink,
+} from '../components/icons.jsx'
+
+const statusTone = { 제출완료: 'green', 제출예정: 'blue', 보완필요: 'amber', 미제출: 'gray', 대기중: 'gray', 검토중: 'blue' }
+const today = new Date().toISOString().slice(0, 10)
+const isImage = (name = '') => /\.(jpg|jpeg|png|gif|webp)$/i.test(name)
+
+/* 다운로드/삭제 액션 아이콘 (인라인 SVG) */
+const Download = ({ size = 18, className = '' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M12 3v12" /><path d="m7 11 5 5 5-5" /><path d="M5 21h14" />
+  </svg>
+)
+const Trash = ({ size = 18, className = '' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M4 7h16" /><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /><path d="M6 7v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7" /><path d="M10 11v6M14 11v6" />
+  </svg>
+)
+
+/* ── 폴더 카드 (호버 시 카테고리·용량·파일 수 오버레이) ── */
+function FolderTile({ folder, onClick }) {
+  const active = folder.tone === 'blue'
+  return (
+    <button
+      onClick={onClick}
+      className={cx(
+        'group relative h-[232px] w-full overflow-hidden rounded-[22px] border-2 bg-gradient-to-b p-5 text-left transition hover:-translate-y-0.5 hover:shadow-lg',
+        active ? 'border-transparent from-[#537edc] to-[#3677ff]' : 'border-ink-200/70 from-[#eef0f3] to-[#dfe3e9]',
+      )}
+    >
+      {/* 폴더 + 겹쳐진 서류 그래픽 */}
+      <div className="pointer-events-none absolute inset-x-5 top-5 h-[120px]">
+        <div className="absolute left-3 right-9 top-2 h-[92px] -rotate-6 rounded-lg bg-white/70 shadow-sm" />
+        <div className="absolute left-9 right-3 top-1 h-[92px] rotate-3 rounded-lg bg-white/90 shadow-sm" />
+        <div className={cx('absolute inset-x-0 bottom-0 grid h-[74px] place-items-center rounded-xl', active ? 'bg-white/25' : 'bg-white/55')}>
+          <Folder size={40} className={active ? 'text-white' : 'text-ink-300'} />
+        </div>
+      </div>
+      <div className="absolute inset-x-5 bottom-5">
+        <p className={cx('text-lg font-bold', active ? 'text-white' : 'text-ink-900')}>{folder.name}</p>
+        <p className={cx('mt-0.5 text-sm font-medium', active ? 'text-white/85' : 'text-ink-500')}>{folder.files.length} 파일</p>
+        <p className={cx('mt-2 text-xs font-medium', active ? 'text-white/70' : 'text-ink-400')}>{folder.size}</p>
+      </div>
+
+      {/* 호버 오버레이 */}
+      <div className="absolute inset-0 flex flex-col justify-end gap-1.5 bg-gradient-to-t from-ink-900/80 via-ink-900/35 to-transparent p-5 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+        <span className="inline-flex w-fit rounded-full bg-white/20 px-2.5 py-0.5 text-[11px] font-semibold text-white backdrop-blur">증빙 카테고리</span>
+        <p className="text-base font-bold text-white">{folder.name}</p>
+        <div className="flex items-center gap-1.5 text-xs font-medium text-white/90">
+          <Folder size={13} /> {folder.files.length}개 파일
+          <span className="text-white/50">·</span> {folder.size}
+        </div>
+        <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-white/75">클릭하여 폴더 열기 →</p>
+      </div>
+    </button>
+  )
+}
+
+/* ── 저장공간 카드 ── */
+function StorageCard({ totalFiles, submitted }) {
+  const usedPct = Math.round((evidenceStorage.used / evidenceStorage.total) * 100)
+  return (
+    <Card className="p-6">
+      <h3 className="text-[17px] font-bold text-ink-900">저장공간</h3>
+      <div className="mt-4 flex items-end justify-between">
+        <span className="text-3xl font-bold text-ink-900">{evidenceStorage.used} GB</span>
+        <span className="text-sm text-ink-500">/ {evidenceStorage.total} GB</span>
+      </div>
+      <div className="mt-2"><Progress value={usedPct} /></div>
+      <div className="mt-4 space-y-2 text-sm">
+        <div className="flex items-center justify-between"><span className="text-ink-500">총 파일</span><span className="font-semibold text-ink-900">{totalFiles}개</span></div>
+        <div className="flex items-center justify-between"><span className="text-ink-500">제출 완료</span><span className="font-semibold text-emerald-600">{submitted}개</span></div>
+      </div>
+    </Card>
+  )
+}
+
+/* ── 최근 활동 카드 ── */
+function RecentCard() {
+  return (
+    <Card className="p-6">
+      <h3 className="text-[17px] font-bold text-ink-900">최근 활동</h3>
+      <ul className="mt-4 space-y-3">
+        {evidenceRecent.map((r, i) => {
+          const Icon = r.kind === 'img' ? Image : FileText
+          return (
+            <li key={i} className="flex items-center gap-3">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-ink-100 text-ink-500"><Icon size={16} /></span>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-ink-900">{r.name}</p>
+                <p className="text-xs text-ink-400">{r.date}</p>
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+    </Card>
+  )
+}
+
+/* ── Properties 카드 (폴더 상세) ── */
+function PropertiesCard({ folder }) {
+  return (
+    <Card className="p-6">
+      <h3 className="text-[17px] font-bold text-ink-900">Properties</h3>
+      <dl className="mt-4 space-y-3 text-sm">
+        <div><dt className="text-ink-400">Type</dt><dd className="mt-0.5 font-semibold text-ink-900">{folder.name}</dd></div>
+        <div><dt className="text-ink-400">Size</dt><dd className="mt-0.5 font-semibold text-ink-900">{folder.size}</dd></div>
+        <div><dt className="text-ink-400">Files</dt><dd className="mt-0.5 font-semibold text-ink-900">{folder.files.length} items</dd></div>
+        <div>
+          <dt className="text-ink-400">Tags</dt>
+          <dd className="mt-1 flex flex-wrap gap-1.5">{folder.tags.map((t) => <Badge key={t} tone="blue">{t}</Badge>)}</dd>
+        </div>
+      </dl>
+    </Card>
+  )
+}
+
+export default function Evidence() {
+  const [view, setView] = useState('list') // 'list' | 'folder'
+  const [list, setList] = useState(evidenceList)
+  const [folders, setFolders] = useState(evidenceFolders)
+  const [openKey, setOpenKey] = useState(null) // 열린 폴더 key
+
+  const [toast, setToast] = useState('')
+  const flash = (m) => { setToast(m); setTimeout(() => setToast(''), 1800) }
+
+  // 모달 상태
+  const [submitTarget, setSubmitTarget] = useState(null)
+  const [editTarget, setEditTarget] = useState(null)
+  const [editForm, setEditForm] = useState({ file: '', purpose: '' })
+  const [preview, setPreview] = useState(null) // { title, file, size, status }
+  const [newFolderOpen, setNewFolderOpen] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
+  const [uploadOpen, setUploadOpen] = useState(false)
+
+  const openFolder = folders.find((f) => f.key === openKey) || null
+  const submitted = list.filter((e) => e.status === '제출완료').length
+  const rate = Math.round((submitted / list.length) * 100)
+  const notSubmitted = list.filter((e) => e.status === '미제출').length
+  const totalFiles = folders.reduce((s, f) => s + f.files.length, 0)
+
+  // 액션
+  const openEdit = (e) => { setEditTarget(e); setEditForm({ file: e.file, purpose: e.purpose }) }
+
+  const doSubmit = () => {
+    // 대한민국 법원 전자소송 사이트로 연동 (새 창)
+    window.open(courtUrl, '_blank', 'noopener,noreferrer')
+    setList((prev) => prev.map((e) =>
+      e.no === submitTarget.no ? { ...e, status: '제출완료', tone: 'green', dateLabel: '제출일', date: today } : e))
+    flash('전자소송 사이트로 이동했습니다 · 제출완료 처리')
+    setSubmitTarget(null)
+  }
+  const saveEdit = () => {
+    setList((prev) => prev.map((e) =>
+      e.no === editTarget.no ? { ...e, file: editForm.file, purpose: editForm.purpose } : e))
+    flash(`${editTarget.code} 정보를 수정했습니다`)
+    setEditTarget(null)
+  }
+  const addFolder = () => {
+    const name = newFolderName.trim()
+    if (!name) return
+    setFolders((prev) => [...prev, { key: `f${Date.now()}`, name, size: '0 MB', tone: 'slate', tags: [], files: [] }])
+    flash(`'${name}' 폴더를 만들었습니다`)
+    setNewFolderName('')
+    setNewFolderOpen(false)
+  }
+  const deleteFile = (folderKey, idx) => {
+    setFolders((prev) => prev.map((f) =>
+      f.key === folderKey ? { ...f, files: f.files.filter((_, i) => i !== idx) } : f))
+    flash('파일을 삭제했습니다')
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* 헤더 */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-ink-900">증빙 자료</h1>
+          <p className="mt-1 text-sm text-ink-500">소송에 필요한 증거자료를 체계적으로 관리하세요.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex rounded-xl border border-ink-200 bg-white p-1">
+            <button onClick={() => { setView('list') }}
+              className={cx('rounded-lg px-3.5 py-1.5 text-sm font-medium transition', view === 'list' ? 'bg-brand-300 text-white shadow-sm' : 'text-ink-500 hover:text-ink-700')}>법률 증거 관리</button>
+            <button onClick={() => { setView('folder'); setOpenKey(null) }}
+              className={cx('rounded-lg px-3.5 py-1.5 text-sm font-medium transition', view === 'folder' ? 'bg-brand-300 text-white shadow-sm' : 'text-ink-500 hover:text-ink-700')}>폴더 보기</button>
+          </div>
+          <Button size="sm" onClick={() => setUploadOpen(true)}><Upload size={15} /> 파일 업로드</Button>
+        </div>
+      </div>
+
+      {/* ─────────── 법률 증거 관리 뷰 ─────────── */}
+      {view === 'list' && (
+        <>
+          <Card className="flex flex-wrap items-center justify-between gap-3 border-brand-200 bg-brand-50/50 p-4">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+              <span className="font-bold text-ink-800">{activeCase.id} {activeCase.title}</span>
+              <span className="text-ink-500">증거 {list.length}개</span>
+              <span className="text-ink-500">제출률 {rate}%</span>
+              <span className="font-semibold text-amber-500">미제출 {notSubmitted}개</span>
+            </div>
+            <Button variant="neutral" size="sm">내 사건 보기</Button>
+          </Card>
+
+          <Card className="border-amber-200 bg-amber-50/60 p-5">
+            <div className="flex items-center gap-2 text-amber-700"><Sparkles size={16} /><h3 className="text-sm font-bold">AI 제안 사항</h3></div>
+            <ol className="mt-3 space-y-2">
+              {evidenceAi.map((t, i) => (
+                <li key={i} className="flex gap-2 text-[13px] leading-relaxed text-amber-800">
+                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-amber-200/70 text-[11px] font-bold text-amber-700">{i + 1}</span>{t}
+                </li>
+              ))}
+            </ol>
+          </Card>
+
+          <div className="space-y-3">
+            {list.map((e) => {
+              const Icon = isImage(e.file) ? Image : FileText
+              return (
+                <Card key={e.no} className="p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex gap-3">
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-sm font-bold text-brand-500">{e.no}</span>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-bold text-ink-900">{e.code}</span>
+                          <Badge tone={statusTone[e.status]}>{e.status}</Badge>
+                        </div>
+                        <p className="mt-0.5 flex items-center gap-1.5 text-sm text-ink-600"><Icon size={14} className="text-ink-400" /> {e.file}</p>
+                      </div>
+                    </div>
+                    <div className="text-right text-xs text-ink-400">
+                      <p className={cx(e.dateLabel === '기한' && 'font-semibold text-red-400')}>{e.dateLabel}: {e.date}</p>
+                      <p>{e.size}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 rounded-xl bg-ink-50 px-3.5 py-2.5">
+                    <p className="text-xs text-ink-400">입증 취지</p>
+                    <p className="text-[13px] text-ink-700">{e.purpose}</p>
+                  </div>
+
+                  {e.warn && (
+                    <div className="mt-2 flex items-start gap-2 rounded-xl bg-red-50 px-3.5 py-2.5 text-xs leading-relaxed text-red-500">
+                      <AlertTriangle size={14} className="mt-0.5 shrink-0" /><span><b>보안 사항</b> — {e.warn}</span>
+                    </div>
+                  )}
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {e.status !== '제출완료'
+                      ? <Button size="sm" onClick={() => setSubmitTarget(e)}><Upload size={14} /> 제출하기</Button>
+                      : <Button size="sm" variant="soft"><Check size={14} /> 제출완료</Button>}
+                    <Button size="sm" variant="neutral" onClick={() => openEdit(e)}>수정</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setPreview({ title: e.code, file: e.file, size: e.size, status: e.status })}><Eye size={14} /> 미리보기</Button>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+        </>
+      )}
+
+      {/* ─────────── 폴더 보기 뷰 ─────────── */}
+      {view === 'folder' && (
+        <>
+          <div className="flex flex-col gap-6 lg:flex-row">
+            <div className="flex-1">
+              {!openFolder ? (
+                /* 폴더 그리드 */
+                <>
+                  <div className="mb-5 flex items-center justify-between">
+                    <h2 className="text-xl font-bold text-ink-900">폴더</h2>
+                    <Button size="sm" variant="neutral" onClick={() => setNewFolderOpen(true)}><Plus size={15} /> 새 폴더</Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-5 xl:grid-cols-3">
+                    {folders.map((f) => <FolderTile key={f.key} folder={f} onClick={() => setOpenKey(f.key)} />)}
+                  </div>
+                </>
+              ) : (
+                /* 폴더 상세 */
+                <div className="space-y-5">
+                  <button onClick={() => setOpenKey(null)} className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-500 hover:text-brand-600">
+                    <ArrowLeft size={16} /> 폴더로 돌아가기
+                  </button>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="text-xl font-bold text-ink-900">
+                      {openFolder.name} <span className="text-sm font-medium text-ink-400">({openFolder.files.length}개 파일)</span>
+                    </h2>
+                    <Button size="sm" onClick={() => flash('파일을 일괄 다운로드합니다 (데모)')}><Download size={15} /> 일괄 다운로드</Button>
+                  </div>
+
+                  <Card className="overflow-hidden">
+                    <div className="grid grid-cols-[1fr_88px_120px_96px_104px] items-center gap-2 border-b border-ink-100 px-5 py-3 text-xs font-semibold text-ink-400">
+                      <span>이름</span><span>크기</span><span>업로드 날짜</span><span>상태</span><span className="text-right">관리</span>
+                    </div>
+                    {openFolder.files.length === 0 ? (
+                      <p className="py-10 text-center text-sm text-ink-400">아직 파일이 없습니다.</p>
+                    ) : openFolder.files.map((f, i) => {
+                      const Icon = isImage(f.name) ? Image : FileText
+                      return (
+                        <div key={i} className="grid grid-cols-[1fr_88px_120px_96px_104px] items-center gap-2 border-b border-ink-50 px-5 py-3.5 last:border-0 hover:bg-ink-50/60">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-ink-100 text-ink-500"><Icon size={17} /></span>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-ink-900">{f.name}</p>
+                              <p className="truncate text-xs text-ink-400">{f.desc}</p>
+                            </div>
+                          </div>
+                          <span className="text-sm text-ink-600">{f.size}</span>
+                          <span className="text-sm text-ink-600">{f.date}</span>
+                          <span>
+                            {f.status === '제출완료'
+                              ? <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600"><Check size={13} /> {f.status}</span>
+                              : <span className="text-xs font-medium text-ink-400">{f.status}</span>}
+                          </span>
+                          <div className="flex items-center justify-end gap-1 text-ink-400">
+                            <button onClick={() => setPreview({ title: f.name, file: f.name, size: f.size, status: f.status })} className="rounded-lg p-1.5 hover:bg-ink-100 hover:text-ink-700" title="미리보기"><Eye size={17} /></button>
+                            <button onClick={() => flash(`${f.name} 다운로드 (데모)`)} className="rounded-lg p-1.5 hover:bg-ink-100 hover:text-ink-700" title="다운로드"><Download size={17} /></button>
+                            <button onClick={() => deleteFile(openFolder.key, i)} className="rounded-lg p-1.5 hover:bg-red-50 hover:text-red-500" title="삭제"><Trash size={17} /></button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </Card>
+
+                  <Card className="p-5">
+                    <h3 className="text-sm font-bold text-ink-900">폴더 태그</h3>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {openFolder.tags.length ? openFolder.tags.map((t) => <Badge key={t} tone="blue">{t}</Badge>) : <span className="text-sm text-ink-400">태그가 없습니다.</span>}
+                    </div>
+                  </Card>
+                </div>
+              )}
+            </div>
+
+            {/* 사이드 */}
+            <div className="w-full space-y-6 lg:w-80 lg:shrink-0">
+              <StorageCard totalFiles={totalFiles} submitted={submitted} />
+              {openFolder && <PropertiesCard folder={openFolder} />}
+              <RecentCard />
+            </div>
+          </div>
+
+          {!openFolder && (
+            <Card className="p-6">
+              <h3 className="text-[17px] font-bold text-ink-900">💡 증빙자료 관리 팁</h3>
+              <ul className="mt-3 space-y-2">
+                {evidenceTips.map((t, i) => (
+                  <li key={i} className="flex gap-2 text-[15px] text-ink-600"><span className="text-ink-400">•</span>{t}</li>
+                ))}
+              </ul>
+            </Card>
+          )}
+        </>
+      )}
+
+      {/* ───────── 모달: 제출하기 (법원 연동) ───────── */}
+      <Modal
+        open={!!submitTarget}
+        onClose={() => setSubmitTarget(null)}
+        title="법원에 증거 제출"
+        sub={submitTarget ? `${submitTarget.code} · ${activeCase.court}` : ''}
+        footer={(
+          <>
+            <Button variant="neutral" size="sm" onClick={() => setSubmitTarget(null)}>취소</Button>
+            <Button size="sm" onClick={doSubmit}><ExternalLink size={14} /> 전자소송으로 제출</Button>
+          </>
+        )}
+      >
+        {submitTarget && (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-ink-200 bg-ink-50 px-4 py-3">
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-ink-900">
+                {isImage(submitTarget.file) ? <Image size={15} className="text-ink-400" /> : <FileText size={15} className="text-ink-400" />}
+                {submitTarget.file}
+              </p>
+              <p className="mt-1 text-xs text-ink-500">{submitTarget.size} · {activeCase.id}</p>
+            </div>
+            <div className="rounded-xl bg-brand-50/60 px-4 py-3">
+              <p className="text-xs font-medium text-ink-400">입증 취지</p>
+              <p className="mt-0.5 text-[13px] text-ink-700">{submitTarget.purpose}</p>
+            </div>
+            {submitTarget.warn && (
+              <div className="flex items-start gap-2 rounded-xl bg-red-50 px-4 py-3 text-xs leading-relaxed text-red-500">
+                <AlertTriangle size={14} className="mt-0.5 shrink-0" /><span><b>제출 전 확인</b> — {submitTarget.warn}</span>
+              </div>
+            )}
+            <div className="flex items-start gap-2 rounded-xl border border-brand-200 bg-brand-50/40 px-4 py-3 text-xs leading-relaxed text-brand-600">
+              <ExternalLink size={14} className="mt-0.5 shrink-0" />
+              <span><b>대한민국 법원 전자소송</b> 사이트(ecfs.scourt.go.kr)가 새 창으로 열립니다. 실제 제출은 전자소송에서 본인 인증 후 진행되며, 여기서는 ‘제출완료’로 기록됩니다.</span>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ───────── 모달: 수정 ───────── */}
+      <Modal
+        open={!!editTarget}
+        onClose={() => setEditTarget(null)}
+        title="증거 정보 수정"
+        sub={editTarget ? editTarget.code : ''}
+        footer={(
+          <>
+            <Button variant="neutral" size="sm" onClick={() => setEditTarget(null)}>취소</Button>
+            <Button size="sm" onClick={saveEdit}><Check size={14} /> 저장</Button>
+          </>
+        )}
+      >
+        <div className="space-y-4">
+          <Field label="파일명">
+            <Input value={editForm.file} onChange={(e) => setEditForm((f) => ({ ...f, file: e.target.value }))} placeholder="예: 임대차계약서.pdf" />
+          </Field>
+          <Field label="입증 취지" hint="이 증거로 무엇을 입증하려는지 적어주세요.">
+            <textarea
+              className="min-h-[96px] w-full resize-none rounded-xl border border-ink-200 bg-white px-3.5 py-2.5 text-[15px] text-ink-900 outline-none transition focus:border-brand-300 focus:ring-4 focus:ring-brand-100"
+              value={editForm.purpose}
+              onChange={(e) => setEditForm((f) => ({ ...f, purpose: e.target.value }))}
+            />
+          </Field>
+        </div>
+      </Modal>
+
+      {/* ───────── 모달: 미리보기 ───────── */}
+      <Modal
+        open={!!preview}
+        onClose={() => setPreview(null)}
+        title="미리보기"
+        sub={preview ? `${preview.title} · ${preview.file}` : ''}
+        maxW="max-w-xl"
+        footer={<Button variant="neutral" size="sm" onClick={() => setPreview(null)}>닫기</Button>}
+      >
+        {preview && (
+          <div>
+            <div className="grid min-h-[260px] place-items-center rounded-xl border border-ink-200 bg-ink-50 p-6">
+              {isImage(preview.file) ? (
+                <div className="text-center">
+                  <div className="mx-auto grid h-40 w-56 place-items-center rounded-lg border border-ink-200 bg-white text-ink-300"><Image size={48} /></div>
+                  <p className="mt-3 text-xs text-ink-400">이미지 미리보기 (데모)</p>
+                </div>
+              ) : (
+                <div className="w-full max-w-sm rounded-lg border border-ink-200 bg-white p-5 shadow-sm">
+                  <div className="mb-3 flex items-center gap-2 text-ink-400"><FileText size={18} /><span className="text-xs">문서 미리보기 (데모)</span></div>
+                  <div className="space-y-2">
+                    {[10, 9, 11, 8, 10, 6].map((w, i) => <div key={i} className="h-2.5 rounded bg-ink-100" style={{ width: `${w * 9}%` }} />)}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="mt-4 flex items-center justify-between rounded-xl bg-ink-50 px-4 py-3 text-sm">
+              <span className="text-ink-500">{preview.size}</span>
+              <Badge tone={statusTone[preview.status]}>{preview.status}</Badge>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ───────── 모달: 새 폴더 ───────── */}
+      <Modal
+        open={newFolderOpen}
+        onClose={() => setNewFolderOpen(false)}
+        title="새 폴더 만들기"
+        footer={(
+          <>
+            <Button variant="neutral" size="sm" onClick={() => setNewFolderOpen(false)}>취소</Button>
+            <Button size="sm" onClick={addFolder}><Plus size={14} /> 만들기</Button>
+          </>
+        )}
+      >
+        <Field label="폴더 이름">
+          <Input autoFocus value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addFolder()} placeholder="예: 추가 증거" />
+        </Field>
+      </Modal>
+
+      {/* ───────── 모달: 파일 업로드 ───────── */}
+      <Modal
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        title="파일 업로드"
+        sub="PDF, JPG, PNG 형식을 지원합니다 (데모)"
+        footer={(
+          <>
+            <Button variant="neutral" size="sm" onClick={() => setUploadOpen(false)}>취소</Button>
+            <Button size="sm" onClick={() => { flash('파일을 업로드했습니다 (데모)'); setUploadOpen(false) }}><Upload size={14} /> 업로드</Button>
+          </>
+        )}
+      >
+        <label className="grid cursor-pointer place-items-center rounded-2xl border-2 border-dashed border-ink-200 bg-ink-50 py-10 text-center transition hover:border-brand-300 hover:bg-brand-50/40">
+          <Upload size={28} className="text-ink-400" />
+          <p className="mt-2 text-sm font-medium text-ink-700">파일을 끌어다 놓거나 클릭하여 선택</p>
+          <p className="mt-0.5 text-xs text-ink-400">최대 50MB</p>
+          <input type="file" className="hidden" />
+        </label>
+      </Modal>
+
+      {toast && <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-ink-900 px-5 py-2.5 text-sm font-medium text-white shadow-lg">{toast}</div>}
+    </div>
+  )
+}

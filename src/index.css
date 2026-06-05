@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, system-ui, sans-serif;
+
+  --color-brand-50: #eef6ff;
+  --color-brand-100: #d6e9ff;
+  --color-brand-200: #aed3ff;
+  --color-brand-300: #64a8ff;
+  --color-brand-400: #3d8bff;
+  --color-brand-500: #2f7af0;
+  --color-brand-600: #1f63d6;
+  --color-brand-700: #194aa6;
+  --color-brand-900: #12306b;
+
+  --color-ink-900: #191f28;
+  --color-ink-800: #333d4b;
+  --color-ink-700: #4e5968;
+  --color-ink-600: #6b7684;
+  --color-ink-500: #8b95a1;
+  --color-ink-400: #b0b8c1;
+  --color-ink-300: #c9cfd6;
+  --color-ink-200: #e5e8eb;
+  --color-ink-100: #f2f4f6;
+  --color-ink-50: #f9fafb;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-ink-900);
+  -webkit-font-smoothing: antialiased;
+  background: #fff;
+}
+
+/* thin custom scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-ink-200);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-300);
+}
+
+@keyframes fadeup {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fadeup { animation: fadeup 0.6s ease both; }
