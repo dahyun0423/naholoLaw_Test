@@ -1,15 +1,16 @@
 import { useState } from 'react'
 import { Card, Badge, Button, cx } from '../components/ui.jsx'
 import Modal from '../components/Modal.jsx'
-import { upcoming } from '../data/mock.js'
+import { upcoming, dayOffset } from '../data/mock.js'
 import { Calendar, Upload, Plus, ChevronRight } from '../components/icons.jsx'
 
+// 날짜는 오늘 기준 상대일. 고정해 두면 시연할 때마다 달력이 과거로 열린다.
 const events = {
-  '2026-05-17': [{ t: '소장 제출 기한', tone: 'amber' }],
-  '2026-05-20': [{ t: '준비서면 작성', tone: 'brand' }],
-  '2026-05-31': [{ t: '제1회 변론기일', tone: 'red' }],
-  '2026-06-03': [{ t: '준비서면 제출 기한', tone: 'amber' }],
-  '2026-06-14': [{ t: '증거목록 제출 기한', tone: 'brand' }],
+  [dayOffset(-11)]: [{ t: '소장 제출 기한', tone: 'amber' }],
+  [dayOffset(0)]: [{ t: '준비서면 작성', tone: 'brand' }],
+  [dayOffset(3)]: [{ t: '제1회 변론기일', tone: 'red' }],
+  [dayOffset(6)]: [{ t: '준비서면 제출 기한', tone: 'amber' }],
+  [dayOffset(17)]: [{ t: '증거목록 제출 기한', tone: 'brand' }],
 }
 const dotTone = { red: 'bg-red-500', amber: 'bg-amber-500', brand: 'bg-brand-400' }
 const weekdays = ['일', '월', '화', '수', '목', '금', '토']
@@ -19,8 +20,9 @@ function ymd(y, m, d) {
 }
 
 export default function Schedule() {
-  const [cur, setCur] = useState({ y: 2026, m: 4 }) // May 2026
-  const [selected, setSelected] = useState('2026-05-31')
+  const today = dayOffset(0)
+  const [cur, setCur] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() } })
+  const [selected, setSelected] = useState(today)
   const [auto, setAuto] = useState(false)
   const [add, setAdd] = useState(false)
   const [toast, setToast] = useState('')
@@ -68,8 +70,9 @@ export default function Schedule() {
               const key = ymd(cur.y, cur.m, d)
               const evs = events[key] || []
               const isSel = key === selected
+              const isToday = key === today
               return (
-                <button key={i} onClick={() => setSelected(key)} className={cx('relative aspect-square rounded-xl p-1.5 text-sm transition-colors', isSel ? 'bg-brand-300 text-white' : 'hover:bg-ink-100 text-ink-700')}>
+                <button key={i} onClick={() => setSelected(key)} className={cx('relative aspect-square rounded-xl p-1.5 text-sm transition-colors', isSel ? 'bg-brand-300 text-white' : cx('hover:bg-ink-100 text-ink-700', isToday && 'ring-1 ring-inset ring-brand-300 font-bold text-brand-500'))}>
                   <span className={cx(i % 7 === 0 && !isSel && 'text-red-400')}>{d}</span>
                   {evs.length > 0 && (
                     <span className="absolute bottom-1.5 left-1/2 flex -translate-x-1/2 gap-0.5">

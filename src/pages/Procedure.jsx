@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { Card, Badge, Button, Progress, inputCls, cx } from '../components/ui.jsx'
 import Modal from '../components/Modal.jsx'
 import { procedureSteps, procedureSchedule, submitDocs, activeCase } from '../data/mock.js'
+// 인지대·송달료는 소장 화면과 반드시 같은 식을 써야 한다.
+// 여기서 따로 계산하면 같은 앱이 같은 금액에 두 답을 내놓는다.
+import { stampFee, serviceFee, won, SERVICE_FEE_IS_ESTIMATE } from '../lib/complaint.js'
 import { Check, Clock, Circle, Calendar, Upload, FileText, AlertTriangle } from '../components/icons.jsx'
 
 const statusMeta = {
@@ -19,8 +22,8 @@ export default function Procedure() {
   const [toast, setToast] = useState('')
 
   const flash = (m) => { setToast(m); setTimeout(() => setToast(''), 1800) }
-  const fee = amount ? Math.max(1000, Math.round(Number(amount) * 0.0045)) : 0
-  const postage = amount ? 5200 * 10 : 0
+  const fee = amount ? stampFee(Number(amount)) : 0
+  const postage = amount ? serviceFee(2) : 0
 
   const doneCount = submitDocs.filter((d) => d.done).length
 
@@ -182,11 +185,23 @@ export default function Procedure() {
         </label>
         {amount && (
           <div className="mt-4 space-y-2 rounded-xl bg-brand-50/60 p-4">
-            <div className="flex justify-between text-sm"><span className="text-ink-600">예상 인지대</span><span className="font-bold text-ink-800">{fee.toLocaleString()}원</span></div>
-            <div className="flex justify-between text-sm"><span className="text-ink-600">예상 송달료</span><span className="font-bold text-ink-800">{postage.toLocaleString()}원</span></div>
-            <div className="flex justify-between border-t border-brand-200 pt-2 text-sm"><span className="font-semibold text-ink-700">합계</span><span className="font-bold text-brand-500">{(fee + postage).toLocaleString()}원</span></div>
+            <div className="flex justify-between text-sm">
+              <span className="text-ink-600">예상 인지대 <span className="text-xs text-ink-400">민사소송등인지법 제2조</span></span>
+              <span className="font-bold text-ink-800">{won(fee)}원</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-ink-600">
+                예상 송달료 <span className="text-xs text-ink-400">당사자 2명</span>
+                {SERVICE_FEE_IS_ESTIMATE && <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">추정</span>}
+              </span>
+              <span className="font-bold text-ink-800">{won(postage)}원</span>
+            </div>
+            <div className="flex justify-between border-t border-brand-200 pt-2 text-sm"><span className="font-semibold text-ink-700">합계</span><span className="font-bold text-brand-500">{won(fee + postage)}원</span></div>
             {Number(amount) <= 30000000 && <p className="pt-1 text-xs text-emerald-600">✓ 3천만원 이하 — 소액사건으로 간이 절차가 적용됩니다.</p>}
-            <p className="text-[11px] text-ink-400">* 실제 비용은 사건 유형·당사자 수에 따라 달라질 수 있는 참고용 추정치입니다.</p>
+            <p className="text-[11px] leading-relaxed text-ink-400">
+              * 참고용 계산이며 나홀로법에에서 결제하지 않습니다. 실제 납부는 법원 또는 전자소송포털에서 하시고,
+              송달료는 사건 종류별 예납 회차·우편요금에 따라 달라지므로 접수 전에 확인하세요.
+            </p>
           </div>
         )}
       </Modal>

@@ -156,7 +156,10 @@ export default function CaseSearch() {
         {/* sidebar */}
         <div className="space-y-5">
           <Card className="p-5">
-            <div className="flex items-center gap-2 text-ink-700"><TrendingUp size={16} className="text-brand-400" /><span className="text-sm font-bold">유사 판례 통계</span></div>
+            <div className="flex items-center gap-2 text-ink-700">
+              <TrendingUp size={16} className="text-brand-400" /><span className="text-sm font-bold">유사 판례 통계</span>
+              <span className="ml-auto rounded-full bg-ink-100 px-2 py-0.5 text-[10px] font-semibold text-ink-500">샘플 데이터</span>
+            </div>
             <div className="mt-3 text-center">
               <div className="text-2xl font-bold text-brand-500">{winrate.overall}%</div>
               <p className="mt-1 text-xs text-ink-500">유사 판례 중 원고 승소 비율 <span className="font-semibold text-emerald-500">{winrate.trend} 최근 1년</span></p>
@@ -165,13 +168,17 @@ export default function CaseSearch() {
               <div className="flex justify-between text-xs"><span className="text-ink-500">내 사건과 유사한 판례</span><span className="font-bold text-brand-500">{winrate.similar}%</span></div>
               <div className="mt-1.5"><Progress value={winrate.similar} /></div>
             </div>
-            <div className="mt-4 border-l-2 border-ink-200 pl-3 text-[11px] leading-relaxed text-ink-400">
-              위 수치는 유사 판례의 통계적 경향이며, 실제 재판 결과를 예측하거나 보장하지 않습니다. 구체적인 결과는 사건의 사실관계에 따라 달라질 수 있습니다.
+            <div className="mt-4 border-l-2 border-amber-300 pl-3 text-[11px] leading-relaxed text-ink-500">
+              <b className="font-semibold text-ink-700">아직 실제 판례를 집계한 수치가 아닙니다.</b> 화면 구성을 보여주기 위한 샘플 값이에요.
+              집계가 붙더라도 통계적 경향일 뿐이라 재판 결과를 예측하거나 보장하지 않습니다. 이 숫자를 근거로 소송 여부를 정하지 마세요.
             </div>
           </Card>
 
           <Card className="p-5">
-            <div className="flex items-center gap-2 text-ink-700"><Scale size={16} className="text-brand-400" /><span className="text-sm font-bold">주요 쟁점별 원고 승소 비율</span></div>
+            <div className="flex items-center gap-2 text-ink-700">
+              <Scale size={16} className="text-brand-400" /><span className="text-sm font-bold">주요 쟁점별 원고 승소 비율</span>
+              <span className="ml-auto rounded-full bg-ink-100 px-2 py-0.5 text-[10px] font-semibold text-ink-500">샘플</span>
+            </div>
             <div className="mt-4 space-y-3">
               {winrate.issues.map((i) => (
                 <div key={i.name}>

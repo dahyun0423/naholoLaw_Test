@@ -8,12 +8,13 @@ import HelpMedia from '../components/HelpMedia.jsx'
 import {
   ArrowRight, Check, Clock, Video, Book, Scroll, HelpCircle, Sparkles, ChevronRight,
 } from '../components/icons.jsx'
+import { activeCase, aiSuggestion, ddayOf, dateLabel, dayOffset } from '../data/mock.js'
 
 /* ── Figma 200:24198 픽셀 기준 + 전체 인터랙션 ──────────────── */
 
 const stats = [
   { label: '진행 중인 사건', value: '2건', sub: '1건 기일 임박', to: '/app/procedure' },
-  { label: '다음 변론기일', value: 'D-3', sub: '7월 1일', to: '/app/schedule' },
+  { label: '다음 변론기일', value: ddayOf(activeCase.nextHearing), sub: dateLabel(activeCase.nextHearing), to: '/app/schedule' },
   { label: '생성한 문서', value: '7', sub: '2개 제출 완료', to: '/app/documents' },
   { label: '등록된 증거', value: '14', sub: '갑호증 9개', to: '/app/evidence' },
 ]
@@ -24,24 +25,32 @@ const aiTasks = [
   { label: '답변 예정', tag: '권장하기', tagTone: 'soft', to: '/app/documents', msg: '답변서 작성을 시작합니다' },
 ]
 
-const week = [
-  { d: '월', n: 18 }, { d: '화', n: 19 }, { d: '수', n: 20 }, { d: '목', n: 21 },
-  { d: '금', n: 22 }, { d: '토', n: 23 }, { d: '일', n: 24 },
-]
+/** 오늘이 가운데 오도록 이번 주(월~일)를 만든다 */
+function thisWeek() {
+  const t = new Date()
+  const mon = new Date(t)
+  mon.setDate(t.getDate() - ((t.getDay() + 6) % 7))   // 월요일로 이동
+  return ['월', '화', '수', '목', '금', '토', '일'].map((d, i) => {
+    const x = new Date(mon); x.setDate(mon.getDate() + i)
+    return { d, n: x.getDate(), today: x.toDateString() === t.toDateString() }
+  })
+}
+const week = thisWeek()
+
 const timeline = [
-  { title: '소장 제출 기한', date: '2026-05-17', state: 'done' },
-  { title: '증거 자료 정리', date: '2026-05-18', state: 'done' },
-  { title: '준비 서면 작성', date: '2026-05-20', state: 'current' },
+  { title: '소장 제출 기한', date: dayOffset(-11), state: 'done' },
+  { title: '증거 자료 정리', date: dayOffset(-10), state: 'done' },
+  { title: '준비 서면 작성', date: dayOffset(0), state: 'current' },
 ]
 
 const recent = [
-  { title: '소송비용 산출서 확인완료', dday: 'D-2', desc: '인지대 등 비용 산출 완료', to: '/app/procedure' },
-  { title: '증거 목록서 작성 완료', dday: 'D-7', desc: '주요증거 정리완료', to: '/app/evidence' },
-  { title: '준비서면 제출 기한 안내', dday: 'D-7', desc: '변론 전 필수 서류 안내', to: '/app/documents' },
+  { title: '소송비용 산출서 확인완료', dday: ddayOf(dayOffset(-2)), desc: '인지대 등 비용 산출 완료', to: '/app/procedure' },
+  { title: '증거 목록서 작성 완료', dday: ddayOf(dayOffset(-7)), desc: '주요증거 정리완료', to: '/app/evidence' },
+  { title: '준비서면 제출 기한 안내', dday: ddayOf(dayOffset(-7)), desc: '변론 전 필수 서류 안내', to: '/app/documents' },
 ]
 const allActivity = [
   ...recent,
-  { title: '제1회 변론기일 등록', dday: 'D-3', desc: '서울중앙지방법원 327호 14:00' },
+  { title: '제1회 변론기일 등록', dday: ddayOf(activeCase.nextHearing), desc: '서울중앙지방법원 327호 14:00' },
   { title: '상대방 답변서 수령', dday: '완료', desc: 'AI가 쟁점을 분석했습니다' },
   { title: '소장 접수 완료', dday: '완료', desc: '사건번호 2024가단123456 부여' },
 ]
@@ -68,6 +77,7 @@ export default function Dashboard() {
   const [help, setHelp] = useState(null)
   const [faq, setFaq] = useState(null)
   const [activityOpen, setActivityOpen] = useState(false)
+  const now = new Date()
 
   const go = (to, msg) => { if (msg) toast(msg); navigate(to) }
 
@@ -77,11 +87,11 @@ export default function Dashboard() {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h1 className="text-[22px] font-bold text-ink-900">안녕하세요, {user?.name}님</h1>
-          <p className="mt-1 text-sm text-ink-500">진행 중인 사건 2건 | 다음 기일까지 <b className="text-[#f04452]">D-3</b></p>
+          <p className="mt-1 text-sm text-ink-500">진행 중인 사건 2건 | 다음 기일까지 <b className="text-[#f04452]">{ddayOf(activeCase.nextHearing)}</b></p>
         </div>
         <div className="text-right text-xs text-ink-400">
-          <p>2026년 5월 28일 목요일</p>
-          <p className="mt-0.5">오전 9:12</p>
+          <p>{now.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}</p>
+          <p className="mt-0.5">{now.toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' })}</p>
         </div>
       </div>
 
@@ -91,9 +101,9 @@ export default function Dashboard() {
           <button onClick={() => go('/app/documents', '준비서면 작성을 시작합니다')} className="absolute right-5 top-5 inline-flex items-center gap-1 rounded-[10px] border border-[#cfe2ff] bg-white px-3.5 py-2 text-sm font-semibold text-[#1b64da] hover:bg-[#f5f9ff]">
             바로 작성하러 가기 <ArrowRight size={15} />
           </button>
-          <h2 className="text-2xl font-bold leading-snug text-[#1b3a6b]">준비서면 제출 D-3</h2>
+          <h2 className="text-2xl font-bold leading-snug text-[#1b3a6b]">{aiSuggestion.title}</h2>
           <p className="mt-1 text-2xl font-bold leading-snug text-[#1b3a6b]">지금 바로 작성하세요!</p>
-          <p className="mt-4 text-[13px] text-ink-500">서울중앙지방법원 2024가단12345 | 7월 1일(월) 오전 10시까지 제출</p>
+          <p className="mt-4 text-[13px] text-ink-500">{aiSuggestion.meta}</p>
         </div>
 
         <Card className="rounded-[20px] p-5">
@@ -134,7 +144,7 @@ export default function Dashboard() {
         <Card className="rounded-[20px] p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-ink-400">May 20, 2026</p>
+              <p className="text-xs text-ink-400">{now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
               <h3 className="mt-0.5 font-bold text-ink-900">다가오는 일정</h3>
             </div>
             <button onClick={() => navigate('/app/schedule')} className="text-xs font-medium text-brand-400">캘린더 →</button>
@@ -144,7 +154,7 @@ export default function Dashboard() {
             {week.map((w) => (
               <button key={w.n} onClick={() => navigate('/app/schedule')} className="group">
                 <div className="text-[11px] text-ink-400">{w.d}</div>
-                <div className={cx('mx-auto mt-1 grid h-8 w-8 place-items-center rounded-full text-sm group-hover:bg-brand-50', w.n === 20 ? 'bg-brand-300 font-bold text-white group-hover:bg-brand-400' : 'text-ink-600')}>{w.n}</div>
+                <div className={cx('mx-auto mt-1 grid h-8 w-8 place-items-center rounded-full text-sm group-hover:bg-brand-50', w.today ? 'bg-brand-300 font-bold text-white group-hover:bg-brand-400' : 'text-ink-600')}>{w.n}</div>
               </button>
             ))}
           </div>

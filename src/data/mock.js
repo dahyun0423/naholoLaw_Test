@@ -1,45 +1,78 @@
 // 데모용 mock 데이터 (실서비스라면 API 응답으로 대체)
+//
+// 날짜는 고정값이 아니라 "오늘 기준 상대일"로 만든다.
+// 고정해 두면 시연할 때마다 D-day가 어긋나고, 지난 날짜에 "D-3"이 붙는 꼴이 난다.
+
+/** 오늘로부터 n일 뒤의 날짜 (YYYY-MM-DD) */
+export function dayOffset(n) {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() + n)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** 날짜 → D-day 문자열. 지난 날짜는 D+n으로 표시해 "지났다"가 드러나게 한다 */
+export function ddayOf(date) {
+  const t = new Date(); t.setHours(0, 0, 0, 0)
+  const d = new Date(date); d.setHours(0, 0, 0, 0)
+  const diff = Math.round((d - t) / 86400000)
+  return diff === 0 ? 'D-day' : diff > 0 ? `D-${diff}` : `D+${-diff}`
+}
+
+/** 2026. 7. 1.(수) 처럼 — 요일을 직접 적으면 틀린다 */
+export function dateLabel(date) {
+  const d = new Date(date)
+  const w = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()]
+  return `${d.getMonth() + 1}월 ${d.getDate()}일(${w})`
+}
+
+const HEARING = dayOffset(3)      // 제1회 변론기일
+const BRIEF_DUE = dayOffset(6)    // 준비서면 제출 기한
+const EVID_DUE = dayOffset(17)    // 증거목록 제출 기한
+
+export const CASE_NO = '2024가단123456'
 
 export const activeCase = {
-  id: '2024가단123456',
+  id: CASE_NO,
   title: '임대차 보증금 반환 청구',
   court: '서울중앙지방법원',
   type: '민사',
-  nextHearing: '2026-07-01',
+  nextHearing: HEARING,
   progress: 60,
 }
 
 export const stats = [
   { key: 'cases', label: '진행 중인 사건', value: '2건', sub: '1건 기일 임박', tone: 'blue' },
-  { key: 'hearing', label: '다음 변론기일', value: 'D-3', sub: '7월 1일', tone: 'amber' },
+  { key: 'hearing', label: '다음 변론기일', value: ddayOf(HEARING), sub: dateLabel(HEARING), tone: 'amber' },
   { key: 'docs', label: '생성한 문서', value: '7', sub: '2개 제출 완료', tone: 'green' },
   { key: 'evidence', label: '등록된 증거', value: '14', sub: '갑호증 9개', tone: 'purple' },
 ]
 
 export const aiSuggestion = {
   badge: '긴급',
-  title: '준비서면 제출 D-3',
+  title: `준비서면 제출 ${ddayOf(BRIEF_DUE)}`,
   desc: '지금 바로 작성하세요!',
-  meta: '서울중앙지방법원 2024가단12345 · 7월 1일(월) 오전 10시까지 제출',
+  meta: `서울중앙지방법원 ${CASE_NO} · ${dateLabel(BRIEF_DUE)} 오전 10시까지 제출`,
   chips: ['준비서면 작성 권장', '증거 보완 권장', '답변서 제출 권장'],
 }
 
 export const upcoming = [
-  { date: '2026-05-31', dday: 'D-3', title: '제1회 변론기일', case: '임대차 보증금 반환 청구', tone: 'red' },
-  { date: '2026-06-03', dday: 'D-6', title: '준비서면 제출 기한', case: '임대차 보증금 반환 청구', tone: 'amber' },
-  { date: '2026-06-14', dday: 'D-17', title: '증거목록 제출 기한', case: '근로계약 위반 손해배상', tone: 'blue' },
+  { date: HEARING, dday: ddayOf(HEARING), title: '제1회 변론기일', case: '임대차 보증금 반환 청구', tone: 'red' },
+  { date: BRIEF_DUE, dday: ddayOf(BRIEF_DUE), title: '준비서면 제출 기한', case: '임대차 보증금 반환 청구', tone: 'amber' },
+  { date: EVID_DUE, dday: ddayOf(EVID_DUE), title: '증거목록 제출 기한', case: '근로계약 위반 손해배상', tone: 'blue' },
 ]
 
 export const dashboardSchedule = [
-  { date: '2026-05-17', title: '소장 제출 기한', done: true },
-  { date: '2026-05-18', title: '증거 자료 정리', done: true },
-  { date: '2026-05-20', title: '준비 서면 작성', done: false, highlight: true },
+  { date: dayOffset(-11), title: '소장 제출 기한', done: true },
+  { date: dayOffset(-10), title: '증거 자료 정리', done: true },
+  { date: dayOffset(0), title: '준비 서면 작성', done: false, highlight: true },
 ]
 
+// 최근 활동은 '지난 일'이므로 D+n으로 표시한다
 export const recentActivity = [
-  { title: '소송비용 산출서 확인 완료', dday: 'D-2', desc: '인지대 등 비용 산출 완료' },
-  { title: '증거 목록서 작성 완료', dday: 'D-7', desc: '주요 증거 정리 완료' },
-  { title: '준비서면 제출 기한 안내', dday: 'D-7', desc: '변론 전 필수 서류 안내' },
+  { title: '소송비용 산출서 확인 완료', dday: ddayOf(dayOffset(-2)), desc: '인지대 등 비용 산출 완료' },
+  { title: '증거 목록서 작성 완료', dday: ddayOf(dayOffset(-7)), desc: '주요 증거 정리 완료' },
+  { title: '준비서면 제출 기한 안내', dday: ddayOf(dayOffset(-7)), desc: '변론 전 필수 서류 안내' },
 ]
 
 export const helpContents = [
@@ -57,7 +90,7 @@ export const popularFaq = [
 ]
 
 export const notifications = [
-  { title: '준비서면 제출 기한 D-3', meta: '2024가단12345 · 방금', unread: true },
+  { title: `준비서면 제출 ${ddayOf(BRIEF_DUE)}`, meta: `${CASE_NO} · 방금`, unread: true },
   { title: '상대방이 답변서를 제출했습니다', meta: '오늘 오전 8:42 · AI 분석', unread: true },
   { title: '유사 판례 결과가 새로 발견되었습니다', meta: '어제 · 업데이트된 판례집 보기', unread: true },
   { title: '변론기일 D-17 리마인더', meta: '어제 오전 9:00', unread: false },
@@ -65,7 +98,7 @@ export const notifications = [
 
 // 선택 가능한 진행 사건 목록 (판례 검색 기준 사건)
 export const cases = [
-  { id: '2024가단123456', title: '임대차 보증금 반환 청구', court: '서울중앙지방법원', type: '민사', badge: '진행 중' },
+  { id: CASE_NO, title: '임대차 보증금 반환 청구', court: '서울중앙지방법원', type: '민사', badge: '진행 중' },
   { id: '2024가단998877', title: '근로계약 위반 손해배상', court: '서울남부지방법원', type: '민사', badge: '준비 중' },
   { id: '2024가소445566', title: '대여금 반환 청구 (소액)', court: '서울동부지방법원', type: '민사', badge: '진행 중' },
 ]
@@ -219,17 +252,17 @@ export const winrate = {
 }
 
 export const procedureSteps = [
-  { name: '소장 접수', date: '2026-02-20', status: 'done', desc: '법원에 소장을 제출하고 사건번호를 부여받았습니다.', items: ['소장 작성·제출', '인지대·송달료 납부'] },
-  { name: '답변서 확인', date: '2026-03-10', status: 'done', desc: '피고의 답변서를 수령하고 쟁점을 확인했습니다.', items: ['상대방 답변서 검토', '쟁점 정리'] },
-  { name: '변론 준비', date: '2026-03-25', status: 'current', desc: '변론기일에 대비해 준비서면과 증거를 정리하는 단계입니다.', items: ['준비서면 작성', '증거목록 정리', '주장 보강'] },
-  { name: '변론 진행', date: '2026-04-10', status: 'todo', desc: '법원에서 쟁점에 대한 변론이 진행됩니다.', items: ['증거 제출 및 증인 신문', '필요 시 추가 변론기일 지정', '준비서면 제출'] },
+  { name: '소장 접수', date: dayOffset(-90), status: 'done', desc: '법원에 소장을 제출하고 사건번호를 부여받았습니다.', items: ['소장 작성·제출', '인지대·송달료 납부'] },
+  { name: '답변서 확인', date: dayOffset(-45), status: 'done', desc: '피고의 답변서를 수령하고 쟁점을 확인했습니다.', items: ['상대방 답변서 검토', '쟁점 정리'] },
+  { name: '변론 준비', date: dayOffset(0), status: 'current', desc: '변론기일에 대비해 준비서면과 증거를 정리하는 단계입니다.', items: ['준비서면 작성', '증거목록 정리', '주장 보강'] },
+  { name: '변론 진행', date: HEARING, status: 'todo', desc: '법원에서 쟁점에 대한 변론이 진행됩니다.', items: ['증거 제출 및 증인 신문', '필요 시 추가 변론기일 지정', '준비서면 제출'] },
   { name: '판결 선고', date: '미정', status: 'todo', desc: '재판부의 판결이 선고됩니다.', items: ['판결문 수령', '항소 여부 검토'] },
 ]
 
 export const procedureSchedule = [
-  { title: '제1회 변론기일', date: '2026-03-15', place: '서울중앙지방법원 327호 14:00' },
-  { title: '답변서 제출 마감', date: '2026-03-25', place: '' },
-  { title: '제2회 변론기일', date: '2026-04-10', place: '서울중앙지방법원 327호 10:00' },
+  { title: '제1회 변론기일', date: HEARING, place: '서울중앙지방법원 327호 14:00' },
+  { title: '준비서면 제출 마감', date: BRIEF_DUE, place: '' },
+  { title: '제2회 변론기일', date: dayOffset(38), place: '서울중앙지방법원 327호 10:00' },
 ]
 
 export const submitDocs = [
@@ -248,9 +281,9 @@ export const docTypes = [
 ]
 
 export const recentDocs = [
-  { type: '소장', name: '임대차_보증금_반환_소장.pdf', date: '2026-03-05' },
-  { type: '준비서면', name: '준비서면_1차.pdf', date: '2026-03-03' },
-  { type: '증거목록', name: '증거목록.pdf', date: '2026-02-28' },
+  { type: '소장', name: '임대차_보증금_반환_소장.pdf', date: dayOffset(-88) },
+  { type: '준비서면', name: '준비서면_1차.pdf', date: dayOffset(-40) },
+  { type: '증거목록', name: '증거목록.pdf', date: dayOffset(-35) },
 ]
 
 export const writingTips = [
@@ -261,12 +294,12 @@ export const writingTips = [
 ]
 
 export const evidenceList = [
-  { no: 1, code: '갑 제1호증', status: '제출완료', tone: 'green', file: '임대차계약서.pdf', size: '2.3 MB', date: '2026-03-10', dateLabel: '제출일', purpose: '임대차 계약 관계 및 보증금 1,000만원 지급 사실 입증' },
-  { no: 2, code: '갑 제2호증', status: '제출완료', tone: 'green', file: '보증금_입금증.jpg', size: '1.1 MB', date: '2026-03-10', dateLabel: '제출일', purpose: '보증금 1,000만원을 피고에게 실제 지급한 사실 입증' },
-  { no: 3, code: '갑 제3호증', status: '제출예정', tone: 'blue', file: '문자_납부내역.pdf', size: '856 KB', date: '2026-06-15', dateLabel: '기한', purpose: '월세를 성실히 납부한 사실 입증' },
-  { no: 4, code: '갑 제4호증', status: '보완필요', tone: 'amber', file: '카카오톡_대화내용.pdf', size: '3.2 MB', date: '2026-06-08', dateLabel: '기한', purpose: '피고가 보증금 반환을 회피한 사실 입증 (대화 내용 일부 가려야 함)', warn: '카톡 캡처에 제3자 개인정보가 보입니다. 가린 뒤 다시 제출하세요.' },
-  { no: 5, code: '갑 제5호증', status: '미제출', tone: 'gray', file: '하자보수_사진1.jpg', size: '2.8 MB', date: '2026-06-15', dateLabel: '기한', purpose: '임차인이 원상복구 의무를 다한 사실 입증' },
-  { no: 6, code: '갑 제6호증', status: '미제출', tone: 'gray', file: '하자보수_사진2.jpg', size: '2.5 MB', date: '2026-06-15', dateLabel: '기한', purpose: '임차인이 원상복구 의무를 다한 사실 입증' },
+  { no: 1, code: '갑 제1호증', status: '제출완료', tone: 'green', file: '임대차계약서.pdf', size: '2.3 MB', date: dayOffset(-45), dateLabel: '제출일', purpose: '임대차 계약 관계 및 보증금 1,000만원 지급 사실 입증' },
+  { no: 2, code: '갑 제2호증', status: '제출완료', tone: 'green', file: '보증금_입금증.jpg', size: '1.1 MB', date: dayOffset(-45), dateLabel: '제출일', purpose: '보증금 1,000만원을 피고에게 실제 지급한 사실 입증' },
+  { no: 3, code: '갑 제3호증', status: '제출예정', tone: 'blue', file: '문자_납부내역.pdf', size: '856 KB', date: EVID_DUE, dateLabel: '기한', purpose: '월세를 성실히 납부한 사실 입증' },
+  { no: 4, code: '갑 제4호증', status: '보완필요', tone: 'amber', file: '카카오톡_대화내용.pdf', size: '3.2 MB', date: BRIEF_DUE, dateLabel: '기한', purpose: '피고가 보증금 반환을 회피한 사실 입증 (대화 내용 일부 가려야 함)', warn: '카톡 캡처에 제3자 개인정보가 보입니다. 가린 뒤 다시 제출하세요.' },
+  { no: 5, code: '갑 제5호증', status: '미제출', tone: 'gray', file: '하자보수_사진1.jpg', size: '2.8 MB', date: EVID_DUE, dateLabel: '기한', purpose: '임차인이 원상복구 의무를 다한 사실 입증' },
+  { no: 6, code: '갑 제6호증', status: '미제출', tone: 'gray', file: '하자보수_사진2.jpg', size: '2.5 MB', date: EVID_DUE, dateLabel: '기한', purpose: '임차인이 원상복구 의무를 다한 사실 입증' },
 ]
 
 export const evidenceAi = [

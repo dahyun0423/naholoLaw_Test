@@ -15,7 +15,7 @@ const mainMenu = [
   { to: '/app/search', label: '판례 검색', icon: Scale },
   { to: '/app/procedure', label: '절차 안내', icon: Book },
   { to: '/app/evidence', label: '증빙 자료', icon: Folder },
-  { to: '/app/schedule', label: '스케줄 관리', icon: Calendar },
+  { to: '/app/schedule', label: '일정 관리', icon: Calendar },
 ]
 
 function NavItem({ item, onClick }) {
