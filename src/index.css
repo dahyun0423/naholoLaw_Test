@@ -50,6 +50,59 @@ body {
   background: var(--color-ink-300);
 }
 
+/* ── 인쇄 / PDF ──────────────────────────────────────────────
+   법원 제출 기준에 맞춘다: 글자 12포인트, 줄간격 200% 이상, A4.
+   화면용 Tailwind 크기(text-[13px] 등)를 덮어써야 하므로 !important를 쓴다. */
+.print-root { display: none; }
+
+@media print {
+  @page {
+    size: A4;
+    margin: 20mm 20mm 15mm;      /* 재판서 양식에 준하는 여백 */
+  }
+
+  html, body { background: #fff; }
+  body > *:not(.print-root) { display: none !important; }
+  .print-root { display: block !important; }
+
+  .print-doc {
+    font-family: "Batang", "AppleMyungjo", serif;
+    font-size: 12pt;             /* 법원 안내: 12포인트 */
+    line-height: 2;              /* 법원 안내: 줄간격 200% */
+    color: #000;
+    text-align: justify;
+  }
+  /* 화면용 폰트 크기·줄간격이 인쇄본을 흔들지 않게 전부 상속시킨다 */
+  .print-doc * {
+    font-size: inherit !important;
+    line-height: inherit !important;
+    color: #000 !important;
+    background: transparent !important;
+  }
+  .print-doc .print-lg { font-size: 16pt !important; }
+  /* 미입력 자리는 회색으로 남겨 "아직 안 채웠다"가 인쇄본에서도 보이게 한다 */
+  .print-doc .print-muted, .print-doc .text-ink-400 { color: #888 !important; }
+
+  /* 표는 줄간격 200%를 적용하면 셀이 터진다 — 서식지 표는 촘촘하게 */
+  .print-doc table, .print-doc table * { line-height: 1.5 !important; }
+  .print-doc th, .print-doc td { border: 1px solid #000 !important; }
+  .print-doc thead th { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .print-doc table { break-inside: auto; }
+  .print-doc tr { break-inside: avoid; }
+
+  /* 서명·날인 자리 — 12pt 상속을 받으면 원 안에서 글자가 넘친다 */
+  .print-doc .sig-stamp { width: 13mm !important; height: 13mm !important; }
+  .print-doc .sig-stamp, .print-doc .sig-stamp * {
+    font-size: 7pt !important;
+    line-height: 1.2 !important;
+  }
+
+  .print-page { break-after: page; }
+  .print-page:last-child { break-after: auto; }
+  .print-doc p { orphans: 2; widows: 2; }
+  .no-print { display: none !important; }
+}
+
 @keyframes fadeup {
   from { opacity: 0; transform: translateY(16px); }
   to { opacity: 1; transform: translateY(0); }

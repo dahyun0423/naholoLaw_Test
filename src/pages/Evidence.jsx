@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Card, Badge, Button, Progress, Field, Input, cx } from '../components/ui.jsx'
+import { Card, Badge, Button, Progress, Field, Input, inputCls, cx } from '../components/ui.jsx'
 import Modal from '../components/Modal.jsx'
 import {
   evidenceList, evidenceAi, activeCase, courtUrl,
@@ -141,7 +141,11 @@ export default function Evidence() {
   const [preview, setPreview] = useState(null) // { title, file, size, status }
   const [newFolderOpen, setNewFolderOpen] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
+  const [newFolderCat, setNewFolderCat] = useState('')   // 카테고리(태그), 쉼표 구분
   const [uploadOpen, setUploadOpen] = useState(false)
+  const [uploadName, setUploadName] = useState('')
+  const [uploadFolder, setUploadFolder] = useState('')   // 업로드 대상 폴더 key
+  const [tagInput, setTagInput] = useState('')           // 폴더 상세에서 카테고리 추가
 
   const openFolder = folders.find((f) => f.key === openKey) || null
   const submitted = list.filter((e) => e.status === '제출완료').length
@@ -169,10 +173,36 @@ export default function Evidence() {
   const addFolder = () => {
     const name = newFolderName.trim()
     if (!name) return
-    setFolders((prev) => [...prev, { key: `f${Date.now()}`, name, size: '0 MB', tone: 'slate', tags: [], files: [] }])
+    const tags = newFolderCat.split(',').map((t) => t.trim()).filter(Boolean)
+    const key = `f${Date.now()}`
+    setFolders((prev) => [...prev, { key, name, size: '0 MB', tone: 'slate', tags, files: [] }])
     flash(`'${name}' 폴더를 만들었습니다`)
-    setNewFolderName('')
-    setNewFolderOpen(false)
+    setNewFolderName(''); setNewFolderCat(''); setNewFolderOpen(false)
+    setView('folder'); setOpenKey(key)
+  }
+  const doUpload = () => {
+    const name = uploadName.trim()
+    if (!name) { flash('파일명을 입력하세요'); return }
+    if (!uploadFolder) { flash('저장할 폴더를 선택하세요'); return }
+    const file = { name, desc: '직접 업로드한 파일', size: '0.0 MB', date: today, status: '대기중' }
+    setFolders((prev) => prev.map((f) =>
+      f.key === uploadFolder ? { ...f, files: [...f.files, file] } : f))
+    const folderName = folders.find((f) => f.key === uploadFolder)?.name || '폴더'
+    flash(`'${folderName}'에 '${name}'을(를) 업로드했습니다`)
+    setUploadName(''); setUploadOpen(false)
+    setView('folder'); setOpenKey(uploadFolder)
+  }
+  const addTag = (folderKey) => {
+    const t = tagInput.trim()
+    if (!t) return
+    setFolders((prev) => prev.map((f) =>
+      f.key === folderKey && !f.tags.includes(t) ? { ...f, tags: [...f.tags, t] } : f))
+    setTagInput('')
+    flash('카테고리를 추가했습니다')
+  }
+  const removeTag = (folderKey, tag) => {
+    setFolders((prev) => prev.map((f) =>
+      f.key === folderKey ? { ...f, tags: f.tags.filter((t) => t !== tag) } : f))
   }
   const deleteFile = (folderKey, idx) => {
     setFolders((prev) => prev.map((f) =>
@@ -195,7 +225,8 @@ export default function Evidence() {
             <button onClick={() => { setView('folder'); setOpenKey(null) }}
               className={cx('rounded-lg px-3.5 py-1.5 text-sm font-medium transition', view === 'folder' ? 'bg-brand-300 text-white shadow-sm' : 'text-ink-500 hover:text-ink-700')}>폴더 보기</button>
           </div>
-          <Button size="sm" onClick={() => setUploadOpen(true)}><Upload size={15} /> 파일 업로드</Button>
+          <Button size="sm" variant="neutral" onClick={() => { setView('folder'); setOpenKey(null); setNewFolderOpen(true) }}><Plus size={15} /> 새 폴더</Button>
+          <Button size="sm" onClick={() => { setUploadFolder(openFolder?.key || folders[0]?.key || ''); setUploadOpen(true) }}><Upload size={15} /> 파일 업로드</Button>
         </div>
       </div>
 
@@ -335,9 +366,19 @@ export default function Evidence() {
                   </Card>
 
                   <Card className="p-5">
-                    <h3 className="text-sm font-bold text-ink-900">폴더 태그</h3>
+                    <h3 className="text-sm font-bold text-ink-900">카테고리(태그)</h3>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {openFolder.tags.length ? openFolder.tags.map((t) => <Badge key={t} tone="blue">{t}</Badge>) : <span className="text-sm text-ink-400">태그가 없습니다.</span>}
+                      {openFolder.tags.length ? openFolder.tags.map((t) => (
+                        <span key={t} className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-500">
+                          {t}
+                          <button onClick={() => removeTag(openFolder.key, t)} className="text-brand-400 hover:text-brand-600" title="삭제">×</button>
+                        </span>
+                      )) : <span className="text-sm text-ink-400">아직 카테고리가 없습니다.</span>}
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <input className={inputCls} value={tagInput} onChange={(e) => setTagInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && addTag(openFolder.key)} placeholder="카테고리 입력 후 추가" />
+                      <Button size="sm" variant="neutral" className="shrink-0" onClick={() => addTag(openFolder.key)}><Plus size={15} /> 추가</Button>
                     </div>
                   </Card>
                 </div>
@@ -469,7 +510,7 @@ export default function Evidence() {
       <Modal
         open={newFolderOpen}
         onClose={() => setNewFolderOpen(false)}
-        title="새 폴더 만들기"
+        title="새 폴더(카테고리) 만들기"
         footer={(
           <>
             <Button variant="neutral" size="sm" onClick={() => setNewFolderOpen(false)}>취소</Button>
@@ -477,10 +518,16 @@ export default function Evidence() {
           </>
         )}
       >
-        <Field label="폴더 이름">
-          <Input autoFocus value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && addFolder()} placeholder="예: 추가 증거" />
-        </Field>
+        <div className="space-y-4">
+          <Field label="폴더 이름">
+            <Input autoFocus value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addFolder()} placeholder="예: 추가 증거" />
+          </Field>
+          <Field label="카테고리(태그)" hint="쉼표(,)로 여러 개 입력할 수 있어요. 예: 계약, 임대차">
+            <Input value={newFolderCat} onChange={(e) => setNewFolderCat(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addFolder()} placeholder="예: 계약, 임대차" />
+          </Field>
+        </div>
       </Modal>
 
       {/* ───────── 모달: 파일 업로드 ───────── */}
@@ -488,20 +535,35 @@ export default function Evidence() {
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
         title="파일 업로드"
-        sub="PDF, JPG, PNG 형식을 지원합니다 (데모)"
+        sub="선택한 폴더(카테고리)에 증거 파일을 추가합니다 (데모)"
         footer={(
           <>
             <Button variant="neutral" size="sm" onClick={() => setUploadOpen(false)}>취소</Button>
-            <Button size="sm" onClick={() => { flash('파일을 업로드했습니다 (데모)'); setUploadOpen(false) }}><Upload size={14} /> 업로드</Button>
+            <Button size="sm" onClick={doUpload}><Upload size={14} /> 업로드</Button>
           </>
         )}
       >
-        <label className="grid cursor-pointer place-items-center rounded-2xl border-2 border-dashed border-ink-200 bg-ink-50 py-10 text-center transition hover:border-brand-300 hover:bg-brand-50/40">
-          <Upload size={28} className="text-ink-400" />
-          <p className="mt-2 text-sm font-medium text-ink-700">파일을 끌어다 놓거나 클릭하여 선택</p>
-          <p className="mt-0.5 text-xs text-ink-400">최대 50MB</p>
-          <input type="file" className="hidden" />
-        </label>
+        <div className="space-y-4">
+          <Field label="저장할 폴더(카테고리)">
+            {folders.length === 0 ? (
+              <p className="rounded-xl bg-amber-50 px-3.5 py-2.5 text-xs text-amber-700">먼저 [새 폴더]로 폴더를 만들어 주세요.</p>
+            ) : (
+              <select className={inputCls} value={uploadFolder} onChange={(e) => setUploadFolder(e.target.value)}>
+                {folders.map((f) => <option key={f.key} value={f.key}>{f.name} ({f.files.length}개)</option>)}
+              </select>
+            )}
+          </Field>
+          <label className="grid cursor-pointer place-items-center rounded-2xl border-2 border-dashed border-ink-200 bg-ink-50 py-10 text-center transition hover:border-brand-300 hover:bg-brand-50/40">
+            <Upload size={28} className="text-ink-400" />
+            <p className="mt-2 text-sm font-medium text-ink-700">파일을 끌어다 놓거나 클릭하여 선택</p>
+            <p className="mt-0.5 text-xs text-ink-400">최대 50MB</p>
+            <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && setUploadName(e.target.files[0].name)} />
+          </label>
+          <Field label="파일명">
+            <Input value={uploadName} onChange={(e) => setUploadName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && doUpload()} placeholder="예: 임대차계약서.pdf" />
+          </Field>
+        </div>
       </Modal>
 
       {toast && <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-ink-900 px-5 py-2.5 text-sm font-medium text-white shadow-lg">{toast}</div>}

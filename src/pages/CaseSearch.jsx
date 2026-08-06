@@ -25,12 +25,11 @@ function PrecedentCard({ p, cited, saved, onCite, onSave, onCopy, onOriginal }) 
       </div>
 
       <div className="mt-4 rounded-xl bg-brand-50/60 p-3.5">
-        <p className="text-xs font-bold text-brand-500">📌 내 사건 적용 포인트</p>
+        <p className="text-xs font-bold text-brand-500">📌 이 판례에서 참고할 수 있는 내용</p>
         <p className="mt-1 text-[13px] leading-relaxed text-ink-700">{p.point}</p>
       </div>
-      <div className="mt-2 rounded-xl bg-ink-50 p-3.5">
-        <p className="text-xs font-bold text-ink-600">💡 활용 방법</p>
-        <p className="mt-1 text-[13px] leading-relaxed text-ink-600">{p.apply}</p>
+      <div className="mt-2 rounded-xl bg-ink-50 px-3.5 py-2.5 text-[11px] leading-relaxed text-ink-400">
+        이 정보는 법률 조언이 아니라 판례의 일반적인 내용을 참고용으로 정리한 것입니다. 구체적인 적용 여부는 사건의 사실관계에 따라 달라질 수 있습니다.
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
@@ -78,7 +77,7 @@ export default function CaseSearch() {
     toast(savedNos.includes(p.no) ? '저장을 취소했습니다' : '저장한 판례에 추가했습니다', savedNos.includes(p.no) ? 'default' : 'success')
   }
   const onCopy = (p) => {
-    const text = `${p.title} (${p.court} ${p.no}, ${p.date})\n적용 포인트: ${p.point}`
+    const text = `${p.title} (${p.court} ${p.no}, ${p.date})\n참고 내용: ${p.point}`
     navigator.clipboard?.writeText(text).catch(() => {})
     toast('클립보드에 복사했습니다', 'success')
   }
@@ -157,22 +156,22 @@ export default function CaseSearch() {
         {/* sidebar */}
         <div className="space-y-5">
           <Card className="p-5">
-            <div className="flex items-center gap-2 text-ink-700"><TrendingUp size={16} className="text-brand-400" /><span className="text-sm font-bold">유사 사건 승소율</span></div>
+            <div className="flex items-center gap-2 text-ink-700"><TrendingUp size={16} className="text-brand-400" /><span className="text-sm font-bold">유사 판례 통계</span></div>
             <div className="mt-3 text-center">
-              <div className="text-4xl font-bold text-brand-500">{winrate.overall}%</div>
-              <p className="mt-1 text-xs text-ink-500">전체 평균 승소율 <span className="font-semibold text-emerald-500">{winrate.trend} 최근 1년</span></p>
+              <div className="text-2xl font-bold text-brand-500">{winrate.overall}%</div>
+              <p className="mt-1 text-xs text-ink-500">유사 판례 중 원고 승소 비율 <span className="font-semibold text-emerald-500">{winrate.trend} 최근 1년</span></p>
             </div>
             <div className="mt-4">
-              <div className="flex justify-between text-xs"><span className="text-ink-500">내 권리와 유사한 사건</span><span className="font-bold text-brand-500">{winrate.similar}%</span></div>
+              <div className="flex justify-between text-xs"><span className="text-ink-500">내 사건과 유사한 판례</span><span className="font-bold text-brand-500">{winrate.similar}%</span></div>
               <div className="mt-1.5"><Progress value={winrate.similar} /></div>
             </div>
-            <div className="mt-4 flex items-start gap-2 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-700">
-              <Check size={14} className="mt-0.5 shrink-0" /> 승소 가능성이 높습니다. 유사 사건의 {winrate.similar}%가 원고 승소 또는 일부 승소했어요.
+            <div className="mt-4 border-l-2 border-ink-200 pl-3 text-[11px] leading-relaxed text-ink-400">
+              위 수치는 유사 판례의 통계적 경향이며, 실제 재판 결과를 예측하거나 보장하지 않습니다. 구체적인 결과는 사건의 사실관계에 따라 달라질 수 있습니다.
             </div>
           </Card>
 
           <Card className="p-5">
-            <div className="flex items-center gap-2 text-ink-700"><Scale size={16} className="text-brand-400" /><span className="text-sm font-bold">주요 쟁점별 승소율</span></div>
+            <div className="flex items-center gap-2 text-ink-700"><Scale size={16} className="text-brand-400" /><span className="text-sm font-bold">주요 쟁점별 원고 승소 비율</span></div>
             <div className="mt-4 space-y-3">
               {winrate.issues.map((i) => (
                 <div key={i.name}>
@@ -187,9 +186,9 @@ export default function CaseSearch() {
             <div className="flex items-center gap-2 text-ink-700"><Book size={16} className="text-brand-400" /><span className="text-sm font-bold">관련 법령</span></div>
             <div className="mt-3 space-y-2">
               {winrate.laws.map((l) => (
-                <div key={l.name} className="flex items-start justify-between gap-2 rounded-xl border border-ink-100 p-3">
+                <div key={l.name} className="rounded-xl border border-ink-100 p-3">
                   <span className="text-[13px] font-medium text-ink-700">{l.name}</span>
-                  <Badge tone={l.tone}>{l.tag}</Badge>
+                  <p className="mt-1 text-[11px] text-ink-400">관련 가능성이 있는 조항입니다</p>
                 </div>
               ))}
             </div>
@@ -254,7 +253,7 @@ export default function CaseSearch() {
       </Modal>
 
       {/* 인용 목록 모달 */}
-      <Modal open={citeModal} onClose={() => setCiteModal(false)} title={`내 인용 목록 (${citedList.length})`} sub="문서 생성 시 청구원인·준비서면에 자동으로 반영됩니다." maxW="max-w-lg"
+      <Modal open={citeModal} onClose={() => setCiteModal(false)} title={`내 인용 목록 (${citedList.length})`} sub="준비서면과 일부 신청서에서 쓸 수 있어요. 소장에는 판례를 넣지 않습니다." maxW="max-w-lg"
         footer={<><Button variant="neutral" onClick={() => setCiteModal(false)}>닫기</Button><Button disabled={citedList.length === 0} onClick={() => { setCiteModal(false); navigate('/app/documents') }}>문서 생성으로 보내기 →</Button></>}>
         {citedList.length === 0 ? (
           <div className="grid place-items-center py-10 text-center text-sm text-ink-400">

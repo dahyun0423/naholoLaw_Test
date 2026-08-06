@@ -34,23 +34,6 @@ export default function Signup() {
     navigate('/app/dashboard', { replace: true })
   }
 
-  const PwField = ({ field, label, placeholder }) => (
-    <Field label={label} error={touched ? errs[field] : ''}>
-      <div className="relative">
-        <input
-          className={cx(inputCls, 'pr-11')}
-          type={show[field === 'password' ? 'pw' : 'confirm'] ? 'text' : 'password'}
-          placeholder={placeholder}
-          value={form[field]}
-          onChange={onChange(field)}
-        />
-        <button type="button" onClick={() => setShow((s) => ({ ...s, [field === 'password' ? 'pw' : 'confirm']: !s[field === 'password' ? 'pw' : 'confirm'] }))} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-600">
-          {show[field === 'password' ? 'pw' : 'confirm'] ? <EyeOff size={20} /> : <Eye size={20} />}
-        </button>
-      </div>
-    </Field>
-  )
-
   return (
     <div className="grid min-h-screen place-items-center bg-ink-50 px-5 py-12">
       <div className="w-full max-w-[460px]">
@@ -74,7 +57,20 @@ export default function Signup() {
               <input className={inputCls} placeholder="abcd1234" value={form.username} onChange={onChange('username')} />
             </Field>
 
-            <PwField field="password" label="비밀번호" placeholder="6자 이상 입력" />
+            <Field label="비밀번호" required error={touched ? errs.password : ''}>
+              <div className="relative">
+                <input
+                  className={cx(inputCls, 'pr-11')}
+                  type={show.pw ? 'text' : 'password'}
+                  placeholder="6자 이상 입력"
+                  value={form.password}
+                  onChange={onChange('password')}
+                />
+                <button type="button" onClick={() => setShow((s) => ({ ...s, pw: !s.pw }))} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-400 hover:text-ink-600">
+                  {show.pw ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
+            </Field>
 
             <Field
               label="비밀번호 확인"

@@ -75,7 +75,7 @@ export default function About() {
           <div className="grid gap-4 pt-2 sm:grid-cols-3">
             {[
               { icon: FileText, t: '문서 에이전트', d: '소장·준비서면 등 문서 초안 자동 작성' },
-              { icon: Scale, t: '판례 에이전트', d: '유사 판례·법령 분석 및 승소율 제시' },
+              { icon: Scale, t: '판례 에이전트', d: '유사 판례·법령 분석 및 참고 정보 제공' },
               { icon: Book, t: '절차 에이전트', d: '단계별 절차·기한·서류 안내' },
             ].map((a) => (
               <Card key={a.t} className="p-5">

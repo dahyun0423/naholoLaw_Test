@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Button, Card, SectionHeading, Badge, cx } from '../components/ui.jsx'
 import { features, faqs } from '../data/mock.js'
-import * as Icons from '../components/icons.jsx'
 import { ArrowRight, ChevronDown, Scroll, Book, Scale, Folder, Calendar, Sparkles, Check } from '../components/icons.jsx'
 
 const iconMap = { Scroll, Book, Scale, Folder, Calendar, Sparkles }
@@ -82,7 +81,7 @@ export default function Landing() {
           <div className="grid grid-cols-2 gap-4">
             {[
               { icon: Scroll, t: '문서 자동 생성', d: '소장·준비서면' },
-              { icon: Scale, t: '판례 분석', d: '승소율·적용 포인트' },
+              { icon: Scale, t: '판례 분석', d: '유사 판례·참고 정보' },
               { icon: Book, t: '절차 안내', d: '단계별 가이드' },
               { icon: Folder, t: '증거 관리', d: '호증 번호 체계' },
             ].map((c) => (

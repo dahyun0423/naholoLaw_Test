@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, Badge, Button } from '../components/ui.jsx'
 import Modal from '../components/Modal.jsx'
+import HelpMedia from '../components/HelpMedia.jsx'
 import { Video, Book, Scroll, ChevronRight } from '../components/icons.jsx'
 
 const guides = [
@@ -39,17 +40,20 @@ export default function Guide() {
             </div>
             <h3 className="mt-4 font-bold text-ink-900">{g.title}</h3>
             <p className="mt-1.5 text-sm leading-relaxed text-ink-500">{g.desc}</p>
-            <p className="mt-4 flex items-center gap-1 text-sm font-medium text-brand-400">자세히 보기 <ChevronRight size={15} /></p>
+            <p className="mt-4 flex items-center gap-1 text-sm font-medium text-brand-400">
+              {g.type === '동영상' ? '▶ 영상 보기' : g.type === '템플릿' ? '양식 다운로드' : '자세히 보기'} <ChevronRight size={15} />
+            </p>
           </Card>
         ))}
       </div>
 
       <Modal open={!!open} onClose={() => setOpen(null)} title={open?.title}
-        footer={<><Button variant="neutral" onClick={() => setOpen(null)}>닫기</Button><Button onClick={() => { const to = open.to; setOpen(null); navigate(to) }}>{open?.cta}</Button></>}>
+        footer={<Button variant="neutral" onClick={() => setOpen(null)}>닫기</Button>}>
         {open && (
           <div className="space-y-3">
             <Badge tone={tone[open.type]}>{open.type}</Badge>
             <p className="text-[15px] leading-relaxed text-ink-700">{open.body}</p>
+            <HelpMedia item={open} navigate={navigate} onClose={() => setOpen(null)} />
           </div>
         )}
       </Modal>

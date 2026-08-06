@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
 import { Card, Button, cx } from '../components/ui.jsx'
 import Modal from '../components/Modal.jsx'
+import HelpMedia from '../components/HelpMedia.jsx'
 import {
   ArrowRight, Check, Clock, Video, Book, Scroll, HelpCircle, Sparkles, ChevronRight,
 } from '../components/icons.jsx'
@@ -56,7 +57,7 @@ const typePill = { 동영상: 'bg-violet-50 text-violet-500', 가이드: 'bg-bra
 const popular = [
   { q: '재판 준비서면 작성 방법은?', v: 512, a: '준비서면은 상대방의 주장에 대한 반박과 본인 주장의 근거를 정리하는 서면입니다. ① 상대방 주장 요지 정리 → ② 쟁점별 반박 → ③ 관련 판례·증거 인용 순으로 작성하세요. 문서 생성에서 AI 도움을 받을 수 있습니다.' },
   { q: '다음 방법을 추가로 제출하려면?', v: 324, a: '추가 증거나 서면은 변론종결 전까지 제출할 수 있습니다. 문서 생성에서 준비서면을 작성하고, 증빙 자료에서 새 증거를 등록한 뒤 절차 안내의 [서류 업로드]로 제출하세요.' },
-  { q: '증거 제출은 왜 중요할까요?', v: 289, a: '민사소송은 주장하는 사람이 입증 책임을 집니다. 계약서·이체내역·문자 등 객관적 증거가 충분할수록 승소 가능성이 높아집니다. 갑 제1호증부터 번호를 매겨 체계적으로 제출하세요.' },
+  { q: '증거 제출은 왜 중요할까요?', v: 289, a: '민사소송은 주장하는 사람이 입증 책임을 집니다. 계약서·이체내역·문자 등 객관적 증거가 충분할수록 주장을 뒷받침하는 데 유리합니다. 갑 제1호증부터 번호를 매겨 체계적으로 정리하면 좋습니다.' },
   { q: '준비서면 작성시 주의할 점은?', v: 156, a: '감정적 표현보다 사실과 법리 중심으로 간결하게 작성하세요. 새로운 주장은 근거(증거·판례)와 함께 제시하고, 제출 기한을 반드시 지켜야 합니다.' },
 ]
 
@@ -230,11 +231,12 @@ export default function Dashboard() {
 
       {/* 도움 콘텐츠 모달 */}
       <Modal open={!!help} onClose={() => setHelp(null)} title={help?.title}
-        footer={<><Button variant="neutral" onClick={() => setHelp(null)}>닫기</Button><Button onClick={() => { setHelp(null); navigate('/app/guide') }}>가이드에서 보기</Button></>}>
+        footer={<Button variant="neutral" onClick={() => setHelp(null)}>닫기</Button>}>
         {help && (
           <div className="space-y-3">
             <span className={cx('inline-block rounded-full px-2.5 py-1 text-xs font-semibold', typePill[help.type])}>{help.type}</span>
             <p className="text-[15px] leading-relaxed text-ink-700">{help.body}</p>
+            <HelpMedia item={help} navigate={navigate} onClose={() => setHelp(null)} />
           </div>
         )}
       </Modal>

@@ -1,0 +1,356 @@
+// 증거목록 — 새로 입력받는 문서가 아니라, 이미 모은 증거를 재구성하는 문서다.
+// 소장 6단계에서 고른 증거자료를 그대로 갑 제1,2,3…호증으로 번호 매겨 표로 뽑는다.
+// 추가로 받아야 하는 건 딱 하나, "이 자료로 뭘 증명하려는 거예요?" = 입증취지.
+
+import { useMemo, useState } from 'react'
+import { useToast } from '../context/ToastContext.jsx'
+import { Card, Button, Badge, Progress, inputCls, cx } from './ui.jsx'
+import { DocSignature, Note, Label, CourtPicker, SignatureUpload, PrintSheet, printSheet } from './docform.jsx'
+import { ArrowLeft, Plus, X, FileText, Sparkles, Upload } from './icons.jsx'
+import { cases, evidenceList } from '../data/mock.js'
+import { loadDraft, findType, fmtDate } from '../lib/complaint.js'
+
+const MARKS = [
+  { key: 'gap', code: '갑', label: '갑호증 (원고)' },
+  { key: 'eul', code: '을', label: '을호증 (피고)' },
+  { key: 'byung', code: '병', label: '병호증 (제3자)' },
+]
+
+const STATUS = ['미제출', '제출예정', '제출완료', '보완필요']
+const statusTone = { 미제출: 'gray', 제출예정: 'blue', 제출완료: 'green', 보완필요: 'amber' }
+
+/** 소장 초안의 증거 체크 → 표 행으로 */
+function rowsFromDraft(draft) {
+  if (!draft) return null
+  // 올린 파일은 제출예정, 체크만 하고 아직 안 올린 자료는 미제출로 구분해 가져온다
+  const uploaded = (draft.form.evidenceFiles || []).map((x) => x.name).filter(Boolean)
+  const pending = (draft.form.evidenceItems || []).filter((x) => !uploaded.includes(x))
+  const rows = [
+    ...uploaded.map((name) => ({ name, date: '', purpose: '', status: '제출예정', original: true })),
+    ...pending.map((name) => ({ name, date: '', purpose: '', status: '미제출', original: true })),
+  ]
+  return rows.length ? rows : null
+}
+
+/** 증거 이름만 보고 입증취지 초안을 제안한다 */
+const PURPOSE_HINTS = [
+  [/차용증|금전소비대차/, '원·피고 간 금전 대여 약정이 있었던 사실'],
+  [/계좌이체|입금|통장/, '원고가 피고에게 금원을 실제로 지급한 사실'],
+  [/문자|카톡|카카오/, '당사자 사이의 대화로 채무 존재를 인정한 사실'],
+  [/내용증명/, '원고가 피고에게 이행을 최고한 사실과 그 도달일'],
+  [/임대차계약서/, '임대차계약의 체결과 보증금 액수'],
+  [/전입세대|확정일자/, '대항력과 우선변제권을 갖춘 사실'],
+  [/근로계약서/, '근로관계의 성립과 약정 임금'],
+  [/급여명세서|임금대장/, '약정 임금과 미지급 금액'],
+  [/출퇴근|근태/, '실제 근로시간과 연장근로 사실'],
+  [/체불금품확인원/, '고용노동청이 확인한 체불 금액'],
+  [/진단서|소견서/, '상해의 부위와 정도, 치료 기간'],
+  [/영수증|견적서/, '실제 지출한 손해액'],
+  [/등기부|등기사항/, '부동산의 표시와 소유관계'],
+  [/사진|영상/, '사고 현장과 손해의 상태'],
+  [/녹취/, '상대방이 채무를 인정한 진술'],
+]
+const suggestPurpose = (name) => PURPOSE_HINTS.find(([re]) => re.test(name))?.[1] || ''
+
+export default function EvidenceListBuilder({ onExit }) {
+  const toast = useToast()
+  const draft = useMemo(() => loadDraft(), [])
+  const draftRows = useMemo(() => rowsFromDraft(draft), [draft])
+  const draftType = draft ? findType(draft.typeKey) : null
+
+  const [mark, setMark] = useState('gap')
+  const [header, setHeader] = useState(() => ({
+    court: draft?.form.court || '',
+    caseNo: '',
+    caseName: draftType?.caseName || '',
+    plaintiff: draft?.form.pName || '',
+    defendant: draft?.form.dName || '',
+    signature: '',
+  }))
+  const [rows, setRows] = useState(() => draftRows || [])
+  const [loaded, setLoaded] = useState(!!draftRows)
+
+  const code = MARKS.find((m) => m.key === mark).code
+  const setH = (k) => (e) => setHeader((h) => ({ ...h, [k]: e.target.value }))
+  const update = (i, k, v) => setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, [k]: v } : r)))
+  const remove = (i) => setRows((rs) => rs.filter((_, idx) => idx !== i))
+  const add = () => setRows((rs) => [...rs, { name: '', date: '', purpose: '', status: '미제출' }])
+  const move = (i, dir) => setRows((rs) => {
+    const to = i + dir
+    if (to < 0 || to >= rs.length) return rs
+    const copy = [...rs]
+    ;[copy[i], copy[to]] = [copy[to], copy[i]]
+    return copy
+  })
+
+  const loadFromComplaint = () => {
+    if (!draftRows) return
+    setRows(draftRows)
+    setLoaded(true)
+    toast(`소장에서 증거 ${draftRows.length}건을 불러왔습니다`)
+  }
+  const loadFromEvidence = () => {
+    setRows(evidenceList.map((e) => ({
+      name: e.file.replace(/\.[a-z]+$/i, '').replace(/_/g, ' '),
+      date: e.date,
+      purpose: e.purpose,
+      status: e.status,
+    })))
+    setLoaded(true)
+    toast(`증빙 자료에서 ${evidenceList.length}건을 불러왔습니다`)
+  }
+  const fillPurposes = () => {
+    let n = 0
+    setRows((rs) => rs.map((r) => {
+      if (r.purpose || !r.name) return r
+      const s = suggestPurpose(r.name)
+      if (s) n += 1
+      return s ? { ...r, purpose: s } : r
+    }))
+    setTimeout(() => toast(n ? `입증취지 ${n}건을 채웠습니다. 내용을 확인해 주세요` : '제안할 입증취지를 찾지 못했어요'), 0)
+  }
+
+  const withPurpose = rows.filter((r) => r.name && r.purpose).length
+  const percent = rows.length === 0 ? 0 : Math.round((withPurpose / rows.length) * 100)
+  const submitted = rows.filter((r) => r.status === '제출완료').length
+
+  // 화면 미리보기와 인쇄본이 같은 조판을 쓰도록 한 곳에서 만든다
+  const paper = (
+                <div className="font-serif text-[13px] leading-loose text-ink-800">
+                  <p className="print-lg text-center text-xl font-bold tracking-[0.3em] text-ink-900">증 거 목 록</p>
+                  <p className="mt-1 text-center text-ink-500">({header.plaintiff ? '원고' : '제출자'} 제출 {code}호증)</p>
+
+                  <div className="mt-6 space-y-0.5">
+                    <p>사건번호　{header.caseNo ? <b className="font-semibold text-brand-500">{header.caseNo}</b> : <span className="text-ink-400">[ 사건번호 ]</span>} {header.caseName}</p>
+                    <p>원　　고　{header.plaintiff ? <b className="font-semibold text-brand-500">{header.plaintiff}</b> : <span className="text-ink-400">[ 원고 ]</span>}</p>
+                    <p>피　　고　{header.defendant ? <b className="font-semibold text-brand-500">{header.defendant}</b> : <span className="text-ink-400">[ 피고 ]</span>}</p>
+                  </div>
+
+                  <div className="mt-5 overflow-x-auto">
+                    <table className="w-full border-collapse text-[12px]">
+                      <thead>
+                        <tr className="bg-ink-100 text-ink-700">
+                          <th className="border border-ink-300 px-2 py-2 font-semibold whitespace-nowrap">호증번호</th>
+                          <th className="border border-ink-300 px-2 py-2 font-semibold">서증명</th>
+                          <th className="border border-ink-300 px-2 py-2 font-semibold whitespace-nowrap">작성일</th>
+                          <th className="border border-ink-300 px-2 py-2 font-semibold">입증취지</th>
+                          <th className="border border-ink-300 px-2 py-2 font-semibold whitespace-nowrap">제출</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.length === 0 && (
+                          <tr><td colSpan={5} className="border border-ink-300 px-2 py-6 text-center text-ink-400">증거를 추가하면 여기에 표로 정리됩니다</td></tr>
+                        )}
+                        {rows.map((r, i) => (
+                          <tr key={i}>
+                            <td className="border border-ink-300 px-2 py-2 text-center whitespace-nowrap">{code} 제{i + 1}호증</td>
+                            <td className="border border-ink-300 px-2 py-2">
+                              {r.name ? <b className="font-semibold text-brand-500">{r.name}</b> : <span className="text-ink-400">[ 서증명 ]</span>}
+                            </td>
+                            <td className="border border-ink-300 px-2 py-2 text-center whitespace-nowrap">{r.date ? fmtDate(r.date) : '-'}</td>
+                            <td className="border border-ink-300 px-2 py-2">
+                              {r.purpose || <span className="text-ink-400">[ 입증취지를 채워 주세요 ]</span>}
+                            </td>
+                            <td className="border border-ink-300 px-2 py-2 text-center whitespace-nowrap">
+                              <Badge tone={statusTone[r.status]}>{r.status}</Badge>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <p className="mt-4 text-ink-500">※ 각 호증은 원본을 소지하고 있으며, 필요 시 법원에 제출하겠습니다.</p>
+
+                  <DocSignature
+                    date={fmtDate(new Date().toISOString().slice(0, 10))}
+                    name={header.plaintiff}
+                    court={header.court}
+                    signature={header.signature}
+                  />
+                </div>
+  )
+
+  return (
+    <div className="space-y-5">
+      <PrintSheet>{paper}</PrintSheet>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <button onClick={onExit} className="mb-2 flex items-center gap-1 text-sm font-medium text-ink-500 hover:text-ink-700">
+            <ArrowLeft size={16} /> 문서 종류 다시 고르기
+          </button>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-bold text-ink-900">증거목록 작성</h1>
+            <Badge tone="blue">{MARKS.find((m) => m.key === mark).label}</Badge>
+          </div>
+          <p className="mt-1 text-sm text-ink-500">새로 입력할 게 거의 없어요. 이미 모은 증거에 번호를 매기고 입증취지만 채우면 됩니다.</p>
+        </div>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        {/* ── 작업 영역 ── */}
+        <div className="space-y-4">
+          <Card className="p-5">
+            <h3 className="font-bold text-ink-900">어디서 가져올까요?</h3>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <button
+                onClick={loadFromComplaint}
+                disabled={!draftRows}
+                className={cx(
+                  'flex items-center gap-3 rounded-xl border p-3 text-left transition-colors',
+                  draftRows ? 'border-ink-200 hover:border-brand-200 hover:bg-brand-50/40' : 'cursor-not-allowed border-ink-100 opacity-50',
+                )}
+              >
+                <FileText size={18} className="shrink-0 text-brand-400" />
+                <span>
+                  <span className="block text-sm font-bold text-ink-800">작성한 소장에서</span>
+                  <span className="block text-xs text-ink-500">
+                    {draftRows ? `${draftType?.title} · 증거 ${draftRows.length}건` : '소장에서 고른 증거가 아직 없어요'}
+                  </span>
+                </span>
+              </button>
+              <button
+                onClick={loadFromEvidence}
+                className="flex items-center gap-3 rounded-xl border border-ink-200 p-3 text-left transition-colors hover:border-brand-200 hover:bg-brand-50/40"
+              >
+                <Upload size={18} className="shrink-0 text-brand-400" />
+                <span>
+                  <span className="block text-sm font-bold text-ink-800">증빙 자료에서</span>
+                  <span className="block text-xs text-ink-500">업로드해 둔 파일 {evidenceList.length}건</span>
+                </span>
+              </button>
+            </div>
+            {!loaded && (
+              <div className="mt-3">
+                <Note tone="info">소장을 먼저 작성하면 거기서 고른 증거가 그대로 넘어와요. 직접 추가해도 됩니다.</Note>
+              </div>
+            )}
+          </Card>
+
+          <Card className="p-5">
+            <h3 className="font-bold text-ink-900">사건 정보</h3>
+            <div className="mt-3 space-y-4">
+              <div><Label required>법원</Label><CourtPicker value={header.court} onChange={(c) => setHeader((h) => ({ ...h, court: c }))} /></div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block"><Label required>사건번호</Label>
+                  <input className={inputCls} placeholder="2026가단123456" value={header.caseNo} onChange={setH('caseNo')} list="case-ids" />
+                  <datalist id="case-ids">{cases.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}</datalist>
+                </label>
+                <label className="block"><Label>사건명</Label><input className={inputCls} placeholder="대여금" value={header.caseName} onChange={setH('caseName')} /></label>
+                <label className="block"><Label required>원고</Label><input className={inputCls} placeholder="홍길동" value={header.plaintiff} onChange={setH('plaintiff')} /></label>
+                <label className="block"><Label required>피고</Label><input className={inputCls} placeholder="김철수" value={header.defendant} onChange={setH('defendant')} /></label>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-5">
+            <div className="flex flex-wrap items-center gap-3">
+              <h3 className="font-bold text-ink-900">증거 번호 체계</h3>
+              <div className="inline-flex rounded-xl bg-ink-100 p-1">
+                {MARKS.map((m) => (
+                  <button
+                    key={m.key}
+                    onClick={() => setMark(m.key)}
+                    className={cx('rounded-lg px-3.5 py-1.5 text-sm transition-colors', mark === m.key ? 'bg-brand-300 font-semibold text-white' : 'text-ink-500 hover:text-ink-700')}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <p className="text-[13px] text-ink-500">입증취지 {withPurpose} / {rows.length}건</p>
+              <div className="w-24"><Progress value={percent} /></div>
+              <Button size="sm" variant="soft" className="ml-auto" onClick={fillPurposes}>
+                <Sparkles size={14} /> 입증취지 자동 제안
+              </Button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {rows.length === 0 && (
+                <p className="rounded-xl border border-dashed border-ink-200 bg-ink-50 p-6 text-center text-[13px] text-ink-400">
+                  증거가 없어요. 위에서 불러오거나 아래 버튼으로 추가하세요.
+                </p>
+              )}
+              {rows.map((r, i) => (
+                <div key={i} className="rounded-xl border border-ink-200 bg-white p-3">
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="rounded-md bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand-500">{code} 제{i + 1}호증</span>
+                    <select
+                      className="h-7 rounded-lg border border-ink-200 px-2 text-xs text-ink-700"
+                      value={r.status}
+                      onChange={(e) => update(i, 'status', e.target.value)}
+                    >
+                      {STATUS.map((s) => <option key={s}>{s}</option>)}
+                    </select>
+                    <div className="ml-auto flex items-center gap-0.5">
+                      <button onClick={() => move(i, -1)} disabled={i === 0} className="rounded p-1 text-ink-400 hover:bg-ink-100 disabled:opacity-30" aria-label="위로">↑</button>
+                      <button onClick={() => move(i, 1)} disabled={i === rows.length - 1} className="rounded p-1 text-ink-400 hover:bg-ink-100 disabled:opacity-30" aria-label="아래로">↓</button>
+                      <button onClick={() => remove(i)} className="rounded p-1 text-ink-400 hover:bg-ink-100" aria-label="삭제"><X size={14} /></button>
+                    </div>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-[1fr_10rem]">
+                    <input className={cx(inputCls, 'h-10 text-sm')} placeholder="서증명 (예: 차용증)" value={r.name} onChange={(e) => update(i, 'name', e.target.value)} />
+                    <input type="date" className={cx(inputCls, 'h-10 text-sm')} value={r.date} onChange={(e) => update(i, 'date', e.target.value)} />
+                  </div>
+                  <input
+                    className={cx(inputCls, 'mt-2 h-10 text-sm', !r.purpose && r.name && 'border-amber-300 bg-amber-50/40')}
+                    placeholder="이 자료로 뭘 증명하려는 거예요?"
+                    value={r.purpose}
+                    onChange={(e) => update(i, 'purpose', e.target.value)}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <button onClick={add} className="mt-3 flex items-center gap-1 text-sm font-medium text-brand-400 hover:text-brand-500">
+              <Plus size={15} /> 증거 추가
+            </button>
+
+            <div className="mt-4">
+              <Note tone="info">
+                여기서 적은 입증취지는 소장의 입증방법란과 나중에 쓸 준비서면에서도 그대로 재사용됩니다.
+              </Note>
+            </div>
+          </Card>
+
+          <Card className="p-5">
+            <SignatureUpload value={header.signature} onChange={(v) => setHeader((h) => ({ ...h, signature: v }))} />
+          </Card>
+
+          <Card className="sticky bottom-0 flex items-center gap-2 p-3">
+            <Button variant="neutral" onClick={onExit}><ArrowLeft size={16} /> 이전</Button>
+            <span className="text-xs text-ink-400">제출완료 {submitted} / {rows.length}건</span>
+            <Button className="ml-auto" onClick={printSheet}>
+              <FileText size={16} /> PDF 저장 · 인쇄
+            </Button>
+          </Card>
+        </div>
+
+        {/* ── 미리보기 ── */}
+        <div className="lg:sticky lg:top-4 lg:h-[calc(100vh-6rem)]">
+          <Card className="flex h-full flex-col p-0">
+            <div className="flex flex-wrap items-center gap-3 border-b border-ink-100 px-5 py-3.5">
+              <h3 className="font-bold text-ink-900">증거목록 미리보기</h3>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-600">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> 실시간 반영 중
+              </span>
+              <div className="ml-auto flex items-center gap-2">
+                <span className="text-xs text-ink-500">입증취지</span>
+                <div className="w-20"><Progress value={percent} /></div>
+                <span className="text-sm font-bold text-brand-400">{percent}%</span>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto bg-ink-50 p-4">
+              <div className="rounded-xl border border-ink-200 bg-white p-6 sm:p-8">
+                {paper}
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
+    </div>
+  )
+}
