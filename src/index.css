@@ -6,20 +6,20 @@
   --color-brand-50: #eef6ff;
   --color-brand-100: #d6e9ff;
   --color-brand-200: #aed3ff;
-  --color-brand-300: #64a8ff;
+  --color-brand-300: #64a8ff; /* Figma bluee300 — 메인 스케일 */
   --color-brand-400: #3d8bff;
   --color-brand-500: #2f7af0;
   --color-brand-600: #1f63d6;
   --color-brand-700: #194aa6;
   --color-brand-900: #12306b;
 
-  --color-ink-900: #191f28;
+  --color-ink-900: #191f28;   /* Figma grey900 */
   --color-ink-800: #333d4b;
   --color-ink-700: #4e5968;
   --color-ink-600: #6b7684;
   --color-ink-500: #8b95a1;
   --color-ink-400: #b0b8c1;
-  --color-ink-300: #c9cfd6;
+  --color-ink-300: #d1d6db;   /* Figma grey300 */
   --color-ink-200: #e5e8eb;
   --color-ink-100: #f2f4f6;
   --color-ink-50: #f9fafb;
@@ -81,7 +81,7 @@ body {
   }
   .print-doc .print-lg { font-size: 16pt !important; }
   /* 미입력 자리는 회색으로 남겨 "아직 안 채웠다"가 인쇄본에서도 보이게 한다 */
-  .print-doc .print-muted, .print-doc .text-ink-400 { color: #888 !important; }
+  .print-doc .print-muted, .print-doc .text-ink-300, .print-doc .text-ink-400 { color: #888 !important; }
 
   /* 표는 줄간격 200%를 적용하면 셀이 터진다 — 서식지 표는 촘촘하게 */
   .print-doc table, .print-doc table * { line-height: 1.5 !important; }
@@ -96,6 +96,9 @@ body {
     font-size: 7pt !important;
     line-height: 1.2 !important;
   }
+
+  /* 별개 서면은 새 장에서 시작해야 한다 — 한 장에 섞이면 접수처가 나눠 보지 못한다 */
+  .print-doc .print-page-before { break-before: page; border-top: 0 !important; padding-top: 0 !important; }
 
   .print-page { break-after: page; }
   .print-page:last-child { break-after: auto; }

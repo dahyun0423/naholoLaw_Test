@@ -1,7 +1,11 @@
 import { useState } from 'react'
 import { Card, Badge, Button, Progress, inputCls, cx } from '../components/ui.jsx'
 import Modal from '../components/Modal.jsx'
-import { procedureSteps, procedureSchedule, submitDocs, activeCase } from '../data/mock.js'
+import { procedureSteps as demoSteps, procedureSchedule, submitDocs, activeCase as demoCase } from '../data/mock.js'
+import { useWorkspace } from '../context/WorkspaceContext.jsx'
+import { caseSteps, caseProgress, caseTodos, caseEvidence } from '../lib/casebook.js'
+import CaseBar from '../components/CaseBar.jsx'
+import { Link } from 'react-router-dom'
 // 인지대·송달료는 소장 화면과 반드시 같은 식을 써야 한다.
 // 여기서 따로 계산하면 같은 앱이 같은 금액에 두 답을 내놓는다.
 import { stampFee, serviceFee, won, SERVICE_FEE_IS_ESTIMATE } from '../lib/complaint.js'
@@ -14,6 +18,17 @@ const statusMeta = {
 }
 
 export default function Procedure() {
+  // 내가 만든 사건이면 그 사건의 실제 상태를 보여준다.
+  // 아직 없으면 예시 사건으로 화면 구성을 보여주되, 예시임을 밝힌다.
+  const { activeCase, activeRaw } = useWorkspace()
+  const mine = !!activeRaw
+  const steps = mine ? caseSteps(activeRaw) : demoSteps
+  const todos = mine ? caseTodos(activeRaw) : []
+  const evidence = mine ? caseEvidence(activeRaw) : []
+  const banner = mine
+    ? { ...activeCase, progress: caseProgress(activeRaw) }
+    : { ...demoCase, title: demoCase.title, court: demoCase.court, caseNo: demoCase.id, status: '예시', progress: demoCase.progress }
+
   const [upload, setUpload] = useState(false)
   const [checklist, setChecklist] = useState(false)
   const [calc, setCalc] = useState(false)
@@ -25,7 +40,17 @@ export default function Procedure() {
   const fee = amount ? stampFee(Number(amount)) : 0
   const postage = amount ? serviceFee(2) : 0
 
-  const doneCount = submitDocs.filter((d) => d.done).length
+  // 제출 서류 체크도 실제 작성 상태를 따른다
+  const docs = mine
+    ? [
+        { name: '소장', done: caseProgress(activeRaw) >= 60 },
+        { name: '당사자 표시', done: !!(activeRaw.form?.pName && activeRaw.form?.dName) },
+        { name: '증거자료', done: evidence.length > 0 },
+        { name: '입증취지', done: evidence.length > 0 && evidence.every((e) => e.purpose) },
+        { name: '서명 · 날인', done: !!activeRaw.form?.signature },
+      ]
+    : submitDocs
+  const doneCount = docs.filter((d) => d.done).length
 
   return (
     <div className="space-y-6">
@@ -34,30 +59,53 @@ export default function Procedure() {
         <p className="mt-1 text-sm text-ink-500">소송 진행 단계를 한눈에 확인하고 다음 단계를 준비하세요.</p>
       </div>
 
+      <CaseBar />
+
       {/* case banner */}
       <Card className="border-brand-200 bg-gradient-to-r from-brand-500 to-brand-400 p-5 text-white">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <Badge className="bg-white/20 text-white">{activeCase.type} 소송</Badge>
-            <h2 className="mt-2 text-lg font-bold">{activeCase.title}</h2>
-            <p className="text-sm text-white/80">{activeCase.court} · {activeCase.id}</p>
+            <Badge className="bg-white/20 text-white">민사 소송</Badge>
+            <h2 className="mt-2 text-lg font-bold">{banner.title}</h2>
+            <p className="text-sm text-white/80">
+              {[banner.court, banner.caseNo || '사건번호 없음 (접수 전)'].filter(Boolean).join(' · ')}
+            </p>
           </div>
           <div className="w-48">
-            <div className="flex justify-between text-xs text-white/80"><span>진행률</span><span>{activeCase.progress}%</span></div>
-            <div className="mt-1.5 h-2 rounded-full bg-white/25"><div className="h-full rounded-full bg-white" style={{ width: `${activeCase.progress}%` }} /></div>
+            <div className="flex justify-between text-xs text-white/80"><span>진행률</span><span>{banner.progress}%</span></div>
+            <div className="mt-1.5 h-2 rounded-full bg-white/25"><div className="h-full rounded-full bg-white" style={{ width: `${banner.progress}%` }} /></div>
           </div>
         </div>
       </Card>
+
+      {/* 접수 전 사건은 '무엇을 더 채워야 하는가'가 곧 다음 단계다 */}
+      {mine && todos.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50 p-5">
+          <p className="flex items-center gap-2 text-sm font-bold text-amber-800">
+            <AlertTriangle size={16} /> 접수하려면 {todos.length}가지가 더 필요해요
+          </p>
+          <ul className="mt-2.5 space-y-1.5">
+            {todos.slice(0, 5).map((t, i) => (
+              <li key={i}>
+                <Link to={t.to} className="text-[13px] leading-relaxed text-amber-700 hover:underline">
+                  · <b className="font-semibold">{t.title}</b>{t.desc && ` — ${t.desc}`}
+                </Link>
+              </li>
+            ))}
+          </ul>
+          {todos.length > 5 && <p className="mt-2 text-xs text-amber-600">외 {todos.length - 5}건</p>}
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* timeline */}
         <Card className="p-6 lg:col-span-2">
           <h3 className="font-bold text-ink-900">소송 진행 단계</h3>
           <div className="mt-5">
-            {procedureSteps.map((s, i) => {
+            {steps.map((s, i) => {
               const m = statusMeta[s.status]
               const Icon = m.icon
-              const last = i === procedureSteps.length - 1
+              const last = i === steps.length - 1
               return (
                 <div key={s.name} className="flex gap-4">
                   <div className="flex flex-col items-center">
@@ -66,7 +114,9 @@ export default function Procedure() {
                   </div>
                   <div className={cx('flex-1 pb-7', last && 'pb-0')}>
                     <div className="flex flex-wrap items-center gap-2">
-                      <h4 className={cx('font-bold', s.status === 'todo' ? 'text-ink-500' : 'text-ink-900')}>{s.name}</h4>
+                      {s.to
+                        ? <Link to={s.to} className={cx('font-bold hover:text-brand-500 hover:underline', s.status === 'todo' ? 'text-ink-500' : 'text-ink-900')}>{s.name}</Link>
+                        : <h4 className={cx('font-bold', s.status === 'todo' ? 'text-ink-500' : 'text-ink-900')}>{s.name}</h4>}
                       {s.status === 'current' && <Badge tone="blue">진행 중</Badge>}
                       <span className="text-xs text-ink-400">{s.date}</span>
                     </div>
@@ -98,11 +148,11 @@ export default function Procedure() {
           <Card className="p-5">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-ink-900">제출 서류</h3>
-              <span className="text-xs text-ink-400">{doneCount}/{submitDocs.length}</span>
+              <span className="text-xs text-ink-400">{doneCount}/{docs.length}</span>
             </div>
-            <div className="mt-3"><Progress value={(doneCount / submitDocs.length) * 100} tone="green" /></div>
+            <div className="mt-3"><Progress value={(doneCount / docs.length) * 100} tone="green" /></div>
             <div className="mt-3 space-y-2">
-              {submitDocs.map((d) => (
+              {docs.map((d) => (
                 <div key={d.name} className="flex items-center justify-between rounded-lg px-1 py-1.5">
                   <span className="flex items-center gap-2 text-sm text-ink-700"><FileText size={15} className="text-ink-400" /> {d.name}</span>
                   {d.done ? <Check size={16} className="text-emerald-500" /> : <Circle size={16} className="text-ink-300" />}

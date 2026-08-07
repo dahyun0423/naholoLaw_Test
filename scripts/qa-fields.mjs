@@ -61,7 +61,7 @@ for (const type of complaintTypes) {
     for (const f of fields) form[f.key] = val(f, f.options ? rand(f.options.length) : 0, false)
     for (const f of fields) if (f.kind === 'address') { form[`${f.key}Zip`] = '00000'; form[`${f.key}Detail`] = '101호' }
     // 개인정보 「소장 표시」 토글은 기본값이 꺼짐이라 켜두고 잰다
-    for (const k of ['pRrnShow', 'dRrnShow', 'pPhoneShow', 'dPhoneShow', 'pEmailShow', 'dEmailShow', 'pFaxShow', 'dFaxShow']) form[k] = true
+    for (const k of ['pRrnShow', 'dRrnShow', 'pPhoneShow', 'dPhoneShow', 'pEmailShow', 'dEmailShow', 'pFaxShow', 'dFaxShow', 'pTelShow', 'dTelShow', 'pCorpNoShow', 'dCorpNoShow']) form[k] = true
     return form
   }
 

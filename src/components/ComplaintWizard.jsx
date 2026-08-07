@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useToast } from '../context/ToastContext.jsx'
+import { useWorkspace } from '../context/WorkspaceContext.jsx'
 import { Card, Button, Badge, Progress, cx } from './ui.jsx'
 import Modal from './Modal.jsx'
 import { Check, ArrowRight, FileText, Lightbulb, Scale, X } from './icons.jsx'
@@ -11,7 +12,7 @@ import {
 import SubmitGuide from './SubmitGuide.jsx'
 import {
   complaintTypes, findType, allSteps, completeness, stepSummary,
-  buildPreview, requiredChecklist, costSummary, won, fmtDate, emptyComplaint,
+  buildPreview, requiredChecklist, costSummary, effectiveSueValue, partyCount, won, fmtDate, emptyComplaint,
   saveDraft, loadDraft, clearDraft, savedAgo,
 } from '../lib/complaint.js'
 
@@ -69,7 +70,10 @@ export function ComplaintPaper({ doc, dense, signature }) {
     <div className={cx('font-serif leading-loose text-ink-800', dense ? 'text-[11px]' : 'text-[13px]')}>
       <p className="print-lg text-center text-xl font-bold tracking-[0.4em] text-ink-900">소　장</p>
       <p className="mt-6">사건명 : <b className="font-semibold text-brand-500">{doc.caseName}</b> 청구의 소</p>
-      <p>소송목적의 값 : 금 {doc.sueValue ? <b className="font-semibold text-brand-500">{won(doc.sueValue)}원</b> : <span className="text-ink-400">[ 1단계에서 입력 ]</span>}</p>
+      <p>
+        소송목적의 값 : 금 {doc.sueValue ? <b className="font-semibold text-brand-500">{won(doc.sueValue)}원</b> : <span className="text-ink-300">[ 1단계에서 입력 ]</span>}
+        {doc.sueValueDeemed && <span className="ml-1 text-[0.9em]">(민사소송 등 인지규칙 제18조의2)</span>}
+      </p>
 
       <div className="mt-4 space-y-0.5">
         {doc.parties.map((l, i) => <p key={i} className="whitespace-pre-wrap"><Rich text={l} /></p>)}
@@ -85,7 +89,7 @@ export function ComplaintPaper({ doc, dense, signature }) {
       <DocHeading>입 증 방 법</DocHeading>
       {doc.evidences
         ? doc.evidences.map((e, i) => <p key={e + i}>{i + 1}. 갑 제{i + 1}호증　　<b className="font-semibold text-brand-500">{e}</b></p>)
-        : <p className="text-ink-400">[ 6단계에서 증거를 고르면 갑 제1호증부터 자동으로 번호가 매겨집니다 ]</p>}
+        : <p className="text-ink-300">[ 6단계에서 증거를 고르면 갑 제1호증부터 자동으로 번호가 매겨집니다 ]</p>}
 
       <DocHeading>첨 부 서 류</DocHeading>
       {(doc.attachments || []).map((a, i) => <p key={i}>{i + 1}. {a}</p>)}
@@ -99,7 +103,7 @@ export function ComplaintPaper({ doc, dense, signature }) {
           <p className="mt-3 text-center text-ink-600">{doc.appendix.title}</p>
           {doc.appendix.body
             ? <p className="mt-3 whitespace-pre-wrap"><b className="font-semibold text-brand-500">{doc.appendix.body}</b></p>
-            : <p className="mt-3 text-ink-400">[ 3단계에서 부동산의 표시를 등기부 기재대로 입력해 주세요 ]</p>}
+            : <p className="mt-3 text-ink-300">[ 3단계에서 부동산의 표시를 등기부 기재대로 입력해 주세요 ]</p>}
         </div>
       )}
     </div>
@@ -142,7 +146,7 @@ function FullView({ type, form, onClose, onEdit }) {
               <DocHeading>입 증 방 법</DocHeading>
               {doc.evidences
                 ? doc.evidences.map((e, i) => <p key={e + i}>{i + 1}. 갑 제{i + 1}호증　　<b className="font-semibold text-brand-500">{e}</b></p>)
-                : <p className="text-ink-400">[ 6단계에서 증거를 골라 주세요 ]</p>}
+                : <p className="text-ink-300">[ 6단계에서 증거를 골라 주세요 ]</p>}
               <DocHeading>첨 부 서 류</DocHeading>
               {(doc.attachments || []).map((a, i) => <p key={i}>{i + 1}. {a}</p>)}
             </div>
@@ -191,7 +195,7 @@ function FullView({ type, form, onClose, onEdit }) {
                 </div>
                 <div>
                   <p className="font-semibold text-ink-800">③ 인지대·송달료 납부</p>
-                  <p>접수 전에 {won(costSummary(form.amount).total)}원을 납부하고 영수증을 함께 냅니다.</p>
+                  <p>접수 전에 {won(costSummary(effectiveSueValue(form), partyCount(form)).total)}원을 납부하고 영수증을 함께 냅니다.</p>
                 </div>
               </div>
             </div>
@@ -225,12 +229,17 @@ function VenueGuide() {
   )
 }
 
-function CostBox({ amount }) {
-  const { stamp, service, total, small, estimate } = costSummary(amount)
+function CostBox({ form }) {
+  // 인지대는 청구금액이 아니라 '소가'로 계산한다.
+  // 비재산권상 청구·소가 산출 불가면 인지규칙 제18조의2에 따라 5천만원으로 본다.
+  const sue = effectiveSueValue(form)
+  const deemed = sue !== (Number(form.amount) || 0)
+  const parties = partyCount(form)
+  const { stamp, service, total, small, estimate } = costSummary(sue, parties)
   const rows = [
-    ['소송목적의 값 (소가)', amount ? `${won(amount)}원` : '-', null],
+    ['소송목적의 값 (소가)', sue ? `${won(sue)}원` : '-', deemed ? '인지규칙 제18조의2' : null],
     ['인지대', `${won(stamp)}원`, '민사소송등인지법 제2조'],
-    ['송달료 (당사자 2명)', `${won(service)}원`, estimate ? '추정' : null],
+    [`송달료 (당사자 ${parties}명)`, `${won(service)}원`, estimate ? '추정' : null],
   ]
   return (
     <div className="rounded-xl border border-ink-200 bg-white p-4">
@@ -293,7 +302,7 @@ function makeComplaintExtras(type) {
     case 'venue':
       return <VenueGuide />
     case 'cost':
-      return <CostBox amount={form.amount} />
+      return <CostBox form={form} />
     case 'partyTag':
       return (
         <div className="flex items-center gap-2 pt-1">
@@ -331,7 +340,7 @@ function makeComplaintExtras(type) {
       const months = Number(form.unpaidMonths) || 0
       if (!rent || !months) return null
       const need = form.leaseKind === '상가' ? 3 : 2
-      const { stamp } = costSummary(form.amount)
+      const { stamp } = costSummary(effectiveSueValue(form))
       return (
         <div className="rounded-xl border border-ink-200 bg-white p-4">
           <p className="text-[13px] font-medium text-ink-600">자동 계산</p>
@@ -374,21 +383,28 @@ function Writer({ typeKey, form, setForm, onBack, onDone }) {
   const [savedAt, setSavedAt] = useState(null)
   const [saveFailed, setSaveFailed] = useState(false)
   const firstRender = useRef(true)
+  // 사건은 소장 초안과 같은 것이다. 한 번 만들어진 사건 id를 계속 물고 간다.
+  const { saveCase } = useWorkspace()
+  const caseIdRef = useRef(null)
 
   const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }))
   const extras = useMemo(() => makeComplaintExtras(type), [type])
   const percent = useMemo(() => completeness(type, form), [type, form])
   const doc = useMemo(() => buildPreview(type, form), [type, form])
 
-  // 입력할 때마다 자동 저장 — 새로고침해도 이어서 쓸 수 있게
+  // 입력할 때마다 자동 저장 — 새로고침해도 이어서 쓸 수 있게.
+  // 동시에 '사건'으로도 저장한다. 그래야 절차 안내·증빙 자료·일정이 같은 사건을 본다.
   useEffect(() => {
     if (firstRender.current) { firstRender.current = false; return }
     const t = setTimeout(() => {
-      if (saveDraft(typeKey, form)) { setSavedAt(Date.now()); setSaveFailed(false) }
+      const ok = saveDraft(typeKey, form)
+      const saved = saveCase(typeKey, form, caseIdRef.current)
+      if (saved) caseIdRef.current = saved.id
+      if (ok && saved) { setSavedAt(Date.now()); setSaveFailed(false) }
       else setSaveFailed(true)   // 저장소 한도 초과 등 — 조용히 넘기면 작업물을 잃는다
     }, 600)
     return () => clearTimeout(t)
-  }, [typeKey, form])
+  }, [typeKey, form, saveCase])
 
   const stepsWithExtras = steps.map((s, i) => ({
     ...s,

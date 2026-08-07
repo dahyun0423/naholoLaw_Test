@@ -22,7 +22,7 @@ export function Rich({ text, className }) {
     <span className={className}>
       {parts.map((p, i) => {
         if (p.startsWith('⟨')) return <b key={i} className="font-semibold text-brand-500">{p.slice(1, -1)}</b>
-        if (p.startsWith('⟦')) return <span key={i} className="print-muted text-ink-400">[ {p.slice(1, -1)} ]</span>
+        if (p.startsWith('⟦')) return <span key={i} className="print-muted text-ink-300">[ {p.slice(1, -1)} ]</span>
         return <span key={i}>{p}</span>
       })}
     </span>
@@ -52,7 +52,7 @@ export function DocSignature({ date, role = '위 원고', name, court, signature
       <div className="mt-3 flex items-center justify-end gap-2">
         <span>{role}</span>
         <span className="min-w-[7rem] border-b border-ink-300 pb-0.5 text-center">
-          {name ? <b className="font-semibold text-brand-500">{name}</b> : <span className="text-ink-400">[ 이름 ]</span>}
+          {name ? <b className="font-semibold text-brand-500">{name}</b> : <span className="text-ink-300">[ 이름 ]</span>}
         </span>
         {signature
           ? <img src={signature} alt="서명" className="sig-stamp h-10 w-auto max-w-[5rem] object-contain" />
@@ -67,7 +67,7 @@ export function DocSignature({ date, role = '위 원고', name, court, signature
         {signature ? '올리신 서명이 제출본에 그대로 인쇄됩니다' : '서명 이미지를 올리거나, 출력 후 직접 서명하세요'}
       </p>
       <p className="mt-5 text-center font-semibold tracking-[0.15em]">
-        {court ? <b className="text-brand-500">{court}</b> : <span className="text-ink-400">[ 법원 ]</span>}　귀중
+        {court ? <b className="text-brand-500">{court}</b> : <span className="text-ink-300">[ 법원 ]</span>}　귀중
       </p>
     </>
   )
@@ -94,7 +94,7 @@ export function GenericPaper({ doc, dense }) {
         <div key={s.heading}>
           <DocHeading>{s.heading}</DocHeading>
           {s.lines.length === 0
-            ? <p className="text-ink-400">[ 입력하면 여기에 표시됩니다 ]</p>
+            ? <p className="text-ink-300">[ 입력하면 여기에 표시됩니다 ]</p>
             : s.lines.map((l, i) => <p key={i} className="whitespace-pre-wrap"><Rich text={l} /></p>)}
         </div>
       ))}
@@ -108,6 +108,16 @@ export function GenericPaper({ doc, dense }) {
 
       <DocSignature date={doc.date} role={doc.role} name={doc.name} court={doc.court} signature={doc.signature} />
 
+      {/* 함께 내야 하는 별개 서면 (가압류신청 진술서 등) — 같은 미리보기에서 이어 보여준다 */}
+      {doc.extraDoc && (
+        <div className="mt-10 border-t-2 border-dashed border-ink-300 pt-8 print-page-before">
+          <p className="no-print mb-3 text-center text-[11px] font-semibold text-brand-500">
+            ↓ 여기부터는 별개의 서면입니다. 신청서와 함께 제출하세요.
+          </p>
+          <GenericPaper doc={doc.extraDoc} dense={dense} />
+        </div>
+      )}
+
       {/* 별지 목록 — 목적물이 특정되어야 하는 신청서에 붙는다 */}
       {doc.appendix && (
         <div className="mt-8 border-t border-dashed border-ink-300 pt-6">
@@ -115,7 +125,7 @@ export function GenericPaper({ doc, dense }) {
           <p className="mt-3 text-center text-ink-600">{doc.appendix.title}</p>
           {doc.appendix.body
             ? <p className="mt-3 whitespace-pre-wrap"><b className="font-semibold text-brand-500">{doc.appendix.body}</b></p>
-            : <p className="mt-3 text-ink-400">[ 부동산의 표시를 등기부 기재대로 입력해 주세요 ]</p>}
+            : <p className="mt-3 text-ink-300">[ 부동산의 표시를 등기부 기재대로 입력해 주세요 ]</p>}
         </div>
       )}
     </div>
@@ -185,12 +195,12 @@ export function ShowInDocToggle({ on, onChange }) {
         'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
         on ? 'border-brand-200 bg-brand-50 text-brand-500' : 'border-ink-200 bg-white text-ink-400 hover:bg-ink-50',
       )}
-      title={on ? '소장에 표시됩니다' : '법원 제출본에만 들어가고 소장 표시에서는 빠집니다'}
+      title={on ? '제출하는 서면에 표시됩니다' : '법원에만 알리고 상대방이 받는 부본에는 표시하지 않습니다'}
     >
       <span className={cx('grid h-3.5 w-3.5 place-items-center rounded border', on ? 'border-brand-300 bg-brand-300 text-white' : 'border-ink-300')}>
         {on && <Check size={9} />}
       </span>
-      소장 표시
+      제출문서에 보임
     </button>
   )
 }
@@ -215,7 +225,8 @@ export function Pills({ options, value, onChange, multi }) {
           )}
         >
           <span className={cx(
-            'grid h-4 w-4 place-items-center rounded-full border',
+            'grid h-4 w-4 place-items-center border',
+            multi ? 'rounded-[5px]' : 'rounded-full',
             on(o) ? 'border-brand-300 bg-brand-300 text-white' : 'border-ink-300',
           )}>
             {on(o) && <Check size={10} />}
@@ -765,6 +776,9 @@ export function CitationPicker({ policy, suggestions, cited, value = [], onChang
 
 export const isVisible = (field, form) => (field.when ? !!field.when(form) : true)
 
+/** 값이 들어 있는지 — 배열은 길이로 본다 */
+const filled = (v) => (Array.isArray(v) ? v.length > 0 : v !== undefined && v !== null && String(v).trim() !== '')
+
 /** 여러 문서가 공유하는 기본 입력 종류. 문서 고유 계산 박스는 renderExtra로 넘긴다. */
 export function FieldOne({ field: f, form, setField, renderExtra }) {
   const v = f.key ? form[f.key] ?? '' : ''
@@ -888,16 +902,28 @@ function RepeatField({ field: f, form, setField }) {
 }
 
 /** 절반 너비 필드는 두 개씩 한 줄에 묶는다 */
-export function Fields({ fields, form, setField, renderExtra }) {
-  const visible = fields.filter((f) => isVisible(f, form))
+/** half 짝맞춤 + 접이식 그룹까지 한 덩어리를 그린다 */
+function FieldList({ list, form, setField, renderExtra }) {
   const out = []
-  for (let i = 0; i < visible.length; i += 1) {
-    const f = visible[i]
-    if (f.half && visible[i + 1]?.half) {
+  for (let i = 0; i < list.length; i += 1) {
+    const f = list[i]
+
+    // fold가 같은 필드끼리 묶어 접는다 — 자주 안 쓰는 항목을 기본으로 감춘다
+    if (f.fold) {
+      const group = []
+      while (i < list.length && list[i].fold === f.fold) { group.push(list[i]); i += 1 }
+      i -= 1
+      out.push(
+        <FoldGroup key={`fold-${f.fold}`} label={f.fold} fields={group} form={form} setField={setField} renderExtra={renderExtra} />,
+      )
+      continue
+    }
+
+    if (f.half && list[i + 1]?.half && !list[i + 1].fold) {
       out.push(
         <div key={f.key || i} className="grid gap-4 sm:grid-cols-2">
           <FieldOne field={f} form={form} setField={setField} renderExtra={renderExtra} />
-          <FieldOne field={visible[i + 1]} form={form} setField={setField} renderExtra={renderExtra} />
+          <FieldOne field={list[i + 1]} form={form} setField={setField} renderExtra={renderExtra} />
         </div>,
       )
       i += 1
@@ -906,6 +932,71 @@ export function Fields({ fields, form, setField, renderExtra }) {
     out.push(<FieldOne key={f.key || `${f.kind}-${i}`} field={f} form={form} setField={setField} renderExtra={renderExtra} />)
   }
   return <div className="space-y-4">{out}</div>
+}
+
+/** 접이식 그룹 — 값이 들어 있으면 처음부터 펼쳐 둔다 (숨겨진 입력을 놓치지 않게) */
+function FoldGroup({ label, fields, form, setField, renderExtra }) {
+  const hasValue = fields.some((f) => f.key && filled(form[f.key]))
+  const [open, setOpen] = useState(hasValue)
+  return (
+    <div className={cx('rounded-xl border', open ? 'border-brand-200 bg-brand-50/40' : 'border-ink-200 bg-white')}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-4 py-3 text-left"
+      >
+        <ChevronRight size={15} className={cx('shrink-0 text-ink-400 transition-transform', open && 'rotate-90')} />
+        <span className={cx('text-sm font-medium', open ? 'text-brand-600' : 'text-ink-600')}>{label}</span>
+        {!open && hasValue && <Badge tone="blue" className="ml-auto">입력됨</Badge>}
+        {!open && !hasValue && <span className="ml-auto text-xs text-ink-400">해당하면 펼치기</span>}
+      </button>
+      {open && (
+        <div className="border-t border-ink-100 px-4 py-4">
+          <FieldList list={fields} form={form} setField={setField} renderExtra={renderExtra} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function Fields({ fields, form, setField, renderExtra }) {
+  const visible = fields.filter((f) => isVisible(f, form))
+  // tab이 붙은 필드가 있으면 탭으로 나눠 한 번에 한 쪽만 보여준다 (당사자 입력이 길어져서)
+  const tabs = [...new Set(visible.map((f) => f.tab).filter(Boolean))]
+  const [tab, setTab] = useState(tabs[0])
+  const active = tabs.includes(tab) ? tab : tabs[0]
+
+  if (tabs.length < 2) return <FieldList list={visible} form={form} setField={setField} renderExtra={renderExtra} />
+
+  const lead = visible.filter((f) => !f.tab)
+  return (
+    <div className="space-y-4">
+      {lead.length > 0 && <FieldList list={lead} form={form} setField={setField} renderExtra={renderExtra} />}
+      <div className="flex gap-1 rounded-xl bg-ink-100 p-1">
+        {tabs.map((t) => {
+          const group = visible.filter((f) => f.tab === t)
+          const need = group.filter((f) => f.required && f.key && !filled(form[f.key])).length
+          return (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className={cx(
+                'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-semibold transition-colors',
+                active === t ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-700',
+              )}
+            >
+              {t}
+              {need > 0
+                ? <span className="rounded-full bg-amber-100 px-1.5 text-[11px] font-bold text-amber-600">{need}</span>
+                : <Check size={13} className="text-emerald-500" />}
+            </button>
+          )
+        })}
+      </div>
+      <FieldList list={visible.filter((f) => f.tab === active)} form={form} setField={setField} renderExtra={renderExtra} />
+    </div>
+  )
 }
 
 /* ─────────────────── 진행 표시 · 유형 목록 ─────────────────── */

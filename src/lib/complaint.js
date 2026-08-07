@@ -21,6 +21,27 @@ export function fmtDate(v) {
   return `${y}. ${Number(m)}. ${Number(d)}.`
 }
 
+/**
+ * 실제 인지대 산정의 기초가 되는 소가.
+ * 민사소송 등 인지규칙 제18조의2 — 재산권상의 소로서 소가를 산출할 수 없는 것과
+ * 비재산권을 목적으로 하는 소송의 소가는 5천만 원으로 한다.
+ * (같은 조 단서의 1억 원 특례는 무체재산권 등 우리 5개 유형에 없는 사건이라 다루지 않는다)
+ */
+export const UNVALUABLE_SUE_VALUE = 50_000_000
+
+/** 소가가 법으로 정해지는 경우 — 「토지 등의 평가액」은 사용자가 계산해 넣으므로 제외 */
+export const isDeemedValue = (form) =>
+  form?.sueValueKind === '소가를 산출할 수 없는 경우' || form?.claimKind === '비재산권상 청구'
+
+export function effectiveSueValue(form) {
+  if (isDeemedValue(form)) return UNVALUABLE_SUE_VALUE
+  return Number(form?.amount) || 0
+}
+
+/** 청구취지·본문에 쓸 금액 — 소가가 간주되는 경우 따로 안 적었으면 그 값을 쓴다 */
+export const claimAmountOf = (form) =>
+  form?.amount || (isDeemedValue(form) ? String(UNVALUABLE_SUE_VALUE) : '')
+
 /** 민사소송등인지법 제2조 (100원 미만 버림) */
 export function stampFee(sueValue) {
   const v = Number(sueValue) || 0
@@ -84,6 +105,7 @@ const radio = (key, label, options, o = {}) => ({ kind: 'radio', key, label, opt
 const checks = (key, label, options, o = {}) => ({ kind: 'checks', key, label, options, ...o })
 const note = (tone, body, o = {}) => ({ kind: 'note', tone, body, ...o })
 const files = (key, label, o = {}) => ({ kind: 'files', key, label, ...o })
+const repeat = (key, label, columns, o = {}) => ({ kind: 'repeat', key, label, columns, ...o })
 
 /** 5단계(최고·청구 이력)는 유형별로 문구만 다르고 구조가 같다 */
 const demandStep = (title, verb, evidenceHint) => ({
@@ -131,7 +153,31 @@ export const commonSteps = [
     fields: [
       { kind: 'court', key: 'court', label: '소장을 낼 법원', required: true },
       { kind: 'venue' },
-      money('amount', '청구 금액', { required: true }),
+      // 전자소송포털 「사건기본정보」와 같은 항목. 소가 산정 방식이 인지대를 바꾼다.
+      radio('claimKind', '청구구분', ['재산권상 청구', '비재산권상 청구'], {
+        required: true,
+        hint: '돈·물건처럼 재산적 가치를 다투면 재산권상 청구예요. 두 가지가 섞여 있으면 비재산권상 청구를 고르세요.',
+      }),
+      radio('sueValueKind', '소가구분', ['금액', '토지 등의 평가액', '소가를 산출할 수 없는 경우'], {
+        required: true,
+        when: (f) => f.claimKind !== '비재산권상 청구',
+        hint: '건물명도처럼 부동산이 목적물이면 「토지 등의 평가액」을 씁니다. 개별공시지가·시가표준액을 기준으로 산정해요.',
+      }),
+      note('info', '토지 등의 평가액으로 정할 때는 소가 계산이 복잡합니다. 포털의 「소가산정안내」와 「부동산가액 및 소가계산기」를 함께 쓰세요.',
+        { when: (f) => f.sueValueKind === '토지 등의 평가액' }),
+      note('info', '비재산권상 청구이거나 소가를 산출할 수 없으면, 인지대 계산용 소가를 5천만원으로 봅니다(민사소송 등 인지규칙 제18조의2).',
+        { when: (f) => f.claimKind === '비재산권상 청구' || f.sueValueKind === '소가를 산출할 수 없는 경우' }),
+      money('amount', '청구 금액', {
+        required: true,
+        when: (f) => !isDeemedValue(f),
+      }),
+      // 비재산권상 청구·소가 산출 불가면 소가가 5천만원으로 정해진다(인지규칙 제18조의2).
+      // 이때는 청구금액을 따로 받지 않고 그 값을 그대로 쓴다 — 두 숫자가 어긋나면 인지대가 틀어진다.
+      money('amount', '청구 금액', {
+        when: (f) => isDeemedValue(f),
+        placeholder: '비워두면 50,000,000원으로 봅니다',
+        hint: '소가가 5천만원으로 정해지는 경우예요. 실제로 더 구하실 금액이 있으면 적어주세요.',
+      }),
       { kind: 'cost' },
     ],
   },
@@ -139,41 +185,104 @@ export const commonSteps = [
     id: 'party',
     title: '누가 누구에게 청구하나요?',
     fields: [
-      { kind: 'partyTag', tone: 'brand', tag: '원고', desc: '돈을 받을 사람 · 나' },
-      text('pName', '이름 / 상호', { required: true, half: true, placeholder: '홍길동' }),
+      /* ── 원고 ── */
+      { kind: 'partyTag', tone: 'brand', tag: '원고', desc: '돈을 받을 사람 · 나', tab: '원고' },
+      text('pName', '이름 / 상호', { required: true, half: true, placeholder: '홍길동', tab: '원고' }),
       text('pRrn', '주민등록번호', {
         required: true, half: true, placeholder: '750101-1234567',
-        showKey: 'pRrnShow', showDefault: false,
+        showKey: 'pRrnShow', showDefault: false, tab: '원고',
       }),
-      note('lock', '「소장 표시」를 끄면 그 항목은 소장 본문에서 빠지고, 법원에만 별도로 알립니다. 주민등록번호는 법이 요구하는 기재사항이 아니어서 기본값이 표시 안 함이에요. 다만 개인 상대 소송이라면 나중에 강제집행을 위해 주민등록상 주소·주민번호 확인이 필요해집니다.'),
+      note('lock', '「제출문서에 보임」을 끄면 그 항목은 소장 본문에서 빠지고, 법원에만 별도로 알립니다. 주민등록번호는 법이 요구하는 기재사항이 아니어서 기본값이 표시 안 함이에요.', { tab: '원고' }),
       {
-        kind: 'address', key: 'pAddr', label: '주소', required: true,
+        kind: 'address', key: 'pAddr', label: '주소', required: true, tab: '원고',
         hint: '서류를 실제로 받을 수 있는 곳이어야 해요. 주민등록상 주소와 달라도 됩니다.',
         detailNote: '단독주택처럼 동·호수가 없으면 비워두셔도 됩니다. 다만 공동주택이라면 꼭 적어주세요 — 내가 받을 서류가 이 주소로 옵니다.',
       },
-      text('pTel', '연락처', { required: true, half: true, placeholder: '010-1234-5678', showKey: 'pTelShow' }),
-      select('pService', '송달장소', ['위 주소와 같음', '다른 주소로 받겠습니다'], { half: true }),
-      { kind: 'address', key: 'pServiceAddr', label: '송달받을 주소', when: (f) => f.pService === '다른 주소로 받겠습니다' },
-      text('pFax', '팩스번호 (선택)', { half: true, placeholder: '없으면 비워두세요', showKey: 'pFaxShow' }),
-      text('pEmail', '이메일', { half: true, placeholder: 'hong@example.com', showKey: 'pEmailShow' }),
-      note('info', '전화·팩스·이메일은 소장 필수 기재사항이에요. 법원이 서류를 빠르게 보낼 때 씁니다.'),
-      { kind: 'partyTag', tone: 'ink', tag: '피고', desc: '돈을 갚아야 할 사람 · 상대방' },
-      text('dName', '이름 / 상호', { required: true, half: true, placeholder: '김철수' }),
-      text('dRrn', '주민등록번호 (모르면 비워두세요)', {
-        half: true, placeholder: '대부분 모릅니다',
-        showKey: 'dRrnShow', showDefault: false,
+      text('pTel', '연락처', { required: true, half: true, placeholder: '010-1234-5678', showKey: 'pTelShow', tab: '원고' }),
+      text('pEmail', '이메일', { half: true, placeholder: 'hong@example.com', showKey: 'pEmailShow', tab: '원고' }),
+
+      // 자주 안 쓰는 항목은 접어 둔다
+      select('pService', '송달장소', ['위 주소와 같음', '다른 주소로 받겠습니다'], { half: true, tab: '원고', fold: '송달받을 주소가 따로 있거나, 팩스를 쓰시나요?' }),
+      { kind: 'address', key: 'pServiceAddr', label: '송달받을 주소', when: (f) => f.pService === '다른 주소로 받겠습니다', tab: '원고', fold: '송달받을 주소가 따로 있거나, 팩스를 쓰시나요?' },
+      text('pFax', '팩스번호', { half: true, placeholder: '없으면 비워두세요', showKey: 'pFaxShow', tab: '원고', fold: '송달받을 주소가 따로 있거나, 팩스를 쓰시나요?' }),
+
+      radio('pEntity', '원고는 개인인가요, 법인인가요?', ['개인 (자연인)', '법인·단체'], { tab: '원고', fold: '법인이거나 미성년자인가요?' }),
+      text('pRep', '대표자', {
+        required: true, half: true, when: (f) => f.pEntity === '법인·단체',
+        placeholder: '대표이사 김모아', tab: '원고', fold: '법인이거나 미성년자인가요?',
+        hint: '법인등기사항증명서에 적힌 대표자를 그대로 적으세요.',
       }),
-      note('info', '피고 주민등록번호는 몰라도 됩니다. 실제로 아는 경우가 드물고, 법에서 요구하는 것도 이름·주소·연락처예요. 피고는 이름과 주소로 특정되면 충분합니다. 나중에 강제집행 단계에서 필요해지면 그때 법원 절차로 확인할 수 있어요.'),
+      text('pCorpNo', '법인등록번호', {
+        half: true, when: (f) => f.pEntity === '법인·단체', placeholder: '110111-0000000',
+        showKey: 'pCorpNoShow', showDefault: false, tab: '원고', fold: '법인이거나 미성년자인가요?',
+      }),
+      radio('pLegalRep', '원고가 미성년자이거나 후견이 필요한가요?', ['해당 없음', '법정대리인이 있어요'], {
+        when: (f) => f.pEntity !== '법인·단체', tab: '원고', fold: '법인이거나 미성년자인가요?',
+      }),
+      text('pLegalRepName', '법정대리인', {
+        required: true, when: (f) => f.pLegalRep === '법정대리인이 있어요',
+        placeholder: '친권자 부 홍순길, 모 김미향', tab: '원고', fold: '법인이거나 미성년자인가요?',
+        hint: '「친권자 부 ○○○」처럼 자격과 이름을 함께 적습니다. 소장 당사자란에 그대로 들어가요.',
+      }),
+      text('pForeignName', '외국어 이름', { half: true, placeholder: '외국인·법인이면 영문·한자 병기', tab: '원고', fold: '법인이거나 미성년자인가요?' }),
+
+      /* ── 피고 ── */
+      { kind: 'partyTag', tone: 'ink', tag: '피고', desc: '돈을 갚아야 할 사람 · 상대방', tab: '피고' },
+      text('dName', '이름 / 상호', { required: true, half: true, placeholder: '김철수', tab: '피고' }),
       {
-        kind: 'address', key: 'dAddr', label: '주소', required: true,
-        allowUnknown: true,
+        kind: 'address', key: 'dAddr', label: '주소', required: true, allowUnknown: true, tab: '피고',
         hint: '주민등록상 주소가 아니어도 됩니다. 실제로 서류를 받을 수 있는 곳이면 되고, 직장 주소도 괜찮아요.',
         detailNoteTone: 'warn',
         detailNote: '동·호수를 모르면 비워두고 접수하세요. 추측해서 적으면 엉뚱한 사람에게 송달돼 더 큰 문제가 됩니다. 송달이 안 되면 법원이 주소보정명령을 내리고, 그 명령서를 주민센터에 가져가면 피고의 주민등록초본을 발급받아 정확한 주소를 확인할 수 있어요.',
       },
-      text('dTel', '연락처', { half: true, placeholder: '010-9876-5432', showKey: 'dTelShow' }),
-      note('warn', '피고 주소를 모르면 소장 접수 후 사실조회·보정명령으로 확인할 수 있어요. 아는 범위까지만 적으세요.'),
-    ],
+      text('dTel', '연락처', { half: true, placeholder: '010-9876-5432', showKey: 'dTelShow', tab: '피고' }),
+      note('warn', '피고 주소를 모르면 소장 접수 후 사실조회·보정명령으로 확인할 수 있어요. 아는 범위까지만 적으세요.', { tab: '피고' }),
+
+      text('dRrn', '주민등록번호', {
+        half: true, placeholder: '대부분 모릅니다', showKey: 'dRrnShow', showDefault: false,
+        tab: '피고', fold: '피고의 주민등록번호를 아시나요?',
+      }),
+      note('info', '피고 주민등록번호는 몰라도 됩니다. 법에서 요구하는 것도 이름·주소·연락처예요. 나중에 강제집행 단계에서 필요해지면 그때 법원 절차로 확인할 수 있어요.', { tab: '피고', fold: '피고의 주민등록번호를 아시나요?' }),
+
+      radio('dCount', '피고가 몇 명인가요?', ['한 명', '여러 명'], { tab: '피고', fold: '피고가 여러 명인가요?' }),
+      repeat('dMore', '나머지 피고', [
+        { key: 'name', label: '이름 / 상호', placeholder: '김보증' },
+        { key: 'addr', label: '주소', placeholder: '서울 ○○구 ○○로 12, 101동 1001호' },
+        { key: 'tel', label: '연락처', placeholder: '010-0000-0000' },
+        { key: 'amount', label: '이 피고에게 청구할 금액', placeholder: '연대책임이면 비워두세요' },
+      ], {
+        when: (f) => f.dCount === '여러 명', required: true, tab: '피고', fold: '피고가 여러 명인가요?',
+        itemLabel: '피고', addLabel: '피고 추가', empty: '위에 적은 피고 외에 더 있는 분을 추가해 주세요.',
+      }),
+      money('dOwnAmount', '첫 번째 피고에게 청구할 금액', {
+        half: true, when: (f) => f.dCount === '여러 명' && f.dLiability === '피고별로 금액이 달라요',
+        tab: '피고', fold: '피고가 여러 명인가요?',
+        hint: '나머지 피고의 금액은 위 목록에서 각각 적으세요. 합계가 청구 금액과 맞아야 합니다.',
+      }),
+      radio('dLiability', '피고들에게 어떻게 청구하나요?', ['연대하여 (전액을 누구에게나)', '피고별로 금액이 달라요'], {
+        required: true, when: (f) => f.dCount === '여러 명', tab: '피고', fold: '피고가 여러 명인가요?',
+      }),
+      note('info', '보증인·공동차주는 보통 「연대하여」입니다. 전액을 아무 피고에게나 청구할 수 있어요. 사고 가해자가 여럿이라 각자 책임 범위가 다르면 「피고별로 금액이 달라요」를 고르세요.', { when: (f) => f.dCount === '여러 명', tab: '피고', fold: '피고가 여러 명인가요?' }),
+      note('warn', '피고가 늘면 송달료도 늘어납니다. 당사자 수에 비례해 예납하므로 1단계 비용 계산에 자동 반영했어요.', { when: (f) => f.dCount === '여러 명', tab: '피고', fold: '피고가 여러 명인가요?' }),
+
+      radio('dEntity', '피고는 개인인가요, 법인인가요?', ['개인 (자연인)', '법인·단체'], { tab: '피고', fold: '피고가 법인이거나 미성년자인가요?' }),
+      text('dRep', '대표자', {
+        required: true, half: true, when: (f) => f.dEntity === '법인·단체',
+        placeholder: '대표이사 김감영', tab: '피고', fold: '피고가 법인이거나 미성년자인가요?',
+        hint: '모르면 법인등기사항증명서를 떼어 확인하세요. 인터넷등기소에서 상호로 찾을 수 있어요.',
+      }),
+      text('dCorpNo', '법인등록번호', {
+        half: true, when: (f) => f.dEntity === '법인·단체', placeholder: '모르면 비워두세요',
+        showKey: 'dCorpNoShow', showDefault: false, tab: '피고', fold: '피고가 법인이거나 미성년자인가요?',
+      }),
+      radio('dLegalRep', '피고가 미성년자인가요?', ['해당 없음', '법정대리인이 있어요'], {
+        when: (f) => f.dEntity !== '법인·단체', tab: '피고', fold: '피고가 법인이거나 미성년자인가요?',
+      }),
+      text('dLegalRepName', '피고의 법정대리인', {
+        required: true, when: (f) => f.dLegalRep === '법정대리인이 있어요',
+        placeholder: '친권자 부 김○○, 모 이○○', tab: '피고', fold: '피고가 법인이거나 미성년자인가요?',
+      }),
+    ]
   },
 ]
 
@@ -211,8 +320,15 @@ export const complaintTypes = [
             placeholder: '예) 대학 동창으로 10년간 알고 지낸 사이입니다.',
             hint: '필수는 아니지만, 청구원인 첫머리에 들어가면 재판부가 사실관계를 이해하기 쉬워집니다.',
           }),
-          date('loanDate', '대여일자', { required: true, half: true }),
+          date('loanDate', '계약을 맺은 날', { required: true, half: true, hint: '빌려주기로 약속한 날이에요.' }),
           money('loanAmount', '대여금액', { required: true, half: true }),
+          // 요건사실은 ①계약 체결과 ②금전 지급이 별개다. 약속한 날과 실제로 건넨 날이 다를 수 있다.
+          radio('payDateSame', '돈은 언제 건네줬나요?', ['계약한 날 바로', '며칠 뒤에'], { required: true }),
+          date('payDate', '실제로 돈이 건너간 날', {
+            required: true, half: true,
+            when: (f) => f.payDateSame === '며칠 뒤에',
+            hint: '계좌이체라면 이체일, 현금이면 실제로 건넨 날이에요. 이체내역과 날짜가 맞아야 합니다.',
+          }),
           radio('loanMethod', '어떤 방법으로 건네줬나요?', ['계좌이체', '현금 교부', '수표 교부', '기타'], { required: true }),
           text('loanMethodEtc', '어떤 방법인가요?', {
             required: true,
@@ -284,6 +400,11 @@ export const complaintTypes = [
           date('contractDate', '계약체결일', { required: true, half: true }),
           money('depositAmount', '보증금액', { required: true, half: true }),
           date('leaseStart', '임대차 시작일', { half: true }),
+          // 법원 요건사실: "임대차계약을 체결하고 보증금을 지급한 사실" — 지급이 별개 사실이다
+          date('depositPaidDate', '보증금을 낸 날', {
+            half: true,
+            hint: '계약일과 달라도 됩니다. 계약금·잔금으로 나눠 냈다면 잔금 낸 날을 적으세요.',
+          }),
           date('leaseEnd', '임대차 종료일', { half: true }),
           radio('endWay', '계약이 어떻게 끝났나요?', ['기간 만료', '묵시적 갱신 후 해지통고', '합의 해지'], { required: true }),
           radio('handover', '집을 비워주셨나요? (목적물 인도)', ['비워줬어요', '아직 살고 있어요'], { required: true }),
@@ -534,7 +655,7 @@ export function completeness(type, form) {
 export function stepSummary(idx, type, form) {
   if (idx === 0) {
     if (!form.court && !form.amount) return ''
-    const { stamp, small } = costSummary(form.amount)
+    const { stamp, small } = costSummary(effectiveSueValue(form))
     return [form.court, form.amount && `${won(form.amount)}원`, small && '소액사건', stamp && `인지대 ${won(stamp)}원`]
       .filter(Boolean).join(' · ')
   }
@@ -569,6 +690,43 @@ const addrOf = (form, key) => {
   return [zip ? `(${zip})` : '', base, detail].filter(Boolean).join(' ')
 }
 
+
+/**
+ * 청구취지 제1항의 앞부분 — 법원 「작성예시」의 상세구분을 따른다.
+ *   피고 1명            : "피고는 원고에게 50,000,000원"
+ *   연대채무            : "피고들은 연대하여 원고에게 50,000,000원"
+ *   피고별 금액이 다름  : "원고에게 피고 김철수는 30,000,000원, 피고 김보증은 20,000,000원"
+ */
+function claimHead(form, amountText) {
+  const more = defendantsOf(form)
+  if (!more.length) return `피고는 원고에게 ${amountText}`
+
+  if (form.dLiability === '피고별로 금액이 달라요') {
+    const all = [
+      { name: form.dName, amount: form.dOwnAmount || form.amount },
+      ...more.map((x) => ({ name: x.name, amount: x.amount })),
+    ]
+    const parts = all.map((x) => `피고 ${or(x.name, '이름')}${x.name ? topicParticle(x.name) : '은(는)'} ${money$(x.amount, '금액')}`)
+    return `원고에게 ${parts.join(', ')}`
+  }
+  return `피고들은 연대하여 원고에게 ${amountText}`
+}
+
+/** 피고가 여럿이면 소송비용·가집행 문구도 복수형이 된다 */
+const costLine = (form) =>
+  defendantsOf(form).length ? '소송비용은 피고들의 부담으로 한다.' : '소송비용은 피고의 부담으로 한다.'
+
+/** 첫 피고 외에 추가된 피고들 — 이름이 비어 있는 줄은 버린다 */
+function defendantsOf(form) {
+  if (form.dCount !== '여러 명') return []
+  return (form.dMore || []).filter((x) => x && (x.name || x.addr))
+}
+
+/** 원고 1 + 피고 전원 — 송달료는 당사자 수에 비례한다 */
+export function partyCount(form) {
+  return 1 + 1 + defendantsOf(form).length
+}
+
 function partyLines(form) {
   // 「소장 표시」가 꺼진 항목은 본문에서 빼고, 법원에만 알린다는 각주를 남긴다
   const show = (key, dflt = true) => form[key] ?? dflt
@@ -576,10 +734,21 @@ function partyLines(form) {
 
   const p = [
     `원　고　${or(form.pName, '2단계에서 이름을 입력해 주세요')}${
+      form.pForeignName ? ` (${F(form.pForeignName)})` : ''
+    }${
       form.pRrn && show('pRrnShow', false) ? ` (${String(form.pRrn).slice(0, 8)}*****)` : ''
     }`,
     `　　　　${or(addrOf(form, 'pAddr'), '2단계에서 주소를 입력해 주세요')}`,
   ]
+  // 법인은 대표자를, 미성년자 등은 법정대리인을 당사자란에 함께 적는다
+  if (form.pEntity === '법인·단체') {
+    if (form.pCorpNo && show('pCorpNoShow', false)) p.push(`　　　　법인등록번호 ${F(form.pCorpNo)}`)
+    else if (form.pCorpNo) hidden.push('원고 법인등록번호')
+    p.push(`　　　　${or(form.pRep, '대표자')}`)
+  }
+  else if (form.pLegalRep === '법정대리인이 있어요') {
+    p.push(`　　　　위 원고는 소송능력이 없으므로 법정대리인 ${or(form.pLegalRepName, '법정대리인')}`)
+  }
   if (form.pRrn && !show('pRrnShow', false)) hidden.push('원고 주민등록번호')
 
   const contact = []
@@ -604,9 +773,30 @@ function partyLines(form) {
     }`,
     `　　　　${or(addrOf(form, 'dAddr'), '2단계에서 주소를 입력해 주세요')}`,
   ]
+  if (form.dEntity === '법인·단체') {
+    if (form.dCorpNo && show('dCorpNoShow', false)) d.push(`　　　　법인등록번호 ${F(form.dCorpNo)}`)
+    else if (form.dCorpNo) hidden.push('피고 법인등록번호')
+    d.push(`　　　　${or(form.dRep, '대표자')}`)
+  }
+  else if (form.dLegalRep === '법정대리인이 있어요') {
+    d.push(`　　　　위 피고는 소송능력이 없으므로 법정대리인 ${or(form.dLegalRepName, '법정대리인')}`)
+  }
   if (form.dRrn && !show('dRrnShow', false)) hidden.push('피고 주민등록번호')
   if (form.dTel && show('dTelShow')) d.push(`　　　　전화 ${F(form.dTel)}`)
   else if (form.dTel) hidden.push('피고 전화번호')
+
+  // 피고가 여럿이면 순번을 붙여 이어 적는다 (피고 1 / 피고 2 …)
+  const more = defendantsOf(form)
+  if (more.length) {
+    // 번호를 붙이면 이어지는 줄도 그만큼 들여써야 열이 맞는다
+    d[0] = d[0].replace('피　고　', '피　고　1. ')
+    for (let i = 1; i < d.length; i++) d[i] = d[i].replace(/^　　　　/, '　　　　　　')
+    more.forEach((x, i) => {
+      d.push(`　　　　${i + 2}. ${or(x.name, `피고 ${i + 2} 이름`)}`)
+      d.push(`　　　　　　${or(x.addr, `피고 ${i + 2} 주소`)}`)
+      if (x.tel) d.push(`　　　　　　전화 ${F(x.tel)}`)
+    })
+  }
 
   const lines = [...p, ...d]
   if (hidden.length) {
@@ -673,6 +863,12 @@ const objectParticle = (w) => {
   return f === null ? '을(를)' : f ? '을' : '를'
 }
 /** 으로 / 로 — ㄹ받침은 '로' */
+/** 주격 조사 은/는 — 받침 있으면 '은' */
+const topicParticle = (w) => {
+  const f = hasFinalConsonant(w)
+  return f === null ? '은(는)' : f ? '은' : '는'
+}
+
 const byParticle = (w) => {
   const code = String(w).trim().slice(-1).charCodeAt(0)
   if (Number.isNaN(code) || code < 0xac00 || code > 0xd7a3) return '(으)로'
@@ -705,13 +901,19 @@ function demandLines(form, verb) {
   return out
 }
 
+/** 금전을 실제로 건넨 시점 — 계약일과 같으면 "같은 날", 다르면 그 날짜를 적는다 */
+function payWhen(form) {
+  if (form.payDateSame === '며칠 뒤에') return date$(form.payDate, '지급일')
+  return '같은 날'
+}
+
 function loanBody(form) {
   const rate = form.interestSet === '약정함' && form.interestRate ? `연 ${form.interestRate}%` : RATE
   const start = form.dueSet === '날짜로 정함' ? date$(form.dueDate, '변제기') : date$(form.demandDate, '최고일')
   const claims = [
-    `피고는 원고에게 ${money$(form.amount, '1단계에서 청구금액을 입력해 주세요')} 및 이에 대하여 ${start}부터 이 사건 소장 부본 송달일까지는 ${F(rate)}, 그 다음 날부터 다 갚는 날까지는 ${F('연 12%')}의 비율로 계산한 돈을 지급하라.`,
-    '소송비용은 피고가 부담한다.',
-    '위 제1항은 가집행할 수 있다.',
+    `${claimHead(form, money$(claimAmountOf(form), '1단계에서 청구금액을 입력해 주세요'))} 및 이에 대하여 ${start}부터 이 사건 소장 부본 송달일까지는 ${F(rate)}, 그 다음 날부터 다 갚는 날까지는 ${F('연 12%')}의 각 비율에 의한 돈을 지급하라.`,
+    costLine(form),
+    '제1항은 가집행할 수 있다.',
   ]
 
   const reasons = []
@@ -730,7 +932,7 @@ function loanBody(form) {
   // ③ 계약 내용에 따른 금전 지급(인도) 사실
   const method = form.loanMethod === '기타' ? form.loanMethodEtc : form.loanMethod
   reasons.push(
-    `원고는 같은 날 피고에게 ${money$(form.loanAmount, '대여금액')}을 ${method ? F(`${method}하는 방법으로`) : ''} 지급하였습니다.${citeFor(form, 'payment')}`.replace('  ', ' '),
+    `원고는 ${payWhen(form)} 피고에게 ${money$(form.loanAmount, '대여금액')}을 ${method ? F(`${method}하는 방법으로`) : ''} 지급하였습니다.${citeFor(form, 'payment')}`.replace('  ', ' '),
   )
   if (form.loanTimes === '2회 이상' && form.loanSchedule) {
     reasons.push(`　　각 회차의 대여 내역은 다음과 같습니다. ${F(form.loanSchedule)}`)
@@ -767,12 +969,13 @@ function loanBody(form) {
 function depositBody(form) {
   const start = form.handover === '비워줬어요' ? date$(form.handoverDate, '인도일') : date$(form.leaseEnd, '임대차 종료일')
   const claims = [
-    `피고는 원고에게 ${money$(form.amount, '1단계에서 보증금액을 입력해 주세요')} 및 이에 대하여 ${start}부터 이 사건 소장 부본 송달일까지는 ${F('연 5%')}, 그 다음 날부터 다 갚는 날까지는 ${F('연 12%')}의 비율로 계산한 돈을 지급하라.`,
-    '소송비용은 피고가 부담한다.',
-    '위 제1항은 가집행할 수 있다.',
+    `${claimHead(form, money$(claimAmountOf(form), '1단계에서 보증금액을 입력해 주세요'))} 및 이에 대하여 ${start}부터 이 사건 소장 부본 송달일까지는 ${F('연 5%')}, 그 다음 날부터 다 갚는 날까지는 ${F('연 12%')}의 각 비율에 의한 돈을 지급하라.`,
+    costLine(form),
+    '제1항은 가집행할 수 있다.',
   ]
   const reasons = [
     `원고는 ${date$(form.contractDate, '3단계에서 계약체결일을 입력해 주세요')} 피고와 사이에 ${or(addrOf(form, 'propertyAddr'), '임차목적물 주소')}에 관하여 보증금 ${money$(form.depositAmount, '보증금액')}으로 하는 ${form.leaseKind ? F(`${form.leaseKind} 임대차`) : '임대차'}계약을 체결하였습니다.${citeFor(form, 'lease')}`,
+    `원고는 ${form.depositPaidDate ? date$(form.depositPaidDate, '보증금 지급일') : '같은 날'} 피고에게 위 보증금 ${money$(form.depositAmount, '보증금액')}을 지급하였습니다.${citeFor(form, 'payment')}`,
     `위 임대차계약은 ${date$(form.leaseEnd, '임대차 종료일')} ${form.endWay ? F(form.endWay) : P('종료 사유')}로 종료되었습니다.`,
   ]
   // 임대차 기간 — 계약의 존속기간이 특정되어야 종료 주장이 성립한다
@@ -806,9 +1009,9 @@ function depositBody(form) {
 
 function wageBody(form) {
   const claims = [
-    `피고는 원고에게 ${money$(form.amount, '1단계에서 체불액을 입력해 주세요')} 및 이에 대하여 ${date$(form.leaveDate, '퇴사일')}부터 14일이 지난 날의 다음 날부터 다 갚는 날까지 ${F('연 20%')}의 비율로 계산한 돈을 지급하라.`,
-    '소송비용은 피고가 부담한다.',
-    '위 제1항은 가집행할 수 있다.',
+    `${claimHead(form, money$(claimAmountOf(form), '1단계에서 체불액을 입력해 주세요'))} 및 이에 대하여 ${date$(form.leaveDate, '퇴사일')}부터 14일이 지난 날의 다음 날부터 다 갚는 날까지 ${F('연 20%')}의 비율에 의한 돈을 지급하라.`,
+    costLine(form),
+    '제1항은 가집행할 수 있다.',
   ]
   const reasons = [
     `원고는 ${date$(form.hireDate, '3단계에서 입사일을 입력해 주세요')}부터 ${date$(form.leaveDate, '퇴사일')}까지 피고가 운영하는 사업장에서 ${or(form.jobTitle, '담당 업무')}로 근무하였습니다.${citeFor(form, 'work')}`,
@@ -837,9 +1040,9 @@ function wageBody(form) {
 
 function tortBody(form) {
   const claims = [
-    `피고는 원고에게 ${money$(form.claimAmount || form.amount, '1단계에서 청구금액을 입력해 주세요')} 및 이에 대하여 ${date$(form.incidentDate, '손해 발생일')}부터 이 사건 소장 부본 송달일까지는 ${F('연 5%')}, 그 다음 날부터 다 갚는 날까지는 ${F('연 12%')}의 비율로 계산한 돈을 지급하라.`,
-    '소송비용은 피고가 부담한다.',
-    '위 제1항은 가집행할 수 있다.',
+    `${claimHead(form, money$(form.claimAmount || claimAmountOf(form), '1단계에서 청구금액을 입력해 주세요'))} 및 이에 대하여 ${date$(form.incidentDate, '손해 발생일')}부터 이 사건 소장 부본 송달일까지는 ${F('연 5%')}, 그 다음 날부터 다 갚는 날까지는 ${F('연 12%')}의 각 비율에 의한 돈을 지급하라.`,
+    costLine(form),
+    '제1항은 가집행할 수 있다.',
   ]
   const reasons = [
     `${or(form.incidentStory, '3단계에서 사건 경위를 입력해 주세요')}${citeFor(form, 'medical')}`,
@@ -866,10 +1069,11 @@ function tortBody(form) {
 function evictBody(form) {
   const unpaid = (Number(form.rent) || 0) * (Number(form.unpaidMonths) || 0)
   const claims = [
-    `피고는 원고에게 별지 목록 기재 부동산을 인도하라.`,
-    `피고는 원고에게 ${unpaid ? F(`${won(unpaid)}원`) : P('미납 차임 합계')} 및 이 사건 소장 부본 송달일 다음 날부터 위 부동산 인도 완료일까지 월 ${money$(form.rent, '월세')}의 비율로 계산한 돈을 지급하라.`,
-    '소송비용은 피고가 부담한다.',
-    '위 제1, 2항은 가집행할 수 있다.',
+    // 명도는 목적물 인도라 '연대'가 성립하지 않는다. 공동점유면 피고들이 함께 인도할 뿐이다.
+    `${defendantsOf(form).length ? '피고들은' : '피고는'} 원고에게 별지 목록 기재 부동산을 인도하라.`,
+    `${claimHead(form, unpaid ? F(`${won(unpaid)}원`) : P('미납 차임 합계'))} 및 이 사건 소장 부본 송달일 다음 날부터 위 부동산 인도 완료일까지 월 ${money$(form.rent, '월세')}의 비율에 의한 돈을 지급하라.`,
+    costLine(form),
+    '제1, 2항은 가집행할 수 있다.',
   ]
   // ① 원고에게 인도를 구할 권원이 있다는 사실 — 법원이 공시한 건물인도 요건사실의 첫 항목
   const title = form.ownership === '원고가 소유자로부터 임대 권한을 받음'
@@ -930,7 +1134,9 @@ export function buildPreview(type, form) {
   return {
     caseName,
     title: type.key === 'evict' ? `${caseName} 청구의 소` : `${caseName} 청구의 소`,
-    sueValue: form.amount,
+    sueValue: effectiveSueValue(form),
+    // 청구금액과 소가가 다른 경우(산출불능·비재산권)를 문서에서 구분해 보여준다
+    sueValueDeemed: effectiveSueValue(form) !== (Number(form.amount) || 0),
     parties: partyLines(form),
     claims,
     reasons,

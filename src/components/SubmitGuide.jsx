@@ -4,23 +4,30 @@
 // 그래서 "안내 + 붙여넣을 내용 제공 + 외부 링크"까지가 현실적인 범위.
 
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useToast } from '../context/ToastContext.jsx'
 import { Card, Button, Badge, cx } from './ui.jsx'
-import { Note, StageBar, PrintSheet, printSheet } from './docform.jsx'
+import { Note, StageBar, PrintSheet, printSheet, Rich, DocHeading } from './docform.jsx'
 import {
   ArrowLeft, ExternalLink, Copy, Check, FileText, Shield, AlertTriangle, Building, ChevronDown,
 } from './icons.jsx'
-import { won, costSummary, buildPreview } from '../lib/complaint.js'
+import { won, costSummary, effectiveSueValue, partyCount, buildPreview } from '../lib/complaint.js'
 import { addrOf } from '../lib/docschema.js'
+import { useWorkspace } from '../context/WorkspaceContext.jsx'
+import { caseEvidence } from '../lib/casebook.js'
+import CaseStatus from './CaseStatus.jsx'
 import { ComplaintPaper } from './ComplaintWizard.jsx'
 import { courtUrl } from '../data/mock.js'
 
 /** ⟨⟩·⟦⟧ 마킹을 걷어낸 순수 텍스트 — 전자소송 입력창에 붙여넣기 위한 것 */
 const plain = (s) => String(s).replace(/⟨([^⟩]*)⟩/g, '$1').replace(/⟦[^⟧]*⟧/g, '(미입력)')
 
-function CopyBlock({ title, lines }) {
+const PORTAL_LIMIT = 2000        // 포털 청구취지·청구원인 입력창 한도 (한글 2,000자)
+
+function CopyBlock({ title, lines, limit }) {
   const [done, setDone] = useState(false)
   const body = lines.map(plain).join('\n')
+  const over = limit && body.length > limit
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(body)
@@ -34,11 +41,22 @@ function CopyBlock({ title, lines }) {
     <div className="rounded-xl border border-ink-200 bg-white">
       <div className="flex items-center gap-2 border-b border-ink-100 px-4 py-2.5">
         <p className="text-sm font-bold text-ink-900">{title}</p>
+        {limit && (
+          <span className={cx('rounded-full px-2 py-0.5 text-[11px] font-semibold', over ? 'bg-red-50 text-red-500' : 'bg-ink-100 text-ink-500')}>
+            {body.length.toLocaleString()} / {limit.toLocaleString()}자
+          </span>
+        )}
         <Button size="sm" variant="neutral" className="ml-auto" onClick={copy}>
           {done ? <><Check size={14} /> 복사됨</> : <><Copy size={14} /> 복사</>}
         </Button>
       </div>
       <pre className="max-h-52 overflow-y-auto whitespace-pre-wrap px-4 py-3 font-serif text-[12px] leading-relaxed text-ink-700">{body}</pre>
+      {over && (
+        <p className="border-t border-red-100 bg-red-50 px-4 py-2 text-[12px] leading-relaxed text-red-600">
+          포털 입력창 한도를 넘습니다. 붙여넣으면 뒷부분이 잘려요.
+          청구원인은 <b className="font-semibold">「내용파일 첨부」</b>, 청구취지는 <b className="font-semibold">「청구취지별지 첨부하기」</b>를 쓰세요.
+        </p>
+      )}
     </div>
   )
 }
@@ -120,8 +138,8 @@ const STEPS = [
   },
   {
     title: '전자소송 동의 후 소장 제출',
-    body: '민사 → 소장 작성으로 들어가 당사자·청구취지·청구원인을 화면에서 입력합니다. 아래 복사 버튼으로 내용을 그대로 붙여넣으면 돼요.',
-    tip: '완성한 소장 파일을 첨부하는 방식은 전자소송이 지원하지 않아요. 증거만 파일로 첨부합니다.',
+    body: '서류제출 → 민사서류 → 민사본안 → 소장. 사건기본정보 · 당사자 · 법정대리인 · 청구취지 · 청구원인 · 입증서류 · 첨부서류 순서로 채웁니다.',
+    tip: '청구원인은 「직접입력」 대신 「내용파일 첨부」를 골라도 됩니다. 입력창은 2,000자 제한이에요.',
   },
   {
     title: '인지대 · 송달료 납부',
@@ -135,17 +153,46 @@ const STEPS = [
   },
 ]
 
+/** 포털 「내용파일 첨부」에 그대로 올릴 수 있게, 그 항목만 담은 A4 문서 */
+function PartPaper({ heading, lines, caseName, plaintiff, defendant }) {
+  return (
+    <div className="font-serif text-[13px] leading-loose text-ink-800">
+      {/* 어느 사건의 어느 항목인지 — 파일만 떼어 보면 알 수 없으므로 머리에 남긴다 */}
+      <p className="text-center text-[15px]">{caseName} 청구의 소</p>
+      <p className="mt-1 text-center text-ink-600">원고 {plaintiff || '(미입력)'} / 피고 {defendant || '(미입력)'}</p>
+      <DocHeading>{heading}</DocHeading>
+      {lines.map((l, i) => <p key={i} className="whitespace-pre-wrap"><Rich text={l} /></p>)}
+    </div>
+  )
+}
+
 export default function SubmitGuide({ type, form, onBack, onEditDoc }) {
   const toast = useToast()
   const doc = buildPreview(type, form)
-  const { stamp, service, total } = costSummary(form.amount)
+  // 인쇄 대상 — null이면 소장 전체, 'claims'/'reasons'면 그 항목만 뽑는다.
+  // 포털 「내용파일 첨부」·「청구취지별지 첨부하기」에 그대로 올릴 파일을 만들기 위한 것.
+  const { activeRaw } = useWorkspace()
+  const registered = activeRaw ? caseEvidence(activeRaw) : []
+  const [printPart, setPrintPart] = useState(null)
+  const printOnly = (part) => {
+    setPrintPart(part)
+    // 시트가 그려진 다음에 인쇄 대화상자를 연다
+    setTimeout(() => { printSheet(); setPrintPart(null) }, 80)
+  }
+  const { stamp, service, total } = costSummary(effectiveSueValue(form), partyCount(form))
   const eStamp = Math.floor((stamp * 0.9) / 100) * 100
   const eTotal = eStamp + service
 
   return (
     <div className="space-y-5">
       {/* 인쇄·PDF 저장 — 법원 기준(12pt · 줄간격 200% · A4)으로 조판된다 */}
-      <PrintSheet><ComplaintPaper doc={doc} signature={form.signature} /></PrintSheet>
+      <PrintSheet>
+        {printPart === 'claims'
+          ? <PartPaper heading="청 구 취 지" lines={[...doc.claims, '라는 판결을 구합니다.']} caseName={doc.caseName} plaintiff={form.pName} defendant={form.dName} />
+          : printPart === 'reasons'
+            ? <PartPaper heading="청 구 원 인" lines={doc.reasons} caseName={doc.caseName} plaintiff={form.pName} defendant={form.dName} />
+            : <ComplaintPaper doc={doc} signature={form.signature} />}
+      </PrintSheet>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <button onClick={onBack} className="mb-2 flex items-center gap-1 text-sm font-medium text-ink-500 hover:text-ink-700">
@@ -159,6 +206,31 @@ export default function SubmitGuide({ type, form, onBack, onEditDoc }) {
         </div>
         <StageBar stage={2} />
       </div>
+
+      {/* 완성하면 증거는 이미 증빙자료에 들어가 있다 — 다시 올릴 필요가 없다는 걸 알려준다 */}
+      {registered.length > 0 && (
+        <Card className="border-emerald-200 bg-emerald-50/60 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Check size={16} className="text-emerald-500" />
+            <p className="text-sm font-bold text-emerald-800">
+              올리신 증거 {registered.length}건이 증빙자료에 자동으로 등록됐어요
+            </p>
+            <Button as={Link} to="/app/evidence" size="sm" variant="neutral" className="ml-auto">증빙자료 열기</Button>
+          </div>
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {registered.map((e) => (
+              <span key={e.no} className="rounded-md bg-white px-2 py-1 text-[12px] text-ink-700">
+                <b className="font-semibold text-brand-500">{e.code}</b> {e.file}
+              </span>
+            ))}
+          </div>
+          <p className="mt-2 text-[12px] leading-relaxed text-emerald-700">
+            포털 6번 「입증서류」에 이 파일들을 올리고, 서증명을 위 이름과 똑같이 맞추면 됩니다.
+          </p>
+        </Card>
+      )}
+
+      {activeRaw && <CaseStatus caseId={activeRaw.id} status={activeRaw.status} caseNo={activeRaw.caseNo} />}
 
       <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-5">
@@ -174,18 +246,26 @@ export default function SubmitGuide({ type, form, onBack, onEditDoc }) {
             </p>
           </Card>
 
-          {/* 전자소송은 소장 파일 첨부를 지원하지 않는다 — 사용자가 가장 오해하기 쉬운 지점이라 앞에 세운다 */}
+          {/* 실제 포털 작성 화면을 확인해 정리한 내용 (2026-08-07) */}
           <Card className="border-brand-200 bg-brand-50/50 p-4">
             <p className="flex items-center gap-2 text-sm font-bold text-brand-600">
-              <AlertTriangle size={16} /> 전자소송에는 완성된 소장 파일을 올릴 수 없어요
+              <AlertTriangle size={16} /> 소장 전체를 파일 하나로 올릴 수는 없어요 — 항목별로는 됩니다
             </p>
             <p className="mt-1.5 text-[13px] leading-relaxed text-brand-600/90">
-              법원 안내에 <b className="font-semibold">“HWP·WORD 문서 형식의 소장을 미리 작성한 후 첨부하여 제출하는 기능은 지원하지 않습니다”</b>라고
-              되어 있어요. 그래서 전자소송으로 내실 때는 아래 <b className="font-semibold">복사 버튼</b>으로 청구취지·청구원인을
-              포털 입력창에 붙여넣으셔야 합니다. 여기서 만든 소장은 <b className="font-semibold">붙여넣을 원문이자 검토용 출력본</b>이에요.
+              포털은 <b className="font-semibold">당사자·관할·소가</b>를 화면 입력으로만 받습니다.
+              완성된 소장 파일을 통째로 첨부하는 기능은 없어요.
             </p>
             <p className="mt-2 text-[13px] leading-relaxed text-brand-600/90">
-              반대로 <b className="font-semibold">종이로 내실 때는</b> 이 소장을 그대로 출력해 서명·날인하고 간인하면 그것이 제출본이 됩니다.
+              다만 <b className="font-semibold">청구원인은 「직접입력」과 「내용파일 첨부」 중 고를 수 있고</b>,
+              청구취지에는 <b className="font-semibold">「청구취지별지 첨부하기」</b>가 있습니다.
+              HWP·HWPX·DOC·DOCX·PDF·TXT·이미지 형식을 받습니다.
+            </p>
+            <p className="mt-2 rounded-lg bg-white/70 px-3 py-2 text-[13px] leading-relaxed text-brand-600">
+              <b className="font-semibold">입력창은 각각 한글 2,000자 이내</b>예요. 넘으면 잘리니, 길면 내용파일이나 별지로 붙이세요.
+              표·그림도 입력창에는 안 들어가므로 파일로 붙여야 합니다.
+            </p>
+            <p className="mt-2 text-[13px] leading-relaxed text-brand-600/90">
+              <b className="font-semibold">종이로 내실 때는</b> 이 소장을 그대로 출력해 서명·날인하고 간인하면 그것이 제출본이 됩니다.
             </p>
           </Card>
 
@@ -203,7 +283,8 @@ export default function SubmitGuide({ type, form, onBack, onEditDoc }) {
                   <li>· 은행 방문 없이 포털에서 바로 납부</li>
                   <li>· 사건기록 열람·출력 <b className="text-ink-800">무료</b></li>
                   <li>· 서명은 공동인증서로 갈음, 간인 불필요</li>
-                  <li>· 단, <b className="text-ink-800">소장 파일 첨부는 불가</b> — 화면 입력만 가능</li>
+                  <li>· 당사자·관할·소가는 <b className="text-ink-800">화면 입력만</b> 가능</li>
+                  <li>· 청구원인·청구취지별지는 <b className="text-ink-800">파일 첨부 가능</b></li>
                 </ul>
                 <p className="mt-3 border-t border-brand-100 pt-3 text-sm">
                   접수 시 예상 <b className="font-bold text-brand-500">약 {won(eTotal)}원</b>
@@ -296,21 +377,38 @@ export default function SubmitGuide({ type, form, onBack, onEditDoc }) {
                 <PortalField label="연락처" value={form.dTel} />
               </PortalStep>
 
-              <PortalStep no={4} title="청구취지" note="입력창에 그대로 붙여넣으세요. 번호와 줄바꿈까지 함께 복사됩니다.">
-                <CopyBlock title="청구취지 전문" lines={[...doc.claims, '라는 판결을 구합니다.']} />
+              <PortalStep no={4} title="청구취지" note="입력창은 2,000자 제한이에요. 길거나 표가 들어가면 「청구취지별지 첨부하기」로 파일을 붙이세요.">
+                <CopyBlock title="청구취지 전문" lines={[...doc.claims, '라는 판결을 구합니다.']} limit={PORTAL_LIMIT} />
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Button size="sm" variant="neutral" onClick={() => printOnly('claims')}>
+                    <FileText size={14} /> 청구취지만 PDF로 저장
+                  </Button>
+                  <span className="text-[12px] text-ink-500">포털 「청구취지별지 첨부하기」에 그대로 올리세요</span>
+                </div>
               </PortalStep>
 
-              <PortalStep no={5} title="청구원인" note="분량이 길면 포털 입력창이 잘릴 수 있어요. 붙여넣은 뒤 끝부분까지 들어갔는지 꼭 확인하세요.">
-                <CopyBlock title="청구원인 전문" lines={doc.reasons} />
+              <PortalStep no={5} title="청구원인" note="「직접입력」과 「내용파일 첨부」 중 고를 수 있어요. 2,000자를 넘거나 표·그림이 있으면 파일로 붙이는 편이 안전합니다.">
+                <CopyBlock title="청구원인 전문" lines={doc.reasons} limit={PORTAL_LIMIT} />
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Button size="sm" onClick={() => printOnly('reasons')}>
+                    <FileText size={14} /> 청구원인만 PDF로 저장
+                  </Button>
+                  <span className="text-[12px] text-ink-500">포털 「내용파일첨부하기」에 올리면 2,000자 제한이 사라집니다 (20MB까지)</span>
+                </div>
               </PortalStep>
 
-              <PortalStep no={6} title="입증방법 (증거)" note="여기부터는 복사가 아니라 파일 첨부예요. 서증명은 청구원인에 적은 이름과 똑같이 맞춰 주세요.">
+              <PortalStep no={6} title="입증서류 (증거)" note="여기부터는 복사가 아니라 파일 첨부예요. 서증명은 청구원인에 적은 이름과 똑같이 맞춰야 재판부가 대조할 수 있습니다. 파일 하나에 여러 증거가 들어 있으면 포털의 [입증서류분리]로 서증명별 부호를 부여하세요.">
                 {doc.evidences?.length
                   ? doc.evidences.map((e, i) => <PortalField key={e + i} label={`갑 제${i + 1}호증`} value={e} />)
                   : <p className="py-2 text-[13px] text-ink-400">6단계에서 증거 파일을 올리면 여기에 호증 번호가 매겨집니다.</p>}
               </PortalStep>
 
-              <PortalStep no={7} title="첨부서류" note="증거와 별개로 함께 내는 서류입니다. 소장 부본·송달료 납부서는 전자소송에서는 자동 처리돼요.">
+              <PortalStep no={7} title="첨부서류" note="증거가 아닌 서류만 여기 넣습니다.">
+                <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-relaxed text-amber-700">
+                  포털 안내 그대로 — <b className="font-semibold">첨부서류로 제출한 문서는 증거로 사용될 수 없으며, 판결(결정) 등에 효력이 없습니다.</b>
+                  증거가 될 자료는 반드시 <b className="font-semibold">6번 입증서류</b>로 내세요. 여기 잘못 넣으면 증거로 안 쳐 줍니다.
+                  <br />소송대리허가신청서·기타 신청서는 <b className="font-semibold">소장과 별도의 서류</b>로 내야 하므로 첨부서류에 넣지 마세요.
+                </div>
                 {(doc.attachments || []).map((a, i) => <PortalField key={i} label={`${i + 1}.`} value={a.replace(/[　]+/g, ' ')} />)}
               </PortalStep>
 
@@ -393,7 +491,7 @@ export default function SubmitGuide({ type, form, onBack, onEditDoc }) {
           </Button>
           <p className="text-center text-[11px] leading-relaxed text-ink-400">
             글자 12pt · 줄간격 200% · A4로 조판되어 나옵니다<br />
-            종이 제출용 완성본이에요. 전자소송에는 이 파일 대신 위 내용을 붙여넣으세요.
+            종이 제출용 완성본이에요. 전자소송에는 청구원인만 따로 붙여넣거나 파일로 첨부하시면 됩니다.
           </p>
         </div>
       </div>

@@ -1,4 +1,8 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useWorkspace } from '../context/WorkspaceContext.jsx'
+import { caseEvidence } from '../lib/casebook.js'
+import CaseBar from '../components/CaseBar.jsx'
 import { Card, Badge, Button, Progress, Field, Input, inputCls, cx } from '../components/ui.jsx'
 import Modal from '../components/Modal.jsx'
 import {
@@ -126,6 +130,10 @@ function PropertiesCard({ folder }) {
 }
 
 export default function Evidence() {
+  // 소장에서 올린 파일이 곧 갑호증이다. 내 사건이 있으면 그것을 보여주고,
+  // 없으면 화면 구성을 보여주기 위한 예시 목록을 쓴다.
+  const { activeRaw, hasMyCase } = useWorkspace()
+  const mine = activeRaw ? caseEvidence(activeRaw) : []
   const [view, setView] = useState('list') // 'list' | 'folder'
   const [list, setList] = useState(evidenceList)
   const [folders, setFolders] = useState(evidenceFolders)
@@ -233,15 +241,42 @@ export default function Evidence() {
       {/* ─────────── 법률 증거 관리 뷰 ─────────── */}
       {view === 'list' && (
         <>
-          <Card className="flex flex-wrap items-center justify-between gap-3 border-brand-200 bg-brand-50/50 p-4">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-              <span className="font-bold text-ink-800">{activeCase.id} {activeCase.title}</span>
-              <span className="text-ink-500">증거 {list.length}개</span>
-              <span className="text-ink-500">제출률 {rate}%</span>
-              <span className="font-semibold text-amber-500">미제출 {notSubmitted}개</span>
-            </div>
-            <Button variant="neutral" size="sm">내 사건 보기</Button>
-          </Card>
+          <CaseBar right={<Button as={Link} to="/app/procedure" variant="neutral" size="sm">절차 안내</Button>} />
+
+          {/* 소장 6단계에서 올린 파일이 그대로 갑호증이 된다 — 따로 다시 올릴 필요가 없다 */}
+          {mine.length > 0 ? (
+            <Card className="border-emerald-200 bg-emerald-50/60 p-5">
+              <div className="flex flex-wrap items-center gap-2">
+                <Check size={16} className="text-emerald-500" />
+                <h3 className="text-sm font-bold text-emerald-800">소장에 올린 증거 {mine.length}건이 여기 등록돼 있어요</h3>
+                <Button as={Link} to="/app/documents" size="sm" variant="neutral" className="ml-auto">소장에서 수정</Button>
+              </div>
+              <div className="mt-3 space-y-1.5">
+                {mine.map((e) => (
+                  <div key={e.no} className="flex flex-wrap items-center gap-2 rounded-lg bg-white px-3 py-2 text-[13px]">
+                    <span className="rounded-md bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand-500">{e.code}</span>
+                    <span className="font-medium text-ink-800">{e.file}</span>
+                    {e.size && <span className="text-xs text-ink-400">{e.size}</span>}
+                    <span className={cx('ml-auto text-xs font-semibold', e.purpose ? 'text-emerald-600' : 'text-amber-600')}>
+                      {e.purpose || '입증취지를 아직 안 적었어요'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-[12px] leading-relaxed text-emerald-700">
+                입증취지는 증거목록(증거설명서)에서 채웁니다. 서증명은 <b className="font-semibold">청구원인에 적은 이름과 똑같이</b> 맞춰야
+                재판부가 대조할 수 있어요.
+              </p>
+            </Card>
+          ) : (
+            <Card className="flex flex-wrap items-center justify-between gap-3 border-brand-200 bg-brand-50/50 p-4">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                <span className="font-bold text-ink-800">아래는 화면 구성을 보여주는 예시예요</span>
+                <span className="text-ink-500">증거 {list.length}개 · 제출률 {rate}% · 미제출 {notSubmitted}개</span>
+              </div>
+              <Button as={Link} to="/app/documents" size="sm">소장 작성하고 내 증거 등록하기</Button>
+            </Card>
+          )}
 
           <Card className="border-amber-200 bg-amber-50/60 p-5">
             <div className="flex items-center gap-2 text-amber-700"><Sparkles size={16} /><h3 className="text-sm font-bold">AI 제안 사항</h3></div>

@@ -10,11 +10,19 @@ import { ArrowLeft, Plus, X, FileText, Sparkles, Upload } from './icons.jsx'
 import { cases, evidenceList } from '../data/mock.js'
 import { loadDraft, findType, fmtDate } from '../lib/complaint.js'
 
+// 전자소송포털 「입증서류목록 > 표시기준」 그대로
+//   · 제출자가 사건의 원고면 '갑호증', 피고면 '을호증'
+//   · 본소가 소취하되어 병합 분리된 반소사건은 반소원고가 '을호증', 반소피고가 '갑호증'
+//   · 독립당사자 참가인은 '병호증'
 const MARKS = [
-  { key: 'gap', code: '갑', label: '갑호증 (원고)' },
-  { key: 'eul', code: '을', label: '을호증 (피고)' },
-  { key: 'byung', code: '병', label: '병호증 (제3자)' },
+  { key: 'gap', code: '갑', label: '갑호증 — 원고' },
+  { key: 'eul', code: '을', label: '을호증 — 피고' },
+  { key: 'byung', code: '병', label: '병호증 — 독립당사자 참가인' },
 ]
+
+/** 갑 제1호증 / 갑 제1호증의 2 — 가지번호는 한 서증이 여러 건으로 나뉠 때 쓴다 */
+const evidenceNo = (code, i, branch) =>
+  `${code} 제${i + 1}호증${branch ? `의 ${branch}` : ''}`
 
 const STATUS = ['미제출', '제출예정', '제출완료', '보완필요']
 const statusTone = { 미제출: 'gray', 제출예정: 'blue', 제출완료: 'green', 보완필요: 'amber' }
@@ -143,7 +151,7 @@ export default function EvidenceListBuilder({ onExit }) {
                         )}
                         {rows.map((r, i) => (
                           <tr key={i}>
-                            <td className="border border-ink-300 px-2 py-2 text-center whitespace-nowrap">{code} 제{i + 1}호증</td>
+                            <td className="border border-ink-300 px-2 py-2 text-center whitespace-nowrap">{evidenceNo(code, i, r.branch)}</td>
                             <td className="border border-ink-300 px-2 py-2">
                               {r.name ? <b className="font-semibold text-brand-500">{r.name}</b> : <span className="text-ink-400">[ 서증명 ]</span>}
                             </td>
@@ -223,6 +231,13 @@ export default function EvidenceListBuilder({ onExit }) {
             {!loaded && (
               <div className="mt-3">
                 <Note tone="info">소장을 먼저 작성하면 거기서 고른 증거가 그대로 넘어와요. 직접 추가해도 됩니다.</Note>
+                <div className="mt-2">
+                  <Note tone="ok">
+                    이 문서는 법에서 「증거설명서」라고 불러요. 민사소송규칙 제106조 제1항에 따라 <b className="font-semibold">서증이 많거나 입증취지가 불분명할 때 재판장이 제출을 명할 수 있는</b> 문서입니다.
+                    항상 내야 하는 건 아니지만, 증거가 여러 건이면 처음부터 함께 내는 것이 실무예요.
+                    호증 부호와 번호는 같은 규칙 제107조 제2항이 정한 방식(제출 순서대로 갑·을 제○호증)을 따릅니다.
+                  </Note>
+                </div>
               </div>
             )}
           </Card>
@@ -276,7 +291,15 @@ export default function EvidenceListBuilder({ onExit }) {
               {rows.map((r, i) => (
                 <div key={i} className="rounded-xl border border-ink-200 bg-white p-3">
                   <div className="mb-2 flex items-center gap-2">
-                    <span className="rounded-md bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand-500">{code} 제{i + 1}호증</span>
+                    <span className="rounded-md bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand-500">{evidenceNo(code, i, r.branch)}</span>
+                    {/* 가지번호 — 한 서증이 여러 건으로 나뉠 때 (갑 제1호증의 2) */}
+                    <input
+                      className="h-7 w-16 rounded-lg border border-ink-200 px-2 text-xs text-ink-700 placeholder:text-ink-300"
+                      placeholder="가지"
+                      title="가지번호 — 한 서증을 여러 건으로 나눌 때 (예: 갑 제1호증의 2)"
+                      value={r.branch || ''}
+                      onChange={(e) => update(i, 'branch', e.target.value.replace(/[^0-9]/g, ''))}
+                    />
                     <select
                       className="h-7 rounded-lg border border-ink-200 px-2 text-xs text-ink-700"
                       value={r.status}

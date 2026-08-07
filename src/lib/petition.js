@@ -20,6 +20,8 @@ const attachStep = (items, { citation = false } = {}) => ({
     checks('attachItems', '함께 낼 서류를 골라주세요', items, { required: true }),
     ...(citation ? [{ kind: 'citation', key: 'citations' }] : []),
     files('attachFiles', '파일 업로드'),
+    note('warn', '전자소송으로 내려면 사건마다 「전자소송 동의」를 먼저 해야 해요. 특히 <b>본안에 딸린 신청사건은 본안에 관한 전자소송 동의를 마친 경우에만</b> 전자소송으로 진행할 수 있습니다. 동의하면 이후 서류를 전자문서로만 내야 하고, 송달도 전자로 받습니다.'),
+    note('info', '전자송달은 열람하지 않아도 통지받은 날부터 1주가 지나면 송달된 것으로 봅니다(그 날 0시 기준). 기한 계산에 주의하세요.'),
     signature(),
   ],
 })
@@ -389,7 +391,62 @@ export const petitionTypes = [
           note('warn', '허위 사실로 가압류하면 나중에 손해배상 책임을 질 수 있어요. 근거 자료로 확인되는 사정만 적어주세요.'),
         ],
       },
-      attachStep(['차용증·계약서', '부동산 등기사항전부증명서', '내용증명 우편물', '공탁보증보험증권', '법인등기부등본'], { citation: true }),
+      {
+        title: '가압류신청 진술서',
+        hint: '가압류는 신청서만으로 부족해요. 아래 진술서를 함께 내지 않으면 보정 기회 없이 기각될 수 있습니다.',
+        fields: [
+          note('warn', '「보전처분 신청사건의 사무처리요령」(재민 2003-4) 제3조 — 가압류신청 진술서를 첨부하지 않거나, 고의로 진술 사항을 누락하거나 허위로 진술한 내용이 발견되면 <b>특별한 사정이 없는 한 보정명령 없이 신청을 기각</b>할 수 있습니다.'),
+
+          { kind: 'partyTag', tone: 'brand', tag: '1', desc: '피보전권리(청구채권)와 관련하여' },
+          radio('stDebtorAdmits', '채무자가 청구채권을 인정하고 있나요?', ['인정하고 있어요', '다투고 있어요', '아직 모르겠어요'], { required: true }),
+          area('stDebtorClaim', '채무자의 주장 요지', {
+            rows: 2, required: true,
+            when: (f) => f.stDebtorAdmits === '다투고 있어요',
+            placeholder: '예) 빌린 것이 아니라 투자금이었다고 주장합니다.',
+          }),
+          text('stConfirmedHow', '채무자의 의사를 언제, 어떤 방법으로 확인했나요?', {
+            required: true,
+            placeholder: '예) 2026. 5. 3. 내용증명 발송 후 전화 통화',
+          }),
+          radio('stOtherClaim', '이 신청서에 적은 청구채권 외에 다른 채권도 있나요?', ['없어요', '있어요'], { required: true }),
+          text('stOtherClaimDetail', '다른 채권의 내용', {
+            required: true, when: (f) => f.stOtherClaim === '있어요',
+            placeholder: '예) 2025. 3. 대여금 1,000만원 (이 신청과 별개)',
+          }),
+
+          { kind: 'partyTag', tone: 'brand', tag: '2', desc: '보전의 필요성과 관련하여' },
+          area('stWhyNeeded', '지금 가압류하지 않으면 왜 집행이 어려워지나요?', {
+            rows: 3, required: true,
+            placeholder: '예) 채무자가 유일한 재산인 아파트를 부동산에 내놓았다는 사실을 이웃에게 들었습니다.',
+            hint: '4단계에서 고른 사정을 구체적인 사실로 풀어 적으세요. 막연한 우려만으로는 부족합니다.',
+          }),
+          radio('stAmountProper', '신청 금액이 본안에서 승소할 수 있는 금액으로 적정하게 산출된 것인가요?', ['예', '아니오'], { required: true }),
+          note('warn', '과다한 금액으로 가압류하면 나중에 손해배상 책임을 질 수 있어요. 실제로 받을 수 있는 범위로 적으세요.', { when: (f) => f.stAmountProper === '아니오' }),
+          radio('stDebtorBiz', '채무자가 법인이라면, 지금 영업활동을 하고 있나요?', ['채무자가 법인이 아니에요', '영업 중이에요', '영업하지 않는 것 같아요'], { required: true }),
+
+          { kind: 'partyTag', tone: 'brand', tag: '3', desc: '본안소송과 관련하여' },
+          radio('stSuitFiled', '이 청구채권으로 본안소송을 낸 적이 있나요?', ['아직 없어요', '냈어요'], { required: true }),
+          text('stSuitDetail', '본안 사건번호와 진행 상황', {
+            required: true, when: (f) => f.stSuitFiled === '냈어요',
+            placeholder: '예) 서울중앙지방법원 2026가단12345, 변론 준비 중',
+          }),
+          radio('stPast5y', '최근 5년 안에 채무자를 상대로 보전처분을 신청한 적이 있나요?', ['없어요', '있어요'], { required: true }),
+          text('stPast5yDetail', '그 사건의 내용', {
+            required: true, when: (f) => f.stPast5y === '있어요',
+            placeholder: '예) 2024카단1234 부동산가압류, 인용',
+          }),
+
+          { kind: 'partyTag', tone: 'brand', tag: '4', desc: '중복 보전처분과 관련하여' },
+          radio('stDup', '같은 채권으로 이미 보전처분 결정을 받은 적이 있나요?', ['없어요', '있어요'], { required: true }),
+          text('stDupDetail', '사건번호 · 결과 · 목적물', {
+            required: true, when: (f) => f.stDup === '있어요',
+            placeholder: '예) 2025카단5678, 인용, 채무자 소유 ○○아파트',
+          }),
+
+          note('info', '이 진술서는 가압류신청서와 <b>별개의 서면</b>으로 함께 냅니다. 미리보기 아래쪽에 따로 만들어져요. 종이로 낼 때는 채권자가 기명날인 또는 서명해야 합니다.'),
+        ],
+      },
+      attachStep(['가압류신청 진술서 (필수)', '차용증·계약서', '부동산 등기사항전부증명서', '내용증명 우편물', '공탁보증보험증권', '법인등기부등본'], { citation: true }),
     ],
     build(form) {
       const titleByTarget = {
@@ -436,10 +493,79 @@ export const petitionTypes = [
         name: form.aName,
         date: today(),
         signature: form.signature,
+        // 가압류는 신청서만으로 부족하다 — 진술서를 별개 서면으로 함께 낸다
+        extraDoc: statementDoc(form),
       }
     },
   },
 ]
+
+/**
+ * 가압류신청 진술서 — 전산양식 A4705
+ * 근거: 「보전처분 신청사건의 사무처리요령」(재민 2003-4) 제2조 제5호·제3조
+ * 첨부하지 않거나 허위·누락이 발견되면 보정명령 없이 기각될 수 있다.
+ */
+function statementDoc(form) {
+  const yn = (v, yes) => (v === yes ? '☑' : '☐')
+  const q = (n, text, ...lines) => [`${n}. ${text}`, ...lines.filter(Boolean)]
+
+  return {
+    docTitle: '가 압 류 신 청 진 술 서',
+    header: [],
+    lead: '채권자는 가압류신청과 관련하여 다음 사실을 진술하며, 만일 허위진술을 하거나 진술 사항을 고의로 누락한 경우에는 특별한 사정이 없는 한 보정명령 없이 신청이 기각될 것임을 잘 알고 있습니다.',
+    sections: [
+      {
+        heading: '1. 피보전권리(청구채권)와 관련하여',
+        lines: [
+          ...q('가', '채무자가 신청서에 기재한 청구채권을 인정하고 있습니까?',
+            `　　${yn(form.stDebtorAdmits, '인정하고 있어요')} 인정　${yn(form.stDebtorAdmits, '다투고 있어요')} 다툼　${yn(form.stDebtorAdmits, '아직 모르겠어요')} 확인되지 않음`,
+            form.stDebtorAdmits === '다투고 있어요' ? `　　└ 채무자의 주장 요지 : ${or(form.stDebtorClaim, '주장 요지')}` : ''),
+          ...q('나', '채무자의 의사를 언제, 어떠한 방법으로 확인하였습니까?',
+            `　　${or(form.stConfirmedHow, '확인 시기와 방법')}`),
+          ...q('다', '채권자가 신청서에 기재한 청구채권 외에 다른 채권이 있습니까?',
+            `　　${yn(form.stOtherClaim, '없어요')} 없음　${yn(form.stOtherClaim, '있어요')} 있음`,
+            form.stOtherClaim === '있어요' ? `　　└ ${or(form.stOtherClaimDetail, '다른 채권의 내용')}` : ''),
+        ],
+      },
+      {
+        heading: '2. 보전의 필요성과 관련하여',
+        lines: [
+          ...q('가', '가압류하지 않으면 향후 강제집행이 불가능하거나 매우 곤란해질 사유는 무엇입니까?',
+            `　　${or(form.stWhyNeeded, '구체적인 사유')}`),
+          ...q('나', '신청서에 기재한 청구금액은 본안소송에서 승소할 수 있는 금액으로 적정하게 산출된 것입니까?',
+            `　　${yn(form.stAmountProper, '예')} 예　${yn(form.stAmountProper, '아니오')} 아니오`),
+          ...q('다', '(채무자가 법인인 경우) 채무자 법인이 영업활동을 하고 있습니까?',
+            `　　${yn(form.stDebtorBiz, '채무자가 법인이 아니에요')} 해당 없음　${yn(form.stDebtorBiz, '영업 중이에요')} 영업 중　${yn(form.stDebtorBiz, '영업하지 않는 것 같아요')} 영업하지 않음`),
+        ],
+      },
+      {
+        heading: '3. 본안소송과 관련하여',
+        lines: [
+          ...q('가', '채권자는 이 청구채권과 관련하여 본안소송을 제기한 사실이 있습니까?',
+            `　　${yn(form.stSuitFiled, '아직 없어요')} 없음　${yn(form.stSuitFiled, '냈어요')} 있음`,
+            form.stSuitFiled === '냈어요' ? `　　└ 사건번호·진행 상황 : ${or(form.stSuitDetail, '사건번호와 진행 상황')}` : ''),
+          ...q('나', '채권자가 최근 5년간 채무자를 상대로 신청한 보전처분 사건이 있습니까?',
+            `　　${yn(form.stPast5y, '없어요')} 없음　${yn(form.stPast5y, '있어요')} 있음`,
+            form.stPast5y === '있어요' ? `　　└ ${or(form.stPast5yDetail, '사건의 내용')}` : ''),
+        ],
+      },
+      {
+        heading: '4. 중복 보전처분과 관련하여',
+        lines: [
+          ...q('가', '같은 청구채권에 기하여 이 신청 이전에 보전처분을 신청하여 결정을 받은 사실이 있습니까?',
+            `　　${yn(form.stDup, '없어요')} 없음　${yn(form.stDup, '있어요')} 있음`,
+            form.stDup === '있어요' ? `　　└ 사건번호·결과·목적물 : ${or(form.stDupDetail, '내용')}` : ''),
+        ],
+      },
+    ],
+    attach: [],
+    role: '위 채권자',
+    court: form.court,
+    name: form.aName,
+    date: today(),
+    signature: form.signature,
+  }
+}
 
 /** 판례 입력칸을 둔 신청서인지 — 스키마에 없으면 문서에도 넣지 않는다 */
 const usesCitation = (type) => type.steps.some((s) => s.fields.some((f) => f.kind === 'citation'))
