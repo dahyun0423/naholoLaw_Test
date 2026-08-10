@@ -89,3 +89,34 @@ export function partyLines(form, keys, labels) {
     ...(form[b.tel] ? [`　　　　전화 ${F(form[b.tel])}`] : []),
   ]
 }
+
+
+/* ─────────────────────────── 문서별 초안 저장 ─────────────────────────── */
+// 소장은 '사건'으로 따로 저장되지만, 준비서면·신청서·증거목록은 아직 사건에 묶이지 않는다.
+// 최소한 작성 중인 내용이 새로고침으로 날아가지는 않게 문서 종류별로 보관한다.
+
+const draftKey = (kind) => `naholo_draft_${kind}`
+
+export function saveFormDraft(kind, form, meta = {}) {
+  try {
+    localStorage.setItem(draftKey(kind), JSON.stringify({ form, meta, savedAt: Date.now() }))
+    return true
+  } catch {
+    return false                        // 용량 초과 — 호출부가 경고를 띄운다
+  }
+}
+
+export function loadFormDraft(kind) {
+  try {
+    const raw = localStorage.getItem(draftKey(kind))
+    if (!raw) return null
+    const d = JSON.parse(raw)
+    return d?.form ? d : null
+  } catch {
+    return null
+  }
+}
+
+export function clearFormDraft(kind) {
+  try { localStorage.removeItem(draftKey(kind)) } catch { /* 저장소 접근 불가 시 무시 */ }
+}

@@ -1,28 +1,60 @@
 @import "tailwindcss";
 
+/* ── 색 ────────────────────────────────────────────────────────
+   Figma 「나홀로법에」 변수 컬렉션 `color` 를 그대로 옮긴 값이다.
+   여기 없는 색은 화면에 쓰지 않는다 — 팔레트는 grey · blue · red 셋뿐이다.
+
+   쓰임새
+     메인      *-300          면(버튼·강조 도형·진행바)
+     배경      *-50
+     외곽선    *-200
+     플레이스홀더 grey300 / 입력된 값 grey700
+     글자 강조  *-500 이상 (흰 배경 위에서 300은 대비가 모자란다)
+
+   상태를 색으로 나눌 때도 세 계열 안에서 끝낸다.
+     완료·확인  blue      기다림·중립  grey      주의·기한 지남  red        */
 @theme {
   --font-sans: "Pretendard Variable", Pretendard, -apple-system, system-ui, sans-serif;
 
-  --color-brand-50: #eef6ff;
-  --color-brand-100: #d6e9ff;
-  --color-brand-200: #aed3ff;
-  --color-brand-300: #64a8ff; /* Figma bluee300 — 메인 스케일 */
-  --color-brand-400: #3d8bff;
-  --color-brand-500: #2f7af0;
-  --color-brand-600: #1f63d6;
-  --color-brand-700: #194aa6;
-  --color-brand-900: #12306b;
+  /* blue — Figma blue50~900. 앱 안에서는 brand-* 로 부른다. */
+  --color-brand-50: #e8f3ff;
+  --color-brand-100: #c9e2ff;
+  --color-brand-200: #90c2ff;
+  --color-brand-300: #64a8ff; /* 메인 */
+  --color-brand-400: #4593fc;
+  --color-brand-500: #3182f6;
+  --color-brand-600: #2272eb;
+  --color-brand-700: #1b64da;
+  --color-brand-800: #1957c2;
+  --color-brand-900: #194aa6;
 
-  --color-ink-900: #191f28;   /* Figma grey900 */
-  --color-ink-800: #333d4b;
-  --color-ink-700: #4e5968;
-  --color-ink-600: #6b7684;
-  --color-ink-500: #8b95a1;
-  --color-ink-400: #b0b8c1;
-  --color-ink-300: #d1d6db;   /* Figma grey300 */
-  --color-ink-200: #e5e8eb;
-  --color-ink-100: #f2f4f6;
+  /* grey — Figma grey50~900. 앱 안에서는 ink-* 로 부른다. */
   --color-ink-50: #f9fafb;
+  --color-ink-100: #f3f4f6;
+  --color-ink-200: #e5e8eb;
+  --color-ink-300: #d1d6db;
+  --color-ink-400: #b0b8c1;
+  --color-ink-500: #8b95a1;
+  --color-ink-600: #6b7684;
+  --color-ink-700: #4e5968;
+  --color-ink-800: #333d4b;
+  --color-ink-900: #191f28;
+
+  /* red — Figma red50~900. Tailwind 기본 red를 덮어써 팔레트를 하나로 만든다. */
+  --color-red-50: #ffeeee;
+  --color-red-100: #ffd4d6;
+  --color-red-200: #feafb4;
+  --color-red-300: #fb8890;
+  --color-red-400: #f66570;
+  --color-red-500: #f04452;
+  --color-red-600: #e42939;
+  --color-red-700: #d22030;
+  --color-red-800: #bc1b2a;
+  --color-red-900: #a51926;
+
+  /* 배경 — Figma `background color` */
+  --color-surface: #ffffff;
+  --color-surface-sub: #f2f4f6;
 }
 
 html {
@@ -35,6 +67,8 @@ body {
   color: var(--color-ink-900);
   -webkit-font-smoothing: antialiased;
   background: #fff;
+  /* 한국어는 어절 단위로 끊어야 읽힌다. 기본값은 "사건 / 은 접수 전에"처럼 낱말을 쪼갠다. */
+  word-break: keep-all;
 }
 
 /* thin custom scrollbar */
@@ -48,6 +82,63 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-ink-300);
+}
+
+/* ── 사건 선반 ──────────────────────────────────────────────
+   선반에서 움직이는 값은 폭 하나뿐이다. 가리킨 칸이 넓어지면
+   나머지는 밀려 좁아진다 — 옆 칸을 일일이 계산하지 않아도 flex가 알아서 한다.
+   컨테이너 높이는 고정이라 폭이 바뀌어도 아래 내용이 흔들리지 않는다. */
+.rail-item {
+  transition:
+    width 0.55s cubic-bezier(0.22, 0.61, 0.36, 1),
+    box-shadow 0.35s ease,
+    border-color 0.35s ease;
+  will-change: width;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail-item,
+  .rail-item * {
+    transition: none !important;
+  }
+}
+
+/* ── 진행 스텝퍼 ────────────────────────────────────────────
+   배달 추적처럼: 지나온 칸은 채우고, **지금 칸에서 빛이 번진다.**
+   가만히 있는 점은 "여기까지 왔다"만 말하지만, 번지는 점은 "지금 여기다"라고 말한다.
+   흰 링(4px)은 선을 끊어 점을 띄우고, 그 밖으로 파란 빛이 퍼졌다 사라진다. */
+@keyframes step-glow {
+  0% {
+    box-shadow:
+      0 0 0 4px #fff,
+      0 0 0 7px var(--color-brand-100),
+      0 0 0 7px rgba(100, 168, 255, 0.5);
+  }
+  70% {
+    box-shadow:
+      0 0 0 4px #fff,
+      0 0 0 7px var(--color-brand-100),
+      0 0 0 20px rgba(100, 168, 255, 0);
+  }
+  100% {
+    box-shadow:
+      0 0 0 4px #fff,
+      0 0 0 7px var(--color-brand-100),
+      0 0 0 20px rgba(100, 168, 255, 0);
+  }
+}
+
+.step-now {
+  animation: step-glow 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step-now {
+    animation: none;
+    box-shadow:
+      0 0 0 4px #fff,
+      0 0 0 7px var(--color-brand-100);
+  }
 }
 
 /* ── 인쇄 / PDF ──────────────────────────────────────────────

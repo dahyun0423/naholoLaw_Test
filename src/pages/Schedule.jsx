@@ -12,7 +12,7 @@ const events = {
   [dayOffset(6)]: [{ t: '준비서면 제출 기한', tone: 'amber' }],
   [dayOffset(17)]: [{ t: '증거목록 제출 기한', tone: 'brand' }],
 }
-const dotTone = { red: 'bg-red-500', amber: 'bg-amber-500', brand: 'bg-brand-400' }
+const dotTone = { red: 'bg-red-300', amber: 'bg-red-300', brand: 'bg-brand-400' }
 const weekdays = ['일', '월', '화', '수', '목', '금', '토']
 
 function ymd(y, m, d) {
@@ -135,9 +135,9 @@ export default function Schedule() {
         <div className="grid place-items-center rounded-xl border-2 border-dashed border-ink-200 bg-ink-50 py-10 text-center">
           <Upload size={28} className="text-ink-400" /><p className="mt-2 text-sm font-medium text-ink-600">클릭하여 파일 선택</p><p className="text-xs text-ink-400">PDF, JPG, PNG 파일 지원</p>
         </div>
-        <div className="mt-4 rounded-xl bg-amber-50 p-3.5">
-          <p className="text-xs font-bold text-amber-700">⏱ AI가 자동으로 추출하는 정보</p>
-          <ul className="mt-2 space-y-1 text-[13px] text-amber-700">
+        <div className="mt-4 rounded-xl bg-red-50 p-3.5">
+          <p className="text-xs font-bold text-red-500">⏱ AI가 자동으로 추출하는 정보</p>
+          <ul className="mt-2 space-y-1 text-[13px] text-red-500">
             <li>• 사건번호 및 사건명</li><li>• 변론기일 날짜 및 시간</li>
             <li>• 법원 정보 (관할 법원, 재판부)</li><li>• 제출 기한 (답변서, 준비서면 등)</li>
           </ul>

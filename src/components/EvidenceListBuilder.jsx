@@ -2,12 +2,13 @@
 // 소장 6단계에서 고른 증거자료를 그대로 갑 제1,2,3…호증으로 번호 매겨 표로 뽑는다.
 // 추가로 받아야 하는 건 딱 하나, "이 자료로 뭘 증명하려는 거예요?" = 입증취지.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useToast } from '../context/ToastContext.jsx'
+import { useWorkspace } from '../context/WorkspaceContext.jsx'
 import { Card, Button, Badge, Progress, inputCls, cx } from './ui.jsx'
 import { DocSignature, Note, Label, CourtPicker, SignatureUpload, PrintSheet, printSheet } from './docform.jsx'
 import { ArrowLeft, Plus, X, FileText, Sparkles, Upload } from './icons.jsx'
-import { cases, evidenceList } from '../data/mock.js'
+import { evidenceList } from '../data/mock.js'
 import { loadDraft, findType, fmtDate } from '../lib/complaint.js'
 
 // 전자소송포털 「입증서류목록 > 표시기준」 그대로
@@ -34,8 +35,8 @@ function rowsFromDraft(draft) {
   const uploaded = (draft.form.evidenceFiles || []).map((x) => x.name).filter(Boolean)
   const pending = (draft.form.evidenceItems || []).filter((x) => !uploaded.includes(x))
   const rows = [
-    ...uploaded.map((name) => ({ name, date: '', purpose: '', status: '제출예정', original: true })),
-    ...pending.map((name) => ({ name, date: '', purpose: '', status: '미제출', original: true })),
+    ...uploaded.map((name) => ({ name, date: '', author: '', purpose: '', hasOriginal: '있음', status: '제출예정', original: true })),
+    ...pending.map((name) => ({ name, date: '', author: '', purpose: '', hasOriginal: '있음', status: '미제출', original: true })),
   ]
   return rows.length ? rows : null
 }
@@ -62,6 +63,7 @@ const suggestPurpose = (name) => PURPOSE_HINTS.find(([re]) => re.test(name))?.[1
 
 export default function EvidenceListBuilder({ onExit }) {
   const toast = useToast()
+  const { activeCaseId, attachDoc, myCases, activeCase } = useWorkspace()
   const draft = useMemo(() => loadDraft(), [])
   const draftRows = useMemo(() => rowsFromDraft(draft), [draft])
   const draftType = draft ? findType(draft.typeKey) : null
@@ -69,7 +71,8 @@ export default function EvidenceListBuilder({ onExit }) {
   const [mark, setMark] = useState('gap')
   const [header, setHeader] = useState(() => ({
     court: draft?.form.court || '',
-    caseNo: '',
+    // 접수한 사건이면 사건번호가 이미 있다. 없으면 비워 둔다 — 접수 전에는 존재하지 않는 값이다.
+    caseNo: activeCase?.caseNo || '',
     caseName: draftType?.caseName || '',
     plaintiff: draft?.form.pName || '',
     defendant: draft?.form.dName || '',
@@ -82,7 +85,22 @@ export default function EvidenceListBuilder({ onExit }) {
   const setH = (k) => (e) => setHeader((h) => ({ ...h, [k]: e.target.value }))
   const update = (i, k, v) => setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, [k]: v } : r)))
   const remove = (i) => setRows((rs) => rs.filter((_, idx) => idx !== i))
-  const add = () => setRows((rs) => [...rs, { name: '', date: '', purpose: '', status: '미제출' }])
+  const add = () => setRows((rs) => [...rs, { name: '', date: '', author: '', purpose: '', hasOriginal: '있음', status: '미제출' }])
+
+  // 호증 번호는 '제출 순서'로 매겨진다(민사소송규칙 제107조 제2항).
+  // 그래서 순서를 바꾸면 번호도 따라 바뀐다 — 목록 자체가 번호 체계다.
+  const [dragIdx, setDragIdx] = useState(null)
+  const [overIdx, setOverIdx] = useState(null)
+
+  const reorder = (from, to) => {
+    if (from === to || from == null || to == null) return
+    setRows((rs) => {
+      const next = [...rs]
+      const [x] = next.splice(from, 1)
+      next.splice(to, 0, x)
+      return next
+    })
+  }
   const move = (i, dir) => setRows((rs) => {
     const to = i + dir
     if (to < 0 || to >= rs.length) return rs
@@ -122,6 +140,15 @@ export default function EvidenceListBuilder({ onExit }) {
   const percent = rows.length === 0 ? 0 : Math.round((withPurpose / rows.length) * 100)
   const submitted = rows.filter((r) => r.status === '제출완료').length
 
+  // 사건관리에서 "이 사건의 문서"로 보이도록 붙여 둔다
+  useEffect(() => {
+    if (!activeCaseId || rows.length === 0) return
+    const t = setTimeout(() => {
+      attachDoc(activeCaseId, { kind: 'evidence', title: `증거목록 (${code}호증 ${rows.length}건)`, progress: percent })
+    }, 600)
+    return () => clearTimeout(t)
+  }, [activeCaseId, attachDoc, rows.length, percent, code])
+
   // 화면 미리보기와 인쇄본이 같은 조판을 쓰도록 한 곳에서 만든다
   const paper = (
                 <div className="font-serif text-[13px] leading-loose text-ink-800">
@@ -141,13 +168,15 @@ export default function EvidenceListBuilder({ onExit }) {
                           <th className="border border-ink-300 px-2 py-2 font-semibold whitespace-nowrap">호증번호</th>
                           <th className="border border-ink-300 px-2 py-2 font-semibold">서증명</th>
                           <th className="border border-ink-300 px-2 py-2 font-semibold whitespace-nowrap">작성일</th>
+                          <th className="border border-ink-300 px-2 py-2 font-semibold whitespace-nowrap">작성자</th>
+                          <th className="border border-ink-300 px-2 py-2 font-semibold whitespace-nowrap">원본</th>
                           <th className="border border-ink-300 px-2 py-2 font-semibold">입증취지</th>
                           <th className="border border-ink-300 px-2 py-2 font-semibold whitespace-nowrap">제출</th>
                         </tr>
                       </thead>
                       <tbody>
                         {rows.length === 0 && (
-                          <tr><td colSpan={5} className="border border-ink-300 px-2 py-6 text-center text-ink-400">증거를 추가하면 여기에 표로 정리됩니다</td></tr>
+                          <tr><td colSpan={7} className="border border-ink-300 px-2 py-6 text-center text-ink-400">증거를 추가하면 여기에 표로 정리됩니다</td></tr>
                         )}
                         {rows.map((r, i) => (
                           <tr key={i}>
@@ -156,6 +185,10 @@ export default function EvidenceListBuilder({ onExit }) {
                               {r.name ? <b className="font-semibold text-brand-500">{r.name}</b> : <span className="text-ink-400">[ 서증명 ]</span>}
                             </td>
                             <td className="border border-ink-300 px-2 py-2 text-center whitespace-nowrap">{r.date ? fmtDate(r.date) : '-'}</td>
+                            <td className="border border-ink-300 px-2 py-2 text-center whitespace-nowrap">
+                              {r.author || <span className="text-ink-300">[ 작성자 ]</span>}
+                            </td>
+                            <td className="border border-ink-300 px-2 py-2 text-center whitespace-nowrap">{r.hasOriginal || '있음'}</td>
                             <td className="border border-ink-300 px-2 py-2">
                               {r.purpose || <span className="text-ink-400">[ 입증취지를 채워 주세요 ]</span>}
                             </td>
@@ -168,7 +201,7 @@ export default function EvidenceListBuilder({ onExit }) {
                     </table>
                   </div>
 
-                  <p className="mt-4 text-ink-500">※ 각 호증은 원본을 소지하고 있으며, 필요 시 법원에 제출하겠습니다.</p>
+                  <p className="mt-4 text-ink-500">※ 각 호증은 위 「원본」란 기재와 같으며, 필요 시 법원에 제출하겠습니다.</p>
 
                   <DocSignature
                     date={fmtDate(new Date().toISOString().slice(0, 10))}
@@ -232,9 +265,18 @@ export default function EvidenceListBuilder({ onExit }) {
               <div className="mt-3">
                 <Note tone="info">소장을 먼저 작성하면 거기서 고른 증거가 그대로 넘어와요. 직접 추가해도 됩니다.</Note>
                 <div className="mt-2">
+                  <Note tone="warn">
+                    <b className="font-semibold">종이로 낼 때</b>는 서증 사본에 <b className="font-semibold">「원본과 상위 없음.」</b>이라고 적고 기명날인 또는 서명해야 합니다.
+                    호증번호는 서증 첫 페이지의 <b className="font-semibold">왼쪽 또는 오른쪽 중간 상단</b>에 적고,
+                    사본은 <b className="font-semibold">상대방 수 + 1</b>부를 냅니다.
+                    <br /><b className="font-semibold">전자소송</b>으로 내면 입력한 서증이 최종 제출문서에 자동으로 목록화돼요.
+                  </Note>
+                </div>
+                <div className="mt-2">
                   <Note tone="ok">
                     이 문서는 법에서 「증거설명서」라고 불러요. 민사소송규칙 제106조 제1항에 따라 <b className="font-semibold">서증이 많거나 입증취지가 불분명할 때 재판장이 제출을 명할 수 있는</b> 문서입니다.
                     항상 내야 하는 건 아니지만, 증거가 여러 건이면 처음부터 함께 내는 것이 실무예요.
+                    기재할 것은 <b className="font-semibold">문서의 제목 · 작성연월일 · 작성자 · 입증취지 · 원본 소지 여부</b>입니다.
                     호증 부호와 번호는 같은 규칙 제107조 제2항이 정한 방식(제출 순서대로 갑·을 제○호증)을 따릅니다.
                   </Note>
                 </div>
@@ -248,8 +290,17 @@ export default function EvidenceListBuilder({ onExit }) {
               <div><Label required>법원</Label><CourtPicker value={header.court} onChange={(c) => setHeader((h) => ({ ...h, court: c }))} /></div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block"><Label required>사건번호</Label>
-                  <input className={inputCls} placeholder="2026가단123456" value={header.caseNo} onChange={setH('caseNo')} list="case-ids" />
-                  <datalist id="case-ids">{cases.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}</datalist>
+                  <input
+                    className={inputCls}
+                    placeholder="2026가단123456 (접수 전이면 비워두세요)"
+                    value={header.caseNo}
+                    onChange={setH('caseNo')}
+                    list="case-ids"
+                  />
+                  {/* 접수한 내 사건에서 고른다. 접수 전 사건은 번호가 없으니 뜨지 않는다. */}
+                  <datalist id="case-ids">
+                    {myCases.filter((c) => c.caseNo).map((c) => <option key={c.id} value={c.caseNo}>{c.title}</option>)}
+                  </datalist>
                 </label>
                 <label className="block"><Label>사건명</Label><input className={inputCls} placeholder="대여금" value={header.caseName} onChange={setH('caseName')} /></label>
                 <label className="block"><Label required>원고</Label><input className={inputCls} placeholder="홍길동" value={header.plaintiff} onChange={setH('plaintiff')} /></label>
@@ -289,8 +340,28 @@ export default function EvidenceListBuilder({ onExit }) {
                 </p>
               )}
               {rows.map((r, i) => (
-                <div key={i} className="rounded-xl border border-ink-200 bg-white p-3">
+                <div
+                  key={i}
+                  draggable
+                  onDragStart={(e) => { setDragIdx(i); e.dataTransfer.effectAllowed = 'move' }}
+                  onDragOver={(e) => { e.preventDefault(); setOverIdx(i) }}
+                  onDragLeave={() => setOverIdx((v) => (v === i ? null : v))}
+                  onDrop={(e) => { e.preventDefault(); reorder(dragIdx, i); setDragIdx(null); setOverIdx(null) }}
+                  onDragEnd={() => { setDragIdx(null); setOverIdx(null) }}
+                  className={cx(
+                    'rounded-xl border bg-white p-3 transition-colors',
+                    dragIdx === i ? 'border-brand-300 opacity-50'
+                      : overIdx === i ? 'border-brand-300 bg-brand-50/50'
+                        : 'border-ink-200',
+                  )}
+                >
                   <div className="mb-2 flex items-center gap-2">
+                    {/* 드래그 핸들 — 마우스로 순서를 바꾸면 호증 번호가 다시 매겨진다 */}
+                    <span
+                      className="cursor-grab select-none px-1 text-ink-300 active:cursor-grabbing"
+                      title="끌어서 순서 바꾸기"
+                      aria-hidden
+                    >⠿</span>
                     <span className="rounded-md bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand-500">{evidenceNo(code, i, r.branch)}</span>
                     {/* 가지번호 — 한 서증이 여러 건으로 나뉠 때 (갑 제1호증의 2) */}
                     <input
@@ -300,6 +371,23 @@ export default function EvidenceListBuilder({ onExit }) {
                       value={r.branch || ''}
                       onChange={(e) => update(i, 'branch', e.target.value.replace(/[^0-9]/g, ''))}
                     />
+                    <input
+                      className="h-7 w-28 rounded-lg border border-ink-200 px-2 text-xs text-ink-700 placeholder:text-ink-300"
+                      placeholder="작성자"
+                      title="문서를 작성한 사람 — 증거설명서 필수 기재사항"
+                      value={r.author || ''}
+                      onChange={(e) => update(i, 'author', e.target.value)}
+                    />
+                    <select
+                      className="h-7 rounded-lg border border-ink-200 px-2 text-xs text-ink-700"
+                      title="원본 소지 여부 — 증거설명서 필수 기재사항"
+                      value={r.hasOriginal || '있음'}
+                      onChange={(e) => update(i, 'hasOriginal', e.target.value)}
+                    >
+                      <option value="있음">원본 있음</option>
+                      <option value="없음">원본 없음</option>
+                      <option value="사본만">사본만 소지</option>
+                    </select>
                     <select
                       className="h-7 rounded-lg border border-ink-200 px-2 text-xs text-ink-700"
                       value={r.status}
@@ -318,7 +406,7 @@ export default function EvidenceListBuilder({ onExit }) {
                     <input type="date" className={cx(inputCls, 'h-10 text-sm')} value={r.date} onChange={(e) => update(i, 'date', e.target.value)} />
                   </div>
                   <input
-                    className={cx(inputCls, 'mt-2 h-10 text-sm', !r.purpose && r.name && 'border-amber-300 bg-amber-50/40')}
+                    className={cx(inputCls, 'mt-2 h-10 text-sm', !r.purpose && r.name && 'border-red-200 bg-red-50/40')}
                     placeholder="이 자료로 뭘 증명하려는 거예요?"
                     value={r.purpose}
                     onChange={(e) => update(i, 'purpose', e.target.value)}
@@ -356,8 +444,8 @@ export default function EvidenceListBuilder({ onExit }) {
           <Card className="flex h-full flex-col p-0">
             <div className="flex flex-wrap items-center gap-3 border-b border-ink-100 px-5 py-3.5">
               <h3 className="font-bold text-ink-900">증거목록 미리보기</h3>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-600">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> 실시간 반영 중
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-600">
+                <span className="h-1.5 w-1.5 rounded-full bg-brand-500" /> 실시간 반영 중
               </span>
               <div className="ml-auto flex items-center gap-2">
                 <span className="text-xs text-ink-500">입증취지</span>

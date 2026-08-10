@@ -22,7 +22,7 @@ export function ToastProvider({ children }) {
             key={t.id}
             className={
               'animate-fadeup rounded-full px-5 py-2.5 text-sm font-medium text-white shadow-lg ' +
-              (t.type === 'success' ? 'bg-emerald-500' : t.type === 'error' ? 'bg-red-500' : 'bg-ink-900')
+              (t.type === 'success' ? 'bg-brand-500' : t.type === 'error' ? 'bg-red-300' : 'bg-ink-900')
             }
           >
             {t.type === 'success' && '✓ '}{t.message}

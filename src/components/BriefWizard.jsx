@@ -1,17 +1,18 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useToast } from '../context/ToastContext.jsx'
 import { useWorkspace } from '../context/WorkspaceContext.jsx'
 import { Card, Badge, cx } from './ui.jsx'
 import { GenericPaper, Note, Label, WizardShell, CitationPicker } from './docform.jsx'
 import { FileText, Lightbulb, Check } from './icons.jsx'
-import { cases } from '../data/mock.js'
-import { loadDraft, findType } from '../lib/complaint.js'
+import { loadDraft, findType, savedAgo } from '../lib/complaint.js'
+import { saveFormDraft, loadFormDraft } from '../lib/docschema.js'
 import { citationPolicy, suggestPrecedents, matchedIssue } from '../lib/citation.js'
 import { briefSteps, buildBrief, briefCompleteness, briefSummary, emptyBrief, stages, defenses } from '../lib/brief.js'
 
 /* 소장 초안 · 진행 중 사건에서 당사자 정보를 그대로 끌어온다 */
 function CaseLoader({ setField, form }) {
   const draft = useMemo(() => loadDraft(), [])
+  const { myCases } = useWorkspace()          // 데모 목록이 아니라 내가 만든 사건
   const [picked, setPicked] = useState(null)
 
   const fromDraft = () => {
@@ -27,8 +28,12 @@ function CaseLoader({ setField, form }) {
 
   const fromCase = (c) => {
     setField('court', c.court)
-    setField('caseNo', c.id)
+    // 사건번호는 접수해야 나온다. 없으면 비워 두고 사용자가 채우게 한다 —
+    // 내부 id(case_xxxx)를 넣으면 준비서면에 그대로 찍힌다.
+    setField('caseNo', c.caseNo || '')
     setField('caseName', c.title)
+    setField('plaintiff', c.plaintiff || '')
+    setField('defendant', c.defendant || '')
     setPicked(c.id)
   }
 
@@ -53,7 +58,7 @@ function CaseLoader({ setField, form }) {
             {picked === 'draft' && <Check size={16} className="shrink-0 text-brand-400" />}
           </button>
         )}
-        {cases.map((c) => (
+        {myCases.map((c) => (
           <button
             key={c.id}
             type="button"
@@ -65,13 +70,18 @@ function CaseLoader({ setField, form }) {
           >
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-semibold text-ink-900">{c.title}</span>
-              <span className="block text-xs text-ink-500">{c.id} · {c.court}</span>
+              <span className="block text-xs text-ink-500">
+                {[c.caseNo || '사건번호 없음', c.court].filter(Boolean).join(' · ')}
+              </span>
             </span>
-            <Badge tone={c.badge === '진행 중' ? 'green' : 'gray'}>{c.badge}</Badge>
+            <Badge tone={c.status === '진행 중' ? 'green' : 'gray'}>{c.status}</Badge>
           </button>
         ))}
       </div>
-      <p className="mt-2 text-xs text-ink-500">불러오면 아래 항목이 자동으로 채워집니다. 직접 입력해도 돼요.</p>
+      <p className="mt-2 text-xs leading-relaxed text-ink-500">
+        불러오면 아래 항목이 자동으로 채워집니다.
+        <b className="text-ink-700"> 사건번호는 접수해야 나오므로</b>, 아직 없으면 비워 두고 나중에 채우세요.
+      </p>
     </div>
   )
 }
@@ -129,17 +139,40 @@ function makeBriefExtras(cited) {
 
 export default function BriefWizard({ onExit }) {
   const toast = useToast()
-  const [form, setForm] = useState(emptyBrief)
+  // 작성 중인 내용은 새로고침해도 남아야 한다 (소장과 같은 정책)
+  const [form, setForm] = useState(() => loadFormDraft('brief')?.form || emptyBrief)
   const [open, setOpen] = useState(0)
+  const [savedAt, setSavedAt] = useState(loadFormDraft('brief')?.savedAt || null)
+  const [saveFailed, setSaveFailed] = useState(false)
+  const first = useRef(true)
+
+  const { citedList, activeCaseId, attachDoc } = useWorkspace()
+
+  useEffect(() => {
+    if (first.current) { first.current = false; return }
+    const t = setTimeout(() => {
+      if (saveFormDraft('brief', form)) { setSavedAt(Date.now()); setSaveFailed(false) }
+      else setSaveFailed(true)
+      // 사건관리에서 "이 사건의 문서"로 보이도록 붙여 둔다
+      if (activeCaseId) {
+        attachDoc(activeCaseId, { kind: 'brief', title: form.round || '준비서면', progress: briefCompleteness(form) })
+      }
+    }, 600)
+    return () => clearTimeout(t)
+  }, [form, activeCaseId, attachDoc])
 
   const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }))
-  const { citedList } = useWorkspace()
   const extras = useMemo(() => makeBriefExtras(citedList), [citedList])
   const percent = useMemo(() => briefCompleteness(form), [form])
   const doc = useMemo(() => buildBrief(form), [form])
 
   return (
     <WizardShell
+      onSave={() => {
+        if (saveFormDraft('brief', form)) { setSavedAt(Date.now()); toast('작성 중인 내용을 저장했습니다') }
+        else toast('저장에 실패했습니다. 브라우저 저장공간을 확인해 주세요', 'error')
+      }}
+      savedLabel={saveFailed ? '⚠ 자동저장 실패 — 브라우저 저장공간을 확인하세요' : savedAt ? `${savedAgo(savedAt)} 저장됨` : ''}
       title="준비서면 작성"
       badge={form.round || '준비서면'}
       sub="이미 진행 중인 사건에 대한 대응 문서예요. 상대방 주장을 정리하고 쟁점별로 반박합니다."

@@ -136,8 +136,8 @@ export function GenericPaper({ doc, dense }) {
 
 const noteTone = {
   info: 'border-brand-100 bg-brand-50/60 text-brand-600',
-  warn: 'border-amber-200 bg-amber-50/70 text-amber-700',
-  ok: 'border-emerald-200 bg-emerald-50/70 text-emerald-700',
+  warn: 'border-red-200 bg-red-50/70 text-red-500',
+  ok: 'border-brand-200 bg-brand-50/70 text-brand-700',
   lock: 'border-ink-200 bg-ink-50 text-ink-600',
 }
 const noteIcon = { info: Lightbulb, warn: AlertTriangle, ok: Check, lock: Shield }
@@ -152,11 +152,43 @@ export function Note({ tone = 'info', children }) {
   )
 }
 
-export function Label({ children, required, right }) {
+/**
+ * 라벨 옆 (i) 버튼 — 눌러야 설명이 열린다.
+ *
+ * 안내를 전부 펼쳐 두면 화면이 안내로 뒤덮여 정작 입력칸이 안 보인다.
+ * 필요한 사람만 열어보게 하고, 기본은 접어 둔다.
+ */
+export function InfoTip({ children, label = '설명 보기' }) {
+  const [open, setOpen] = useState(false)
   return (
-    <span className="mb-1.5 flex items-center justify-between gap-2">
-      <span className="text-sm font-medium text-ink-700">
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label={label}
+        aria-expanded={open}
+        className={cx(
+          'grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full border text-[11px] font-bold transition-colors',
+          open ? 'border-brand-300 bg-brand-300 text-white' : 'border-ink-300 text-ink-400 hover:border-brand-300 hover:text-brand-400',
+        )}
+      >
+        i
+      </button>
+      {open && (
+        <div className="order-last mt-1.5 w-full rounded-xl border border-brand-100 bg-brand-50/60 px-3.5 py-2.5 text-[12px] leading-relaxed text-brand-600">
+          {children}
+        </div>
+      )}
+    </>
+  )
+}
+
+export function Label({ children, required, right, info }) {
+  return (
+    <span className="mb-1.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-0">
+      <span className="flex items-center gap-1.5 text-sm font-medium text-ink-700">
         {children}{required && <span className="ml-0.5 text-brand-400">*</span>}
+        {info && <InfoTip>{info}</InfoTip>}
       </span>
       {right}
     </span>
@@ -360,7 +392,7 @@ export function AddressField({ field: f, form, setField }) {
 
   return (
     <div>
-      <Label required={f.required}>{f.label}</Label>
+      <Label required={f.required} info={f.info}>{f.label}</Label>
 
       {/* 주소를 못 넣는 두 가지 사정을 먼저 처리한다 */}
       <div className="mb-2 flex flex-wrap gap-2">
@@ -557,7 +589,7 @@ export function FileField({ field: f, form, setField }) {
 
   return (
     <div>
-      <Label>{f.label}</Label>
+      <Label info={f.info}>{f.label}</Label>
 
       <div
         onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
@@ -790,6 +822,7 @@ export function FieldOne({ field: f, form, setField, renderExtra }) {
         <label className="block">
           <Label
             required={f.required}
+            info={f.info}
             right={f.showKey ? (
               <ShowInDocToggle
                 on={form[f.showKey] ?? f.showDefault ?? true}
@@ -806,7 +839,7 @@ export function FieldOne({ field: f, form, setField, renderExtra }) {
     case 'money':
       return (
         <label className="block">
-          <Label required={f.required}>{f.label}</Label>
+          <Label required={f.required} info={f.info}>{f.label}</Label>
           <div className="relative">
             <input className={cx(inputCls, 'pr-9')} inputMode="numeric" placeholder={f.placeholder || '0'} value={v ? won(v) : ''} onChange={(e) => set(e.target.value.replace(/[^0-9]/g, ''))} />
             <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-sm text-ink-400">원</span>
@@ -817,7 +850,7 @@ export function FieldOne({ field: f, form, setField, renderExtra }) {
     case 'num':
       return (
         <label className="block">
-          <Label required={f.required}>{f.label}</Label>
+          <Label required={f.required} info={f.info}>{f.label}</Label>
           <div className="relative">
             <input className={cx(inputCls, f.unit && 'pr-12')} inputMode="numeric" value={v} onChange={(e) => set(e.target.value.replace(/[^0-9.]/g, ''))} />
             {f.unit && <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-sm text-ink-400">{f.unit}</span>}
@@ -825,13 +858,13 @@ export function FieldOne({ field: f, form, setField, renderExtra }) {
         </label>
       )
     case 'date':
-      return <label className="block"><Label required={f.required}>{f.label}</Label><input type="date" className={inputCls} value={v} onChange={(e) => set(e.target.value)} /></label>
+      return <label className="block"><Label required={f.required} info={f.info}>{f.label}</Label><input type="date" className={inputCls} value={v} onChange={(e) => set(e.target.value)} /></label>
     case 'area':
-      return <label className="block"><Label required={f.required}>{f.label}</Label><textarea rows={f.rows || 3} className={cx(inputCls, 'h-auto py-2.5 leading-relaxed')} placeholder={f.placeholder} value={v} onChange={(e) => set(e.target.value)} /></label>
+      return <label className="block"><Label required={f.required} info={f.info}>{f.label}</Label><textarea rows={f.rows || 3} className={cx(inputCls, 'h-auto py-2.5 leading-relaxed')} placeholder={f.placeholder} value={v} onChange={(e) => set(e.target.value)} /></label>
     case 'select':
       return (
         <label className="block">
-          <Label required={f.required}>{f.label}</Label>
+          <Label required={f.required} info={f.info}>{f.label}</Label>
           <select className={inputCls} value={v} onChange={(e) => set(e.target.value)}>
             <option value="">선택하세요</option>
             {f.options.map((o) => <option key={o}>{o}</option>)}
@@ -839,13 +872,13 @@ export function FieldOne({ field: f, form, setField, renderExtra }) {
         </label>
       )
     case 'radio':
-      return <div><Label required={f.required}>{f.label}</Label><Pills options={f.options} value={v} onChange={set} /></div>
+      return <div><Label required={f.required} info={f.info}>{f.label}</Label><Pills options={f.options} value={v} onChange={set} /></div>
     case 'checks':
-      return <div><Label required={f.required}>{f.label}</Label><Pills options={f.options} value={form[f.key] || []} onChange={set} multi /></div>
+      return <div><Label required={f.required} info={f.info}>{f.label}</Label><Pills options={f.options} value={form[f.key] || []} onChange={set} multi /></div>
     case 'note':
       return <Note tone={f.tone}>{f.body}</Note>
     case 'court':
-      return <div><Label required={f.required}>{f.label}</Label><CourtPicker value={form[f.key] ?? ''} onChange={set} /></div>
+      return <div><Label required={f.required} info={f.info}>{f.label}</Label><CourtPicker value={form[f.key] ?? ''} onChange={set} /></div>
     case 'address':
       return <AddressField field={f} form={form} setField={setField} />
     case 'signature':
@@ -868,7 +901,7 @@ function RepeatField({ field: f, form, setField }) {
 
   return (
     <div>
-      <Label required={f.required}>{f.label}</Label>
+      <Label required={f.required} info={f.info}>{f.label}</Label>
       <div className="space-y-3">
         {rows.length === 0 && (
           <p className="rounded-xl border border-dashed border-ink-200 bg-ink-50 p-4 text-center text-[13px] text-ink-400">
@@ -903,13 +936,14 @@ function RepeatField({ field: f, form, setField }) {
 
 /** 절반 너비 필드는 두 개씩 한 줄에 묶는다 */
 /** half 짝맞춤 + 접이식 그룹까지 한 덩어리를 그린다 */
-function FieldList({ list, form, setField, renderExtra }) {
+function FieldList({ list, form, setField, renderExtra, grouped }) {
   const out = []
   for (let i = 0; i < list.length; i += 1) {
     const f = list[i]
 
-    // fold가 같은 필드끼리 묶어 접는다 — 자주 안 쓰는 항목을 기본으로 감춘다
-    if (f.fold) {
+    // fold가 같은 필드끼리 묶어 접는다 — 자주 안 쓰는 항목을 기본으로 감춘다.
+    // 이미 그룹 안이면 다시 묶지 않는다 (묶으면 자기 자신을 무한히 다시 그린다).
+    if (f.fold && !grouped) {
       const group = []
       while (i < list.length && list[i].fold === f.fold) { group.push(list[i]); i += 1 }
       i -= 1
@@ -919,7 +953,7 @@ function FieldList({ list, form, setField, renderExtra }) {
       continue
     }
 
-    if (f.half && list[i + 1]?.half && !list[i + 1].fold) {
+    if (f.half && list[i + 1]?.half && (grouped || !list[i + 1].fold)) {
       out.push(
         <div key={f.key || i} className="grid gap-4 sm:grid-cols-2">
           <FieldOne field={f} form={form} setField={setField} renderExtra={renderExtra} />
@@ -952,7 +986,7 @@ function FoldGroup({ label, fields, form, setField, renderExtra }) {
       </button>
       {open && (
         <div className="border-t border-ink-100 px-4 py-4">
-          <FieldList list={fields} form={form} setField={setField} renderExtra={renderExtra} />
+          <FieldList list={fields} form={form} setField={setField} renderExtra={renderExtra} grouped />
         </div>
       )}
     </div>
@@ -988,8 +1022,8 @@ export function Fields({ fields, form, setField, renderExtra }) {
             >
               {t}
               {need > 0
-                ? <span className="rounded-full bg-amber-100 px-1.5 text-[11px] font-bold text-amber-600">{need}</span>
-                : <Check size={13} className="text-emerald-500" />}
+                ? <span className="rounded-full bg-red-100 px-1.5 text-[11px] font-bold text-red-500">{need}</span>
+                : <Check size={13} className="text-brand-500" />}
             </button>
           )
         })}
@@ -1048,7 +1082,7 @@ export function PickList({ heading, placeholder, items, onPick, onBack, backLabe
             <button
               onClick={() => toggleFave(t.key)}
               aria-label="즐겨찾기"
-              className={cx('shrink-0 p-1 transition-colors', faves.includes(t.key) ? 'text-amber-400' : 'text-ink-300 hover:text-ink-400')}
+              className={cx('shrink-0 p-1 transition-colors', faves.includes(t.key) ? 'text-red-400' : 'text-ink-300 hover:text-ink-400')}
             >
               <Star size={20} />
             </button>
@@ -1164,8 +1198,8 @@ export function WizardShell({
           <Card className="flex h-full flex-col p-0">
             <div className="flex flex-wrap items-center gap-3 border-b border-ink-100 px-5 py-3.5">
               <h3 className="font-bold text-ink-900">{previewTitle}</h3>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-600">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> 실시간 반영 중
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-600">
+                <span className="h-1.5 w-1.5 rounded-full bg-brand-500" /> 실시간 반영 중
               </span>
               <div className="ml-auto flex items-center gap-2">
                 <span className="text-xs text-ink-500">완성도</span>

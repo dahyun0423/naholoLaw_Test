@@ -1,33 +1,128 @@
+// 소송 절차 안내
+//
+// 이 화면의 주인공은 **소송 진행 단계** 하나다.
+// 예전에는 사건 배너가 두 번(CaseBar + 그라데이션 배너) 뜨고, 세로 타임라인이 길게
+// 늘어졌고, 「접수하려면 N가지가 더 필요해요」가 또 따로 있었다. 셋 다 같은 말이었다.
+//
+// 그래서 이렇게 바꾼다.
+//   · 사건 표시는 한 줄로 한 번만
+//   · 진행 단계는 **가로 스텝퍼**로 크게 — 지금 칸은 빛이 번진다
+//   · 못 채운 것은 별도 경고 카드가 아니라 **지금 단계 안의 할 일**로 들어간다
+//
+// 단계 정의는 사건관리와 같은 caseFlow를 쓴다. 한 앱에서 진행 단계가 두 종류면
+// "내가 어디 있는 거지"를 두 번 묻게 된다.
+
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Card, Badge, Button, Progress, inputCls, cx } from '../components/ui.jsx'
 import Modal from '../components/Modal.jsx'
-import { procedureSteps as demoSteps, procedureSchedule, submitDocs, activeCase as demoCase } from '../data/mock.js'
+import Stepper from '../components/Stepper.jsx'
+import { procedureSchedule, submitDocs } from '../data/mock.js'
 import { useWorkspace } from '../context/WorkspaceContext.jsx'
-import { caseSteps, caseProgress, caseTodos, caseEvidence } from '../lib/casebook.js'
-import CaseBar from '../components/CaseBar.jsx'
-import { Link } from 'react-router-dom'
-// 인지대·송달료는 소장 화면과 반드시 같은 식을 써야 한다.
-// 여기서 따로 계산하면 같은 앱이 같은 금액에 두 답을 내놓는다.
-import { stampFee, serviceFee, won, SERVICE_FEE_IS_ESTIMATE } from '../lib/complaint.js'
-import { Check, Clock, Circle, Calendar, Upload, FileText, AlertTriangle } from '../components/icons.jsx'
+import { caseFlow, flowIndex, caseTasks, caseEvidence, caseUpcoming } from '../lib/casebook.js'
+import { stampFee, serviceFee, won, fmtDate, findType, completeness, savedAgo, SERVICE_FEE_IS_ESTIMATE } from '../lib/complaint.js'
+import { Check, Circle, Calendar, Upload, FileText, AlertTriangle, ArrowRight } from '../components/icons.jsx'
 
-const statusMeta = {
-  done: { icon: Check, ring: 'bg-emerald-500 text-white', line: 'bg-emerald-300' },
-  current: { icon: Clock, ring: 'bg-brand-400 text-white', line: 'bg-ink-200' },
-  todo: { icon: Circle, ring: 'bg-ink-200 text-ink-400', line: 'bg-ink-200' },
+/**
+ * 사건 고르기 카드 — Figma 문서 유형 카드와 같은 컴포넌트를 쓴다.
+ * 제목이 사건명, 부제가 「법원 | 사건번호」, 아래에 마지막 업데이트가 붙는다.
+ */
+function CasePick({ c, sum, onPick }) {
+  const type = findType(c.typeKey)
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      className="group relative aspect-[320/284] w-full max-w-[320px] self-start overflow-hidden rounded-[20px] border border-ink-200 bg-ink-100 text-left transition-colors hover:border-brand-200"
+    >
+      {/* 뒷장 — Rectangle 150 (164×194 @100,110) */}
+      <span
+        aria-hidden
+        className="absolute rounded-[14px] bg-[#c0cad7]"
+        style={{ left: '31.25%', top: '38.73%', width: '51.25%', height: '68.31%' }}
+      />
+      {/* 앞장 — Rectangle 149 (164×194 @58,112) + drop-shadow 21.7 / 10% */}
+      <span
+        aria-hidden
+        className="absolute rounded-[14px] bg-white shadow-[0_0_22px_rgba(0,0,0,0.1)]"
+        style={{ left: '18.13%', top: '39.44%', width: '51.25%', height: '68.31%' }}
+      />
+      {/* 포켓 — 320×90 @0,194 · #f2f4f6 68% + 유리 블러 19.5 */}
+      <span
+        aria-hidden
+        className="absolute inset-x-0 bottom-0 backdrop-blur-[19px]"
+        style={{ height: '31.69%', background: 'rgba(242,244,246,0.68)' }}
+      />
+
+      {/* 제목·부제 — @25,14 */}
+      <span className="absolute left-[7.8%] right-[7.8%] top-[4.9%]">
+        <span className="block truncate text-[24px] font-semibold leading-snug text-ink-700 transition-colors group-hover:text-brand-400">
+          {type ? `${type.title} 청구` : '작성 중인 사건'}
+        </span>
+        <span className="mt-0.5 block truncate text-[15px] font-medium text-ink-600">
+          {[c.form?.court || '법원 미정', c.caseNo || '사건번호 없음'].join(' | ')}
+        </span>
+      </span>
+
+      {/* 마지막 업데이트 — 포켓 안 @30,225 */}
+      <span className="absolute bottom-[6%] left-[9.4%] text-[18px] font-normal text-ink-400">
+        마지막 업데이트: {savedAgo(c.updatedAt)}
+      </span>
+    </button>
+  )
+}
+
+/**
+ * 단계마다 "무엇을 하는 때인가"와 "그때 할 일".
+ * 사건 데이터에서 나오지 않는 절차 지식이라 여기 둔다.
+ */
+const GUIDE = {
+  deal: {
+    desc: '다툼이 생긴 시점이에요. 소송보다 먼저 자료를 모아 둡니다.',
+    items: ['계약서·차용증·이체내역 모으기', '사실관계를 시간순으로 적어 두기'],
+  },
+  notice: {
+    desc: '소송 전에 상대방에게 이행을 요구하는 단계예요. 꼭 거쳐야 하는 건 아닙니다.',
+    items: ['내용증명 작성·발송', '배달증명 보관 (도달일이 지연손해금 기산점이 돼요)'],
+  },
+  draft: {
+    desc: '청구취지·청구원인·증거를 갖춘 소장을 만드는 단계예요.',
+    items: ['당사자·관할·청구금액 입력', '사실관계를 요건사실 순서로 정리', '갑호증 번호 매기고 입증취지 적기'],
+    to: '/app/documents',
+  },
+  file: {
+    desc: '관할 법원에 소장을 내고 사건번호를 받는 단계예요.',
+    items: ['인지대·송달료 납부', '전자소송 입력 또는 종이 제출', '접수 후 사건번호를 사건관리에 적어 두기'],
+    to: '/app/cases',
+  },
+  trial: {
+    desc: '답변서와 준비서면이 오가는 단계예요.',
+    items: ['상대방 답변서 검토', '준비서면으로 반박', '부족한 증거 보강'],
+    to: '/app/documents',
+  },
+  judge: {
+    desc: '선고를 받고, 확정되면 집행으로 이어집니다.',
+    items: ['판결문 수령', '항소 여부 판단 — 송달 다음 날부터 2주', '확정 후 강제집행 신청'],
+  },
 }
 
 export default function Procedure() {
-  // 내가 만든 사건이면 그 사건의 실제 상태를 보여준다.
-  // 아직 없으면 예시 사건으로 화면 구성을 보여주되, 예시임을 밝힌다.
-  const { activeCase, activeRaw } = useWorkspace()
+  const { activeCase, activeRaw, rawCases, myCases, setActiveCaseId } = useWorkspace()
+  // Figma 「소송절차안내」 시작 화면 — 어느 사건의 절차인지부터 고른다.
+  // 절차는 사건마다 다르므로, 사건을 안 고른 채로 단계를 보여주면 남의 절차를 읽는 셈이다.
+  const [chosen, setChosen] = useState(false)
   const mine = !!activeRaw
-  const steps = mine ? caseSteps(activeRaw) : demoSteps
-  const todos = mine ? caseTodos(activeRaw) : []
+
+  const steps = mine ? caseFlow(activeRaw) : caseFlow(null)
+  const cur = mine ? flowIndex(activeRaw) : 0
+  const [pick, setPick] = useState(null)              // 눌러서 다른 단계를 볼 수도 있다
+  const shown = pick ?? cur
+
+  const type = mine ? findType(activeRaw.typeKey) : null
+  const pct = mine && type ? completeness(type, activeRaw.form || {}) : 0
+  const tasks = mine ? caseTasks(activeRaw).filter((t) => !t.done) : []
   const evidence = mine ? caseEvidence(activeRaw) : []
-  const banner = mine
-    ? { ...activeCase, progress: caseProgress(activeRaw) }
-    : { ...demoCase, title: demoCase.title, court: demoCase.court, caseNo: demoCase.id, status: '예시', progress: demoCase.progress }
+  const upcoming = mine ? caseUpcoming(activeRaw).slice(0, 3) : []
 
   const [upload, setUpload] = useState(false)
   const [checklist, setChecklist] = useState(false)
@@ -40,10 +135,9 @@ export default function Procedure() {
   const fee = amount ? stampFee(Number(amount)) : 0
   const postage = amount ? serviceFee(2) : 0
 
-  // 제출 서류 체크도 실제 작성 상태를 따른다
   const docs = mine
     ? [
-        { name: '소장', done: caseProgress(activeRaw) >= 60 },
+        { name: '소장', done: pct >= 60 },
         { name: '당사자 표시', done: !!(activeRaw.form?.pName && activeRaw.form?.dName) },
         { name: '증거자료', done: evidence.length > 0 },
         { name: '입증취지', done: evidence.length > 0 && evidence.every((e) => e.purpose) },
@@ -52,123 +146,163 @@ export default function Procedure() {
     : submitDocs
   const doneCount = docs.filter((d) => d.done).length
 
+  const step = steps[shown]
+  const guide = GUIDE[step?.key] || { desc: '', items: [] }
+  const isNow = shown === cur
+
+  if (!chosen && rawCases.length > 0) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-ink-900">소송 절차 안내</h1>
+          <p className="mt-1 text-sm text-ink-500">소송 진행 단계를 한눈에 확인하고 다음 단계를 준비하세요</p>
+        </div>
+        <Card className="p-6">
+          <h2 className="text-[17px] font-bold text-ink-900">현재 진행 중인 소송을 선택해주세요.</h2>
+          <div className="mt-5 grid justify-items-center gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            {rawCases.map((c) => (
+              <CasePick
+                key={c.id}
+                c={c}
+                sum={myCases.find((m) => m.id === c.id)}
+                onPick={() => { setActiveCaseId(c.id); setChosen(true) }}
+              />
+            ))}
+          </div>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-ink-900">소송 절차 안내</h1>
-        <p className="mt-1 text-sm text-ink-500">소송 진행 단계를 한눈에 확인하고 다음 단계를 준비하세요.</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-ink-900">소송 절차 안내</h1>
+          <p className="mt-1 text-sm text-ink-500">지금 어느 단계에 있고, 그 단계에서 무엇을 해야 하는지 보여줍니다.</p>
+        </div>
+        {/* 사건 표시는 여기 한 줄뿐 — 아래에 배너를 또 두지 않는다 */}
+        <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-ink-200 bg-white px-4 py-2.5">
+          <FileText size={15} className="shrink-0 text-brand-300" />
+          <span className="text-[13px] font-bold text-ink-900">
+            {mine && type ? `${type.title} 청구` : activeCase?.title || '예시 사건'}
+          </span>
+          <span className="text-[12px] text-ink-500">{activeRaw?.caseNo || '사건번호 없음 (접수 전)'}</span>
+          {!mine && <Badge tone="gray">예시</Badge>}
+          <button type="button" onClick={() => setChosen(false)} className="text-[12px] font-semibold text-brand-500 hover:underline">사건 바꾸기</button>
+        </div>
       </div>
 
-      <CaseBar />
-
-      {/* case banner */}
-      <Card className="border-brand-200 bg-gradient-to-r from-brand-500 to-brand-400 p-5 text-white">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <Badge className="bg-white/20 text-white">민사 소송</Badge>
-            <h2 className="mt-2 text-lg font-bold">{banner.title}</h2>
-            <p className="text-sm text-white/80">
-              {[banner.court, banner.caseNo || '사건번호 없음 (접수 전)'].filter(Boolean).join(' · ')}
-            </p>
-          </div>
-          <div className="w-48">
-            <div className="flex justify-between text-xs text-white/80"><span>진행률</span><span>{banner.progress}%</span></div>
-            <div className="mt-1.5 h-2 rounded-full bg-white/25"><div className="h-full rounded-full bg-white" style={{ width: `${banner.progress}%` }} /></div>
-          </div>
-        </div>
+      {/* ── 주인공: 가로 진행 스텝퍼 ── */}
+      <Card className="px-6 pb-6 pt-7">
+        <Stepper
+          steps={steps.map((x) => ({
+            ...x,
+            note: x.at ? fmtDate(x.at) : x.pct !== undefined && !x.done ? `${x.pct}%` : '',
+          }))}
+          current={cur}
+          picked={shown}
+          onPick={setPick}
+        />
       </Card>
 
-      {/* 접수 전 사건은 '무엇을 더 채워야 하는가'가 곧 다음 단계다 */}
-      {mine && todos.length > 0 && (
-        <Card className="border-amber-200 bg-amber-50 p-5">
-          <p className="flex items-center gap-2 text-sm font-bold text-amber-800">
-            <AlertTriangle size={16} /> 접수하려면 {todos.length}가지가 더 필요해요
-          </p>
-          <ul className="mt-2.5 space-y-1.5">
-            {todos.slice(0, 5).map((t, i) => (
-              <li key={i}>
-                <Link to={t.to} className="text-[13px] leading-relaxed text-amber-700 hover:underline">
-                  · <b className="font-semibold">{t.title}</b>{t.desc && ` — ${t.desc}`}
-                </Link>
+      <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
+        {/* ── 고른 단계에서 할 일 ── */}
+        <Card className="p-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-[17px] font-bold text-ink-900">{step?.label}</h2>
+            {isNow ? <Badge tone="blue">지금 여기</Badge> : step?.done ? <Badge tone="gray">지난 단계</Badge> : <Badge tone="gray">앞으로</Badge>}
+            {!isNow && (
+              <button type="button" onClick={() => setPick(null)} className="ml-auto text-[12px] font-semibold text-brand-500 hover:underline">
+                지금 단계로
+              </button>
+            )}
+          </div>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-ink-600">{guide.desc}</p>
+
+          <ul className="mt-4 space-y-2">
+            {guide.items.map((it) => (
+              <li key={it} className="flex items-start gap-2 text-[13px] leading-relaxed text-ink-700">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-300" />{it}
               </li>
             ))}
           </ul>
-          {todos.length > 5 && <p className="mt-2 text-xs text-amber-600">외 {todos.length - 5}건</p>}
-        </Card>
-      )}
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* timeline */}
-        <Card className="p-6 lg:col-span-2">
-          <h3 className="font-bold text-ink-900">소송 진행 단계</h3>
-          <div className="mt-5">
-            {steps.map((s, i) => {
-              const m = statusMeta[s.status]
-              const Icon = m.icon
-              const last = i === steps.length - 1
-              return (
-                <div key={s.name} className="flex gap-4">
-                  <div className="flex flex-col items-center">
-                    <span className={cx('grid h-9 w-9 shrink-0 place-items-center rounded-full', m.ring)}><Icon size={18} /></span>
-                    {!last && <span className={cx('my-1 w-0.5 flex-1', m.line)} />}
-                  </div>
-                  <div className={cx('flex-1 pb-7', last && 'pb-0')}>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {s.to
-                        ? <Link to={s.to} className={cx('font-bold hover:text-brand-500 hover:underline', s.status === 'todo' ? 'text-ink-500' : 'text-ink-900')}>{s.name}</Link>
-                        : <h4 className={cx('font-bold', s.status === 'todo' ? 'text-ink-500' : 'text-ink-900')}>{s.name}</h4>}
-                      {s.status === 'current' && <Badge tone="blue">진행 중</Badge>}
-                      <span className="text-xs text-ink-400">{s.date}</span>
-                    </div>
-                    <p className="mt-1 text-sm text-ink-600">{s.desc}</p>
-                    <ul className="mt-2 space-y-1">
-                      {s.items.map((it) => <li key={it} className="flex items-center gap-1.5 text-[13px] text-ink-500">· {it}</li>)}
-                    </ul>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+          {/* 못 채운 것은 따로 경고하지 않고 이 단계의 할 일로 붙인다 */}
+          {isNow && tasks.length > 0 && (
+            <div className="mt-5 border-t border-ink-200 pt-4">
+              <p className="text-[12px] font-bold text-ink-700">이 사건에서 아직 안 채운 것 <span className="text-red-500">{tasks.length}개</span></p>
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                {tasks.map((t) => (
+                  <Link
+                    key={t.key} to={t.to}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-3 py-1.5 text-[12px] text-ink-700 transition-colors hover:border-brand-300 hover:bg-brand-50"
+                  >
+                    <span className="grid h-4 w-4 place-items-center rounded-full bg-ink-100 text-[10px] font-bold tabular-nums text-ink-600">{t.missing}</span>
+                    {t.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {guide.to && (
+            <Button as={Link} to={guide.to} variant="soft" size="sm" className="mt-5">
+              이 단계 이어서 하기 <ArrowRight size={14} />
+            </Button>
+          )}
         </Card>
 
-        {/* right column */}
+        {/* ── 곁정보 ── */}
         <div className="space-y-5">
           <Card className="p-5">
-            <div className="flex items-center gap-2"><Calendar size={16} className="text-brand-400" /><h3 className="text-sm font-bold text-ink-900">예정된 일정</h3></div>
+            <div className="flex items-center gap-2">
+              <Calendar size={15} className="text-brand-300" />
+              <h3 className="text-[13px] font-bold text-ink-900">예정된 일정</h3>
+            </div>
             <div className="mt-3 space-y-2">
-              {procedureSchedule.map((e) => (
-                <div key={e.title} className="rounded-xl border border-ink-100 p-3">
-                  <p className="text-sm font-semibold text-ink-800">{e.title}</p>
-                  <p className="text-xs text-ink-400">{e.date}{e.place && ` · ${e.place}`}</p>
+              {(upcoming.length ? upcoming : procedureSchedule).map((e) => (
+                <div key={e.id || e.title} className="flex items-center gap-3 rounded-xl border border-ink-200 px-3 py-2.5">
+                  {e.dday !== undefined && (
+                    <span className={cx('shrink-0 rounded-md px-2 py-1 text-[11px] font-bold tabular-nums', e.dday < 0 ? 'bg-red-50 text-red-500' : e.dday <= 3 ? 'bg-brand-50 text-brand-600' : 'bg-ink-100 text-ink-600')}>
+                      {e.dday < 0 ? `D+${-e.dday}` : e.dday === 0 ? 'D-DAY' : `D-${e.dday}`}
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-semibold text-ink-800">{e.text || e.title}</span>
+                    <span className="block text-[11px] text-ink-400">{e.due ? fmtDate(e.due) : e.date}{e.place && ` · ${e.place}`}</span>
+                  </span>
                 </div>
               ))}
             </div>
           </Card>
 
           <Card className="p-5">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-ink-900">제출 서류</h3>
-              <span className="text-xs text-ink-400">{doneCount}/{docs.length}</span>
+            <div className="flex items-center gap-2">
+              <h3 className="text-[13px] font-bold text-ink-900">제출 서류</h3>
+              <span className="ml-auto text-[12px] font-bold tabular-nums text-ink-600">{doneCount}/{docs.length}</span>
             </div>
-            <div className="mt-3"><Progress value={(doneCount / docs.length) * 100} tone="green" /></div>
-            <div className="mt-3 space-y-2">
+            <div className="mt-3"><Progress value={(doneCount / docs.length) * 100} /></div>
+            <div className="mt-3 space-y-1">
               {docs.map((d) => (
-                <div key={d.name} className="flex items-center justify-between rounded-lg px-1 py-1.5">
-                  <span className="flex items-center gap-2 text-sm text-ink-700"><FileText size={15} className="text-ink-400" /> {d.name}</span>
-                  {d.done ? <Check size={16} className="text-emerald-500" /> : <Circle size={16} className="text-ink-300" />}
+                <div key={d.name} className="flex items-center justify-between py-1">
+                  <span className={cx('text-[13px]', d.done ? 'text-ink-700' : 'text-ink-500')}>{d.name}</span>
+                  {d.done ? <Check size={15} className="text-brand-300" /> : <Circle size={15} className="text-ink-300" />}
                 </div>
               ))}
             </div>
-            <Button className="mt-3 w-full" onClick={() => setUpload(true)}><Upload size={16} /> 서류 업로드</Button>
-            <Button variant="neutral" className="mt-2 w-full" onClick={() => setChecklist(true)}>제출 전 체크리스트</Button>
+            <div className="mt-4 flex gap-2">
+              <Button size="sm" className="flex-1" onClick={() => setUpload(true)}><Upload size={15} /> 업로드</Button>
+              <Button size="sm" variant="neutral" className="flex-1" onClick={() => setChecklist(true)}>체크리스트</Button>
+            </div>
           </Card>
         </div>
       </div>
 
-      {/* upload modal */}
+      {/* upload */}
       <Modal
         open={upload} onClose={() => setUpload(false)}
-        title="서류 업로드" sub={`${activeCase.title}에 대한 서류를 업로드합니다.`}
+        title="서류 업로드" sub={`${activeCase?.title || '사건'}에 대한 서류를 업로드합니다.`}
         footer={<><Button variant="neutral" onClick={() => setUpload(false)}>취소</Button><Button onClick={() => { setUpload(false); flash('서류가 업로드되었습니다') }}>업로드</Button></>}
       >
         <div className="space-y-4">
@@ -183,17 +317,14 @@ export default function Procedure() {
           <label className="block"><span className="mb-1.5 block text-sm font-medium text-ink-700">제출 기한</span>
             <input type="date" className={inputCls} />
           </label>
-          <label className="block"><span className="mb-1.5 block text-sm font-medium text-ink-700">메모 (선택)</span>
-            <textarea rows={2} className={cx(inputCls, 'h-auto py-2.5')} placeholder="서류에 대한 추가 메모를 입력하세요" />
-          </label>
-          <div className="flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-700">
+          <div className="flex items-start gap-2 rounded-xl bg-red-50 p-3 text-xs leading-relaxed text-red-500">
             <AlertTriangle size={15} className="mt-0.5 shrink-0" />
             <span>서류는 법원 제출용 원본과 동일해야 합니다. 제출 기한을 반드시 확인하고, 서명·날인이 필요한 서류는 완료 후 업로드하세요.</span>
           </div>
         </div>
       </Modal>
 
-      {/* checklist modal */}
+      {/* checklist */}
       <Modal
         open={checklist} onClose={() => setChecklist(false)} maxW="max-w-2xl"
         title="소장 제출 전 필수 준비사항" sub="소송을 제기하기 위해 아래 항목들을 확인하고 준비하세요."
@@ -208,7 +339,7 @@ export default function Procedure() {
             <div key={i} className="rounded-xl border border-ink-200 p-4">
               <div className="flex items-center justify-between">
                 <div><p className="font-bold text-ink-900">{sec.t}</p><p className="text-xs text-ink-500">{sec.d}</p></div>
-                <button onClick={() => setChecked((c) => ({ ...c, [i]: !c[i] }))} className={cx('rounded-lg px-3 py-1.5 text-xs font-semibold', checked[i] ? 'bg-emerald-50 text-emerald-600' : 'bg-ink-100 text-ink-500')}>
+                <button onClick={() => setChecked((c) => ({ ...c, [i]: !c[i] }))} className={cx('rounded-lg px-3 py-1.5 text-xs font-semibold', checked[i] ? 'bg-brand-50 text-brand-600' : 'bg-ink-100 text-ink-500')}>
                   {checked[i] ? '확인됨 ✓' : '확인'}
                 </button>
               </div>
@@ -220,7 +351,7 @@ export default function Procedure() {
         </div>
       </Modal>
 
-      {/* calculator modal */}
+      {/* calculator */}
       <Modal
         open={calc} onClose={() => setCalc(false)}
         title="소송 비용 계산기" sub="청구 금액을 입력하면 인지대와 송달료가 자동으로 계산됩니다."
@@ -234,7 +365,7 @@ export default function Procedure() {
           <span className="mt-1 block text-xs text-ink-400">숫자만 입력하세요 (예: 1천만원 = 10000000)</span>
         </label>
         {amount && (
-          <div className="mt-4 space-y-2 rounded-xl bg-brand-50/60 p-4">
+          <div className="mt-4 space-y-2 rounded-xl bg-brand-50 p-4">
             <div className="flex justify-between text-sm">
               <span className="text-ink-600">예상 인지대 <span className="text-xs text-ink-400">민사소송등인지법 제2조</span></span>
               <span className="font-bold text-ink-800">{won(fee)}원</span>
@@ -242,12 +373,12 @@ export default function Procedure() {
             <div className="flex justify-between text-sm">
               <span className="text-ink-600">
                 예상 송달료 <span className="text-xs text-ink-400">당사자 2명</span>
-                {SERVICE_FEE_IS_ESTIMATE && <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">추정</span>}
+                {SERVICE_FEE_IS_ESTIMATE && <span className="ml-1 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-500">추정</span>}
               </span>
               <span className="font-bold text-ink-800">{won(postage)}원</span>
             </div>
             <div className="flex justify-between border-t border-brand-200 pt-2 text-sm"><span className="font-semibold text-ink-700">합계</span><span className="font-bold text-brand-500">{won(fee + postage)}원</span></div>
-            {Number(amount) <= 30000000 && <p className="pt-1 text-xs text-emerald-600">✓ 3천만원 이하 — 소액사건으로 간이 절차가 적용됩니다.</p>}
+            {Number(amount) <= 30000000 && <p className="pt-1 text-xs text-brand-600">✓ 3천만원 이하 — 소액사건으로 간이 절차가 적용됩니다.</p>}
             <p className="text-[11px] leading-relaxed text-ink-400">
               * 참고용 계산이며 나홀로법에에서 결제하지 않습니다. 실제 납부는 법원 또는 전자소송포털에서 하시고,
               송달료는 사건 종류별 예납 회차·우편요금에 따라 달라지므로 접수 전에 확인하세요.

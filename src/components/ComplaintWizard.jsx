@@ -162,18 +162,18 @@ function FullView({ type, form, onClose, onEdit }) {
             <div className="divide-y divide-ink-100">
               {checks.map((c) => (
                 <div key={c.no} className="flex gap-2.5 px-4 py-3">
-                  <span className={cx('mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md text-white', c.ok ? 'bg-brand-300' : c.warn ? 'bg-amber-400' : 'bg-ink-200')}>
+                  <span className={cx('mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md text-white', c.ok ? 'bg-brand-300' : c.warn ? 'bg-red-300' : 'bg-ink-200')}>
                     {c.ok ? <Check size={13} /> : c.warn ? <span className="text-[11px] font-bold">!</span> : <span className="text-[11px]">-</span>}
                   </span>
                   <div className="min-w-0">
                     <p className={cx('text-[13px] font-semibold', c.ok === null ? 'text-ink-400' : 'text-ink-900')}>{c.no} {c.label}</p>
-                    <p className={cx('text-xs', c.warn ? 'text-amber-600' : 'text-ink-500')}>{c.detail}</p>
+                    <p className={cx('text-xs', c.warn ? 'text-red-500' : 'text-ink-500')}>{c.detail}</p>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="m-3 rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-700">
+            <div className="m-3 rounded-xl bg-red-50 p-3 text-xs leading-relaxed text-red-500">
               <p className="font-semibold">간인이 뭔가요?</p>
               <p className="mt-1">2장 이상일 때 페이지가 이어진다는 표시로 종이 사이에 도장을 걸쳐 찍는 거예요. 전자소송으로 내면 간인은 필요 없습니다.</p>
             </div>
@@ -252,7 +252,7 @@ function CostBox({ form }) {
           <div key={k} className="flex items-center justify-between border-b border-ink-100 pb-2 text-[13px]">
             <span className="flex items-center gap-1.5 text-ink-500">
               {k}
-              {tag === '추정' && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-700">추정</span>}
+              {tag === '추정' && <span className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-semibold text-red-500">추정</span>}
               {tag && tag !== '추정' && <span className="text-[11px] text-ink-400">{tag}</span>}
             </span>
             <span className="font-medium text-ink-800">{v}</span>
@@ -330,7 +330,7 @@ function makeComplaintExtras(type) {
             <span className="font-bold text-brand-400">{won(sum)}원</span>
           </div>
           {target > 0 && sum > 0 && sum !== target && (
-            <p className="mt-1.5 text-xs text-amber-600">청구 금액({won(target)}원)과 {won(Math.abs(target - sum))}원 차이가 있어요. 확인해 주세요.</p>
+            <p className="mt-1.5 text-xs text-red-500">청구 금액({won(target)}원)과 {won(Math.abs(target - sum))}원 차이가 있어요. 확인해 주세요.</p>
           )}
         </div>
       )
@@ -410,10 +410,16 @@ function Writer({ typeKey, form, setForm, onBack, onDone }) {
     ...s,
     badge: i >= 2 ? type.short : undefined,
     hint: i === 0 ? type.amountHint : undefined,
+    // 소장에는 판례를 인용하지 않는다. 담아 둔 판례는 준비서면에서 쓰인다.
     append: i === steps.length - 1 ? (
-      <div className="mt-5 flex items-center gap-2 rounded-xl bg-ink-50 p-3 text-[13px] text-ink-600">
-        <Scale size={16} className="shrink-0 text-brand-400" />
-        <span className="flex-1">더 찾아보고 싶다면 판례 검색에서 <b className="text-ink-800">[내 문서에 인용]</b>으로 담아 오세요. 담은 판례도 위 목록에 함께 뜹니다.</span>
+      <div className="mt-5 flex items-start gap-2 rounded-xl bg-ink-50 p-3 text-[13px] leading-relaxed text-ink-600">
+        <Scale size={16} className="mt-0.5 shrink-0 text-brand-400" />
+        <span className="flex-1">
+          소장에는 판례를 넣지 않습니다. 소장은 <b className="text-ink-800">무슨 일이 있었는지</b>를 밝히는 문서라
+          사실과 증거로 씁니다. 법리 다툼은 상대방 답변서를 받은 뒤 <b className="text-ink-800">준비서면</b>에서 벌어져요.
+          미리 찾아 두고 싶다면 판례 검색에서 <b className="text-ink-800">[내 문서에 인용]</b>으로 담아 두세요 —
+          준비서면을 쓸 때 그 목록이 뜹니다.
+        </span>
         <Link to="/app/search" className="shrink-0 font-semibold text-brand-400">판례 검색 →</Link>
       </div>
     ) : null,

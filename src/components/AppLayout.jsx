@@ -11,6 +11,7 @@ import {
 // Figma 200:24198 기준: 단일 '메인 메뉴' 그룹, 순서 고정
 const mainMenu = [
   { to: '/app/dashboard', label: '대시보드', icon: Grid },
+  { to: '/app/cases', label: '사건 관리', icon: Folder },
   { to: '/app/documents', label: '문서 생성', icon: FileText },
   { to: '/app/search', label: '판례 검색', icon: Scale },
   { to: '/app/procedure', label: '절차 안내', icon: Book },
@@ -86,7 +87,7 @@ function Topbar({ onMenu }) {
         >
           <Bell />
           {unread > 0 && (
-            <span className="absolute right-1.5 top-1.5 grid h-4 w-4 place-items-center rounded-full bg-red-500 text-[10px] font-bold text-white">{unread}</span>
+            <span className="absolute right-1.5 top-1.5 grid h-4 w-4 place-items-center rounded-full bg-red-300 text-[10px] font-bold text-white">{unread}</span>
           )}
         </button>
         {open && (

@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useToast } from '../context/ToastContext.jsx'
 import { Card, Badge, cx } from './ui.jsx'
 import { GenericPaper, PickList, WizardShell, CitationPicker, Note } from './docform.jsx'
 import { Lightbulb } from './icons.jsx'
 import { useWorkspace } from '../context/WorkspaceContext.jsx'
-import { won } from '../lib/complaint.js'
+import { won, savedAgo } from '../lib/complaint.js'
+import { saveFormDraft, loadFormDraft } from '../lib/docschema.js'
 import { citationPolicy, suggestPrecedents, matchedIssue, petitionNeedsCitation } from '../lib/citation.js'
 import {
   petitionTypes, findPetition, petitionCompleteness, petitionSummary,
@@ -54,7 +55,7 @@ function makePetitionExtras(typeKey, cited) {
             <div key={k} className="flex items-center justify-between border-b border-ink-100 pb-2 text-[13px]">
               <span className="flex items-center gap-1.5 text-ink-500">
                 {k}
-                {tag === '추정' && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-700">추정</span>}
+                {tag === '추정' && <span className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-semibold text-red-500">추정</span>}
                 {tag && tag !== '추정' && <span className="text-[11px] text-ink-400">{tag}</span>}
               </span>
               <span className="font-medium text-ink-800">{v}</span>
@@ -85,10 +86,30 @@ function makePetitionExtras(typeKey, cited) {
 
 function Writer({ typeKey, onBack }) {
   const toast = useToast()
-  const { citedList } = useWorkspace()
+  const { citedList, activeCaseId, attachDoc } = useWorkspace()
   const type = findPetition(typeKey)
-  const [form, setForm] = useState(emptyPetition)
+  // 신청서도 종류별로 초안을 남긴다
+  const [form, setForm] = useState(() => loadFormDraft(`petition_${typeKey}`)?.form || emptyPetition)
   const [open, setOpen] = useState(0)
+  const [savedAt, setSavedAt] = useState(loadFormDraft(`petition_${typeKey}`)?.savedAt || null)
+  const [saveFailed, setSaveFailed] = useState(false)
+  const first = useRef(true)
+
+  useEffect(() => {
+    if (first.current) { first.current = false; return }
+    const t = setTimeout(() => {
+      if (saveFormDraft(`petition_${typeKey}`, form)) { setSavedAt(Date.now()); setSaveFailed(false) }
+      else setSaveFailed(true)
+      // 사건관리에서 "이 사건의 문서"로 보이도록 붙여 둔다
+      if (activeCaseId) {
+        attachDoc(activeCaseId, {
+          kind: 'petition', docId: `petition_${typeKey}`,
+          title: type.title, progress: petitionCompleteness(type, form),
+        })
+      }
+    }, 600)
+    return () => clearTimeout(t)
+  }, [form, typeKey, type, activeCaseId, attachDoc])
 
   const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }))
   const percent = useMemo(() => petitionCompleteness(type, form), [type, form])
@@ -97,6 +118,11 @@ function Writer({ typeKey, onBack }) {
 
   return (
     <WizardShell
+      onSave={() => {
+        if (saveFormDraft(`petition_${typeKey}`, form)) { setSavedAt(Date.now()); toast('작성 중인 내용을 저장했습니다') }
+        else toast('저장에 실패했습니다. 브라우저 저장공간을 확인해 주세요', 'error')
+      }}
+      savedLabel={saveFailed ? '⚠ 자동저장 실패 — 브라우저 저장공간을 확인하세요' : savedAt ? `${savedAgo(savedAt)} 저장됨` : ''}
       title="신청서 작성"
       badge={type.title}
       sub="왼쪽에 입력하는 내용이 오른쪽 신청서에 바로 반영됩니다."

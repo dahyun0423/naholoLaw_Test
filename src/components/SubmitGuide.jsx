@@ -52,7 +52,7 @@ function CopyBlock({ title, lines, limit }) {
       </div>
       <pre className="max-h-52 overflow-y-auto whitespace-pre-wrap px-4 py-3 font-serif text-[12px] leading-relaxed text-ink-700">{body}</pre>
       {over && (
-        <p className="border-t border-red-100 bg-red-50 px-4 py-2 text-[12px] leading-relaxed text-red-600">
+        <p className="border-t border-red-100 bg-red-50 px-4 py-2 text-[12px] leading-relaxed text-red-500">
           포털 입력창 한도를 넘습니다. 붙여넣으면 뒷부분이 잘려요.
           청구원인은 <b className="font-semibold">「내용파일 첨부」</b>, 청구취지는 <b className="font-semibold">「청구취지별지 첨부하기」</b>를 쓰세요.
         </p>
@@ -90,7 +90,7 @@ function PortalField({ label, value, hint }) {
           empty ? 'text-ink-300' : 'text-ink-500 hover:bg-ink-100',
         )}
       >
-        {done ? <span className="text-emerald-600">복사됨</span> : '복사'}
+        {done ? <span className="text-brand-600">복사됨</span> : '복사'}
       </button>
     </div>
   )
@@ -101,14 +101,14 @@ function PortalStep({ no, title, note, children }) {
   const [open, setOpen] = useState(no === 1)
   const [done, setDone] = useState(false)
   return (
-    <div className={cx('rounded-xl border transition-colors', done ? 'border-emerald-200 bg-emerald-50/40' : 'border-ink-200 bg-white')}>
+    <div className={cx('rounded-xl border transition-colors', done ? 'border-brand-200 bg-brand-50/40' : 'border-ink-200 bg-white')}>
       <div className="flex items-center gap-2.5 px-4 py-3">
         <button
           type="button"
           onClick={() => setDone(!done)}
           className={cx(
             'grid h-5 w-5 shrink-0 place-items-center rounded-md border transition-colors',
-            done ? 'border-emerald-400 bg-emerald-400 text-white' : 'border-ink-300 hover:border-brand-300',
+            done ? 'border-brand-400 bg-brand-400 text-white' : 'border-ink-300 hover:border-brand-300',
           )}
           aria-label={done ? '옮김 표시 해제' : '옮겼다고 표시'}
         >
@@ -116,7 +116,7 @@ function PortalStep({ no, title, note, children }) {
         </button>
         <button type="button" onClick={() => setOpen(!open)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
           <span className="text-[11px] font-bold text-ink-400">{no}</span>
-          <span className={cx('font-semibold', done ? 'text-emerald-700 line-through' : 'text-ink-900')}>{title}</span>
+          <span className={cx('font-semibold', done ? 'text-brand-700 line-through' : 'text-ink-900')}>{title}</span>
           <ChevronDown size={16} className={cx('ml-auto shrink-0 text-ink-400 transition-transform', open && 'rotate-180')} />
         </button>
       </div>
@@ -209,10 +209,10 @@ export default function SubmitGuide({ type, form, onBack, onEditDoc }) {
 
       {/* 완성하면 증거는 이미 증빙자료에 들어가 있다 — 다시 올릴 필요가 없다는 걸 알려준다 */}
       {registered.length > 0 && (
-        <Card className="border-emerald-200 bg-emerald-50/60 p-4">
+        <Card className="border-brand-200 bg-brand-50/60 p-4">
           <div className="flex flex-wrap items-center gap-2">
-            <Check size={16} className="text-emerald-500" />
-            <p className="text-sm font-bold text-emerald-800">
+            <Check size={16} className="text-brand-500" />
+            <p className="text-sm font-bold text-brand-800">
               올리신 증거 {registered.length}건이 증빙자료에 자동으로 등록됐어요
             </p>
             <Button as={Link} to="/app/evidence" size="sm" variant="neutral" className="ml-auto">증빙자료 열기</Button>
@@ -224,22 +224,23 @@ export default function SubmitGuide({ type, form, onBack, onEditDoc }) {
               </span>
             ))}
           </div>
-          <p className="mt-2 text-[12px] leading-relaxed text-emerald-700">
+          <p className="mt-2 text-[12px] leading-relaxed text-brand-700">
             포털 6번 「입증서류」에 이 파일들을 올리고, 서증명을 위 이름과 똑같이 맞추면 됩니다.
           </p>
         </Card>
       )}
 
-      {activeRaw && <CaseStatus caseId={activeRaw.id} status={activeRaw.status} caseNo={activeRaw.caseNo} />}
+      {/* 접수하고 돌아왔을 때 사건번호를 바로 적을 수 있게 — 제출 안내가 그 자리다 */}
+      {activeRaw && <Card className="p-5"><CaseStatus c={activeRaw} /></Card>}
 
       <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-5">
           {/* 제출 방법 비교 */}
-          <Card className="border-amber-200 bg-amber-50/50 p-4">
-            <p className="flex items-center gap-2 text-sm font-bold text-amber-800">
+          <Card className="border-red-200 bg-red-50/50 p-4">
+            <p className="flex items-center gap-2 text-sm font-bold text-red-500">
               <Shield size={16} /> 나홀로법에는 소장을 접수하거나 돈을 받지 않습니다
             </p>
-            <p className="mt-1.5 text-[13px] leading-relaxed text-amber-700">
+            <p className="mt-1.5 text-[13px] leading-relaxed text-red-500">
               아래 금액은 <b className="font-semibold">참고용 계산</b>이에요. 실제 접수와 인지대·송달료 납부는 법원 또는
               전자소송포털에서 직접 하셔야 하고, 금액은 접수 시점의 기준에 따라 달라질 수 있습니다.
               송달료는 사건 종류별 예납 회차와 우편요금에 연동되므로 <b className="font-semibold">접수 전에 꼭 확인하세요.</b>
@@ -404,7 +405,7 @@ export default function SubmitGuide({ type, form, onBack, onEditDoc }) {
               </PortalStep>
 
               <PortalStep no={7} title="첨부서류" note="증거가 아닌 서류만 여기 넣습니다.">
-                <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-relaxed text-amber-700">
+                <div className="mb-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] leading-relaxed text-red-500">
                   포털 안내 그대로 — <b className="font-semibold">첨부서류로 제출한 문서는 증거로 사용될 수 없으며, 판결(결정) 등에 효력이 없습니다.</b>
                   증거가 될 자료는 반드시 <b className="font-semibold">6번 입증서류</b>로 내세요. 여기 잘못 넣으면 증거로 안 쳐 줍니다.
                   <br />소송대리허가신청서·기타 신청서는 <b className="font-semibold">소장과 별도의 서류</b>로 내야 하므로 첨부서류에 넣지 마세요.
@@ -454,12 +455,12 @@ export default function SubmitGuide({ type, form, onBack, onEditDoc }) {
                 },
               ].map((c) => (
                 <div key={c.title} className="flex gap-2.5">
-                  <span className={cx('mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md text-white', c.ok ? 'bg-brand-300' : 'bg-amber-400')}>
+                  <span className={cx('mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md text-white', c.ok ? 'bg-brand-300' : 'bg-red-300')}>
                     {c.ok ? <Check size={13} /> : <span className="text-[11px] font-bold">!</span>}
                   </span>
                   <div className="min-w-0">
                     <p className="text-[13px] font-semibold text-ink-900">{c.title}</p>
-                    <p className={cx('text-xs leading-relaxed', c.ok ? 'text-ink-500' : 'text-amber-600')}>{c.ok ? c.yes : c.no}</p>
+                    <p className={cx('text-xs leading-relaxed', c.ok ? 'text-ink-500' : 'text-red-500')}>{c.ok ? c.yes : c.no}</p>
                   </div>
                 </div>
               ))}
@@ -478,7 +479,7 @@ export default function SubmitGuide({ type, form, onBack, onEditDoc }) {
           </Card>
 
           <Card className="p-5">
-            <h3 className="flex items-center gap-2 font-bold text-ink-900"><AlertTriangle size={17} className="text-amber-500" /> 자주 막히는 곳</h3>
+            <h3 className="flex items-center gap-2 font-bold text-ink-900"><AlertTriangle size={17} className="text-red-500" /> 자주 막히는 곳</h3>
             <ul className="mt-3 space-y-2 text-[13px] leading-relaxed text-ink-600">
               <li>· <b className="text-ink-800">사용자등록 누락</b> — 회원가입만 하고 사용자등록을 안 하면 제출 버튼이 안 눌려요.</li>
               <li>· <b className="text-ink-800">관할 오류</b> — 관할이 아닌 법원에 내면 이송되어 몇 주가 그냥 흘러갑니다.</li>

@@ -13,6 +13,8 @@ import Signup from './pages/Signup.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import CaseSearch from './pages/CaseSearch.jsx'
 import Procedure from './pages/Procedure.jsx'
+import Cases from './pages/Cases.jsx'
+import CaseDetail from './pages/CaseDetail.jsx'
 import Documents from './pages/Documents.jsx'
 import Evidence from './pages/Evidence.jsx'
 import Schedule from './pages/Schedule.jsx'
@@ -50,6 +52,8 @@ export default function App() {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="search" element={<CaseSearch />} />
           <Route path="procedure" element={<Procedure />} />
+          <Route path="cases" element={<Cases />} />
+          <Route path="cases/:id" element={<CaseDetail />} />
           <Route path="documents" element={<Documents />} />
           <Route path="evidence" element={<Evidence />} />
           <Route path="schedule" element={<Schedule />} />

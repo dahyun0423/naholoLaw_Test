@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useWorkspace } from '../context/WorkspaceContext.jsx'
-import { caseEvidence } from '../lib/casebook.js'
+import { caseEvidence, EVIDENCE_STATUS, EVIDENCE_TONE } from '../lib/casebook.js'
 import CaseBar from '../components/CaseBar.jsx'
 import { Card, Badge, Button, Progress, Field, Input, inputCls, cx } from '../components/ui.jsx'
 import Modal from '../components/Modal.jsx'
@@ -38,7 +38,7 @@ function FolderTile({ folder, onClick }) {
       onClick={onClick}
       className={cx(
         'group relative h-[232px] w-full overflow-hidden rounded-[22px] border-2 bg-gradient-to-b p-5 text-left transition hover:-translate-y-0.5 hover:shadow-lg',
-        active ? 'border-transparent from-[#537edc] to-[#3677ff]' : 'border-ink-200/70 from-[#eef0f3] to-[#dfe3e9]',
+        active ? 'border-transparent from-[#64a8ff] to-[#3182f6]' : 'border-ink-200/70 from-[#f3f4f6] to-[#e5e8eb]',
       )}
     >
       {/* 폴더 + 겹쳐진 서류 그래픽 */}
@@ -82,7 +82,7 @@ function StorageCard({ totalFiles, submitted }) {
       <div className="mt-2"><Progress value={usedPct} /></div>
       <div className="mt-4 space-y-2 text-sm">
         <div className="flex items-center justify-between"><span className="text-ink-500">총 파일</span><span className="font-semibold text-ink-900">{totalFiles}개</span></div>
-        <div className="flex items-center justify-between"><span className="text-ink-500">제출 완료</span><span className="font-semibold text-emerald-600">{submitted}개</span></div>
+        <div className="flex items-center justify-between"><span className="text-ink-500">제출 완료</span><span className="font-semibold text-brand-600">{submitted}개</span></div>
       </div>
     </Card>
   )
@@ -132,10 +132,15 @@ function PropertiesCard({ folder }) {
 export default function Evidence() {
   // 소장에서 올린 파일이 곧 갑호증이다. 내 사건이 있으면 그것을 보여주고,
   // 없으면 화면 구성을 보여주기 위한 예시 목록을 쓴다.
-  const { activeRaw, hasMyCase } = useWorkspace()
+  const { activeRaw, hasMyCase, saveEvidenceStatus, saveEvidence } = useWorkspace()
+  // 내 사건의 증거가 있으면 그것이 목록이다. 상태는 사건에 저장되므로
+  // 새로고침해도, 증거목록·절차 안내에서 읽어도 같은 값이 나온다.
   const mine = activeRaw ? caseEvidence(activeRaw) : []
+  const real = mine.length > 0
   const [view, setView] = useState('list') // 'list' | 'folder'
-  const [list, setList] = useState(evidenceList)
+  const [demo, setDemo] = useState(evidenceList)
+  const list = real ? mine : demo
+  const setList = real ? () => {} : setDemo
   const [folders, setFolders] = useState(evidenceFolders)
   const [openKey, setOpenKey] = useState(null) // 열린 폴더 key
 
@@ -167,13 +172,22 @@ export default function Evidence() {
   const doSubmit = () => {
     // 대한민국 법원 전자소송 사이트로 연동 (새 창)
     window.open(courtUrl, '_blank', 'noopener,noreferrer')
-    setList((prev) => prev.map((e) =>
-      e.no === submitTarget.no ? { ...e, status: '제출완료', tone: 'green', dateLabel: '제출일', date: today } : e))
+    if (real) saveEvidenceStatus(activeRaw.id, submitTarget.no, '제출완료')
+    else setDemo((prev) => prev.map((e) =>
+      e.no === submitTarget.no ? { ...e, status: '제출완료', tone: 'blue', dateLabel: '제출일', date: today } : e))
     flash('전자소송 사이트로 이동했습니다 · 제출완료 처리')
     setSubmitTarget(null)
   }
+
+  /** 상태를 직접 옮긴다 — 법원 시스템을 조회할 수 없으니 사용자가 표시한다 */
+  const moveStatus = (e, next) => {
+    if (real) saveEvidenceStatus(activeRaw.id, e.no, next)
+    else setDemo((prev) => prev.map((x) => (x.no === e.no ? { ...x, status: next, tone: EVIDENCE_TONE[next] } : x)))
+    flash(`${e.code} — ${next}`)
+  }
   const saveEdit = () => {
-    setList((prev) => prev.map((e) =>
+    if (real) saveEvidence(activeRaw.id, editTarget.no, { name: editForm.file, purpose: editForm.purpose })
+    else setDemo((prev) => prev.map((e) =>
       e.no === editTarget.no ? { ...e, file: editForm.file, purpose: editForm.purpose } : e))
     flash(`${editTarget.code} 정보를 수정했습니다`)
     setEditTarget(null)
@@ -245,10 +259,10 @@ export default function Evidence() {
 
           {/* 소장 6단계에서 올린 파일이 그대로 갑호증이 된다 — 따로 다시 올릴 필요가 없다 */}
           {mine.length > 0 ? (
-            <Card className="border-emerald-200 bg-emerald-50/60 p-5">
+            <Card className="border-brand-200 bg-brand-50/60 p-5">
               <div className="flex flex-wrap items-center gap-2">
-                <Check size={16} className="text-emerald-500" />
-                <h3 className="text-sm font-bold text-emerald-800">소장에 올린 증거 {mine.length}건이 여기 등록돼 있어요</h3>
+                <Check size={16} className="text-brand-500" />
+                <h3 className="text-sm font-bold text-brand-800">소장에 올린 증거 {mine.length}건이 여기 등록돼 있어요</h3>
                 <Button as={Link} to="/app/documents" size="sm" variant="neutral" className="ml-auto">소장에서 수정</Button>
               </div>
               <div className="mt-3 space-y-1.5">
@@ -257,13 +271,13 @@ export default function Evidence() {
                     <span className="rounded-md bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand-500">{e.code}</span>
                     <span className="font-medium text-ink-800">{e.file}</span>
                     {e.size && <span className="text-xs text-ink-400">{e.size}</span>}
-                    <span className={cx('ml-auto text-xs font-semibold', e.purpose ? 'text-emerald-600' : 'text-amber-600')}>
+                    <span className={cx('ml-auto text-xs font-semibold', e.purpose ? 'text-brand-600' : 'text-red-500')}>
                       {e.purpose || '입증취지를 아직 안 적었어요'}
                     </span>
                   </div>
                 ))}
               </div>
-              <p className="mt-3 text-[12px] leading-relaxed text-emerald-700">
+              <p className="mt-3 text-[12px] leading-relaxed text-brand-700">
                 입증취지는 증거목록(증거설명서)에서 채웁니다. 서증명은 <b className="font-semibold">청구원인에 적은 이름과 똑같이</b> 맞춰야
                 재판부가 대조할 수 있어요.
               </p>
@@ -278,12 +292,12 @@ export default function Evidence() {
             </Card>
           )}
 
-          <Card className="border-amber-200 bg-amber-50/60 p-5">
-            <div className="flex items-center gap-2 text-amber-700"><Sparkles size={16} /><h3 className="text-sm font-bold">AI 제안 사항</h3></div>
+          <Card className="border-red-200 bg-red-50/60 p-5">
+            <div className="flex items-center gap-2 text-red-500"><Sparkles size={16} /><h3 className="text-sm font-bold">AI 제안 사항</h3></div>
             <ol className="mt-3 space-y-2">
               {evidenceAi.map((t, i) => (
-                <li key={i} className="flex gap-2 text-[13px] leading-relaxed text-amber-800">
-                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-amber-200/70 text-[11px] font-bold text-amber-700">{i + 1}</span>{t}
+                <li key={i} className="flex gap-2 text-[13px] leading-relaxed text-red-500">
+                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-red-200/70 text-[11px] font-bold text-red-500">{i + 1}</span>{t}
                 </li>
               ))}
             </ol>
@@ -313,7 +327,9 @@ export default function Evidence() {
 
                   <div className="mt-3 rounded-xl bg-ink-50 px-3.5 py-2.5">
                     <p className="text-xs text-ink-400">입증 취지</p>
-                    <p className="text-[13px] text-ink-700">{e.purpose}</p>
+                    {e.purpose
+                      ? <p className="text-[13px] text-ink-700">{e.purpose}</p>
+                      : <p className="text-[13px] text-red-500">아직 비어 있어요 — 채워야 증거목록에 들어갑니다</p>}
                   </div>
 
                   {e.warn && (
@@ -322,9 +338,29 @@ export default function Evidence() {
                     </div>
                   )}
 
+                  {/* 제출 상태는 법원 시스템에만 있어서 조회할 수 없다 — 사용자가 직접 옮긴다 */}
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] text-ink-500">제출 상태</span>
+                    <div className="inline-flex gap-1 rounded-lg bg-ink-100 p-1">
+                      {EVIDENCE_STATUS.map((st) => (
+                        <button
+                          key={st}
+                          type="button"
+                          onClick={() => moveStatus(e, st)}
+                          className={cx(
+                            'rounded-md px-2.5 py-1 text-[12px] font-semibold transition-colors',
+                            e.status === st ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-700',
+                          )}
+                        >
+                          {st}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="mt-3 flex flex-wrap gap-2">
                     {e.status !== '제출완료'
-                      ? <Button size="sm" onClick={() => setSubmitTarget(e)}><Upload size={14} /> 제출하기</Button>
+                      ? <Button size="sm" onClick={() => setSubmitTarget(e)}><Upload size={14} /> 전자소송에서 제출</Button>
                       : <Button size="sm" variant="soft"><Check size={14} /> 제출완료</Button>}
                     <Button size="sm" variant="neutral" onClick={() => openEdit(e)}>수정</Button>
                     <Button size="sm" variant="ghost" onClick={() => setPreview({ title: e.code, file: e.file, size: e.size, status: e.status })}><Eye size={14} /> 미리보기</Button>
@@ -387,7 +423,7 @@ export default function Evidence() {
                           <span className="text-sm text-ink-600">{f.date}</span>
                           <span>
                             {f.status === '제출완료'
-                              ? <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600"><Check size={13} /> {f.status}</span>
+                              ? <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600"><Check size={13} /> {f.status}</span>
                               : <span className="text-xs font-medium text-ink-400">{f.status}</span>}
                           </span>
                           <div className="flex items-center justify-end gap-1 text-ink-400">
@@ -581,7 +617,7 @@ export default function Evidence() {
         <div className="space-y-4">
           <Field label="저장할 폴더(카테고리)">
             {folders.length === 0 ? (
-              <p className="rounded-xl bg-amber-50 px-3.5 py-2.5 text-xs text-amber-700">먼저 [새 폴더]로 폴더를 만들어 주세요.</p>
+              <p className="rounded-xl bg-red-50 px-3.5 py-2.5 text-xs text-red-500">먼저 [새 폴더]로 폴더를 만들어 주세요.</p>
             ) : (
               <select className={inputCls} value={uploadFolder} onChange={(e) => setUploadFolder(e.target.value)}>
                 {folders.map((f) => <option key={f.key} value={f.key}>{f.name} ({f.files.length}개)</option>)}

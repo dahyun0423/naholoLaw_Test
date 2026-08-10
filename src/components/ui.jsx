@@ -1,14 +1,19 @@
 // 공용 UI 부품 — Figma 「컴포넌트」 페이지 기준
 //
 // ── 색상 규칙 (한 곳에서만 정한다) ────────────────────────────
-//   메인      brand-300 (#64a8ff, Figma bluee300)  — 주요 버튼·강조 면·진행바
-//   배경      *-50                                  — 카드 안쪽, soft 버튼, 태그 바탕
-//   외곽선    *-200 (#e5e8eb, Figma grey200)        — 카드·인풋·구분선
-//   플레이스홀더  ink-300 (#d1d6db, Figma grey300)
-//   입력된 값     ink-700
+// 팔레트는 Figma 변수 컬렉션 `color` 가 전부다 — **grey · blue · red 셋뿐**.
+// 초록·주황·보라는 없다. 여기 없는 색은 화면에 쓰지 않는다.
 //
-// 텍스트 강조만 brand-500을 쓴다. brand-300은 흰 배경 위 글자로 쓰면
-// 대비가 부족해 읽기 어렵다. 면(배경)은 300, 글자는 500이 짝이다.
+//   메인      *-300   면·아이콘·점·진행바   (blue-300 #64a8ff, red-300 #fb8890)
+//   배경      *-50    카드 안쪽, soft 버튼, 태그 바탕
+//   외곽선    *-200   카드·인풋·구분선
+//   플레이스홀더  ink-300  /  입력된 값  ink-700
+//
+// 글자만 *-500을 쓴다. 300은 흰 배경 위 글자로는 대비가 모자란다.
+// 면은 300, 글자는 500 — 이 짝이 규칙이다.
+//
+// 상태를 색으로 나눌 때도 세 계열 안에서 끝낸다.
+//   완료·확인 blue   ·   기다림·중립 grey   ·   주의·기한 지남 red
 
 import { Link } from 'react-router-dom'
 
@@ -79,8 +84,8 @@ export function Card({ className, children, ...rest }) {
 const panelTones = {
   brand: 'border-brand-200 bg-brand-50',
   gray: 'border-ink-200 bg-ink-50',
-  amber: 'border-amber-200 bg-amber-50',
-  green: 'border-emerald-200 bg-emerald-50',
+  amber: 'border-red-200 bg-red-50',
+  green: 'border-brand-200 bg-brand-50',
   red: 'border-red-200 bg-red-50',
 }
 export function Panel({ tone = 'brand', className, children, ...rest }) {
@@ -92,13 +97,16 @@ export function Panel({ tone = 'brand', className, children, ...rest }) {
 /* ─────────────────────────── 태그 ─────────────────────────── */
 // Figma 「Tag」에 pill·사각형·회색 변형이 있어 shape로 받는다
 
+// 팔레트는 grey · blue · red 셋뿐이다(Figma `color` 변수).
+// 초록·주황이 없으므로 완료는 파랑, 주의는 빨강으로 읽힌다.
+// green/amber/purple 키는 기존 호출부를 위해 남겨 둔 별칭이다.
 const badgeTones = {
-  blue: 'bg-brand-50 text-brand-500',
-  green: 'bg-emerald-50 text-emerald-600',
-  amber: 'bg-amber-50 text-amber-600',
+  blue: 'bg-brand-50 text-brand-600',
+  green: 'bg-brand-50 text-brand-600',   // 완료 = 파랑
+  amber: 'bg-red-50 text-red-500',       // 주의 = 빨강
   red: 'bg-red-50 text-red-500',
   gray: 'bg-ink-100 text-ink-600',
-  purple: 'bg-violet-50 text-violet-600',
+  purple: 'bg-brand-50 text-brand-600',
   outline: 'border border-ink-200 bg-white text-ink-600',
 }
 export function Badge({ tone = 'gray', shape = 'pill', className, children }) {
@@ -121,7 +129,7 @@ export function Badge({ tone = 'gray', shape = 'pill', className, children }) {
 export function Numbering({ n, state = 'default', className }) {
   const tone = {
     default: 'bg-brand-300 text-white',
-    done: 'bg-emerald-500 text-white',
+    done: 'bg-brand-500 text-white',
     gray: 'bg-ink-200 text-ink-500',
   }[state]
   return (
@@ -198,7 +206,7 @@ export function Message({ tone = 'gray', icon, className, children }) {
   const t = {
     gray: 'text-ink-500',
     brand: 'text-brand-500',
-    amber: 'text-amber-600',
+    amber: 'text-red-500',
     red: 'text-red-500',
   }[tone]
   return (
@@ -275,15 +283,15 @@ export function ListRow({ active, onClick, className, children }) {
 
 export function Tip({ children, title = 'AI 팁' }) {
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-[13px] leading-relaxed text-amber-800">
+    <div className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-[13px] leading-relaxed text-red-500">
       <span className="font-semibold">💡 {title}</span>
-      <div className="mt-1 text-amber-700">{children}</div>
+      <div className="mt-1 text-red-500">{children}</div>
     </div>
   )
 }
 
 export function Progress({ value, tone = 'brand' }) {
-  const color = tone === 'green' ? 'bg-emerald-500' : tone === 'amber' ? 'bg-amber-500' : 'bg-brand-300'
+  const color = tone === 'green' ? 'bg-brand-500' : tone === 'amber' ? 'bg-red-300' : 'bg-brand-300'
   return (
     <div className="h-2 w-full overflow-hidden rounded-full bg-ink-100">
       <div className={cx('h-full rounded-full transition-all', color)} style={{ width: `${Math.min(100, value)}%` }} />

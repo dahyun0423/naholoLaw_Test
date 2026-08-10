@@ -62,8 +62,11 @@ export const briefSteps = [
       text('plaintiff', '원고', { required: true, half: true, placeholder: '홍길동' }),
       text('defendant', '피고', { required: true, half: true, placeholder: '김철수' }),
       radio('side', '나는 어느 쪽인가요?', ['원고', '피고'], { required: true }),
+      text('agent', '대리인 (있으면)', { half: true, placeholder: '변호사 ○○○', hint: '준비서면 기재사항이에요. 본인이 직접 하면 비워두세요.' }),
       radio('stage', '지금 소송이 어느 단계인가요?', stages.map((s) => s.label), { required: true }),
       { kind: 'stageAdvice' },
+      note('warn', '준비서면을 내지 않거나 <b>준비서면에 적지 않은 사실은, 상대방이 변론기일에 나오지 않으면 변론에서 주장할 수 없습니다.</b> 하고 싶은 말은 미리 다 적어두세요.'),
+      note('info', '적시제출주의(민사소송법 제146조·제147조) — 재판장이 정한 기간을 넘기면 정당한 사유가 없는 한 주장을 더 내거나 증거를 신청할 수 없어요.'),
       text('round', '준비서면 회차', { half: true, placeholder: '예: 준비서면(1)' }),
       date('dueDate', '제출 기한 / 다음 변론기일', { half: true }),
     ],
@@ -109,6 +112,7 @@ export const briefSteps = [
       files('briefFiles', '파일 업로드'),
       note('ok', '준비서면은 소장과 달라요. 「민사소송 등에서의 전자문서 이용 등에 관한 규칙」 제11조 제1항이 "해당란에 직접 입력하거나 전자문서를 등재하는 방식"을 모두 허용해서, 전자소송에서 한글·PDF 파일로 첨부해 낼 수 있습니다. 실무에서도 파일로 내는 경우가 많아요.'),
       note('info', '준비서면에는 기명날인 또는 서명이 필요합니다(민사소송법 제274조 제1항). 전자소송은 제출할 때 공동인증서 전자서명으로 갈음해요.'),
+      note('ok', '준비서면을 낼 때 <b>송달료를 따로 내지 않습니다.</b> 「송달료규칙의 시행에 따른 업무처리요령」 제6조 제4항이 답변서·준비서면 같은 중간 서류는 따로 예납하지 않는다고 정하고 있어요. 소장 낼 때 예납한 금액에서 씁니다.'),
       signature(),
     ],
   },
@@ -170,6 +174,8 @@ export function buildBrief(form) {
       `사　건　${or(form.caseNo, '1단계에서 사건번호를 입력해 주세요')} ${form.caseName || ''}`,
       `원　고　${or(form.plaintiff, '원고')}`,
       `피　고　${or(form.defendant, '피고')}`,
+      // 민사소송법 제274조 제1항 제2호 — 대리인의 성명과 주소
+      ...(form.agent ? [`${side} 대리인　${F(form.agent)}`] : []),
     ],
     lead: `위 사건에 관하여 ${side}는 다음과 같이 변론을 준비합니다.`,
     sections: [

@@ -139,10 +139,10 @@ export default function About() {
 
         {/* 법적 제약 및 대응 */}
         <Block id="legal" kicker="법적 제약 사항 및 대응 방안" title="변호사법을 준수하는 설계">
-          <Card className="border-amber-200 bg-amber-50/60 p-5">
+          <Card className="border-red-200 bg-red-50/60 p-5">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="mt-0.5 shrink-0 text-amber-500" size={20} />
-              <p className="text-sm leading-relaxed text-amber-800">
+              <AlertTriangle className="mt-0.5 shrink-0 text-red-500" size={20} />
+              <p className="text-sm leading-relaxed text-red-500">
                 변호사법 제109조 등은 금품을 받고 타인의 법률사무를 취급하는 행위를 금지하며, 소송대리는 원칙적으로 변호사만 가능합니다.
                 본 프로젝트는 이러한 제약을 충분히 인지하고 있습니다.
               </p>

@@ -20,7 +20,7 @@ const make = (paths) => function Icon({ size = 20, className = '', ...rest }) {
 
 export const Logo = ({ size = 30, className = '' }) => (
   <svg width={size} height={size} viewBox="0 0 32 32" fill="none" className={className}>
-    <path d="M16 5 L26 13 V26 H6 V13 Z" fill="#eef6ff" stroke="#64a8ff" strokeWidth="2" strokeLinejoin="round" />
+    <path d="M16 5 L26 13 V26 H6 V13 Z" fill="#e8f3ff" stroke="#64a8ff" strokeWidth="2" strokeLinejoin="round" />
     <path d="M16 13 v8 M11 17 h10" stroke="#64a8ff" strokeWidth="2" strokeLinecap="round" />
     <circle cx="16" cy="11.5" r="1.6" fill="#64a8ff" />
   </svg>

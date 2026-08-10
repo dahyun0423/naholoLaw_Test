@@ -78,7 +78,7 @@ export default function Signup() {
             >
               <div className="relative">
                 <input
-                  className={cx(inputCls, 'pr-11', matchOk && 'border-emerald-300 focus:border-emerald-400 focus:ring-emerald-100')}
+                  className={cx(inputCls, 'pr-11', matchOk && 'border-brand-300 focus:border-brand-400 focus:ring-brand-100')}
                   type={show.confirm ? 'text' : 'password'}
                   placeholder="비밀번호를 다시 입력"
                   value={form.confirm}
@@ -88,7 +88,7 @@ export default function Signup() {
                   {show.confirm ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
-              {matchOk && <span className="mt-1 flex items-center gap-1 text-xs text-emerald-600"><Check size={14} /> 비밀번호가 일치합니다</span>}
+              {matchOk && <span className="mt-1 flex items-center gap-1 text-xs text-brand-600"><Check size={14} /> 비밀번호가 일치합니다</span>}
             </Field>
           </div>
 
