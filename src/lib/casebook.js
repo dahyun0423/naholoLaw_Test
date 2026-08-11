@@ -52,6 +52,50 @@ export function removeCase(id) {
 const newId = () => `case_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
 
 /**
+ * 사건을 직접 등록한다 — **소장보다 먼저**.
+ *
+ * 소장을 쓴다고 사건이 시작되는 게 아니다. 계약이 틀어지고, 내용증명을 보내고,
+ * 소송을 할지 말지 고민하는 동안에도 분쟁은 이미 존재한다. 그 시기에도 상대방·금액·
+ * 자료를 모아 둘 곳이 필요하다. 그래서 사건은 소장과 독립적으로 만들어진다.
+ *
+ * 소장은 나중에 이 사건에 붙는 문서 하나일 뿐이다.
+ */
+export function createCase({ title, typeKey = '', court = '', amount = '', pName = '', dName = '', caseNo = '' }) {
+  const name = String(title || '').trim()
+  if (!name) return null
+  const now = Date.now()
+  const c = {
+    id: newId(),
+    kind: 'case',
+    title: name,
+    typeKey,
+    form: { court, amount, pName, dName },
+    caseNo: String(caseNo || '').trim(),
+    filedAt: '',
+    filedVia: '',
+    status: caseNo ? '접수함' : '작성 중',
+    statusAt: {},
+    todos: [], events: [], precedentNos: [], docs: [],
+    createdAt: now,
+    updatedAt: now,
+  }
+  c.statusAt[c.status] = now
+  logInto(c, { kind: 'status', title: '사건 등록', desc: [court, amount && `${Number(amount).toLocaleString('ko-KR')}원`].filter(Boolean).join(' · '), fresh: true })
+  if (caseNo) logInto(c, { kind: 'status', title: `법원 접수 — 사건번호 ${c.caseNo}`, fresh: true })
+  return write([...read(), c]) ? c : null
+}
+
+/**
+ * 사건을 부르는 이름.
+ * 사용자가 붙인 이름이 우선이고, 없으면 소장 유형에서 뽑는다.
+ */
+export const caseTitle = (c) => {
+  if (c?.title) return c.title
+  const t = findType(c?.typeKey)
+  return t ? `${t.title} 청구` : '이름 없는 사건'
+}
+
+/**
  * 소장 작성 내용을 사건으로 저장한다.
  * 같은 id가 있으면 갱신, 없으면 생성. 저장된 사건을 돌려준다.
  */
@@ -76,6 +120,8 @@ export function saveComplaintAsCase(typeKey, form, id) {
     id: prev?.id || id || newId(),
     kind: 'complaint',
     typeKey,
+    // 사건 등록에서 붙인 이름이 있으면 그대로 둔다
+    title: prev?.title || '',
     form: slim(form),
     // 사건번호는 소장에서 오지 않는다. 접수해야 법원이 부여하고, 우리는 조회할 수 없다.
     // 그래서 오직 setFiling()으로만 들어온다. 여기서는 있던 값을 지키기만 한다.
@@ -282,8 +328,8 @@ export function caseSummary(c) {
     id: c.id,
     caseNo: c.caseNo || '',
     // 사건번호가 없으면 사건명으로 부른다 — 번호가 없다고 사건이 없는 게 아니다
-    label: c.caseNo || (doc ? `${doc.caseName} 청구의 소` : '작성 중인 사건'),
-    title: doc ? `${doc.caseName} 청구` : '작성 중인 사건',
+    label: c.caseNo || caseTitle(c),
+    title: caseTitle(c),
     court: form.court || '',
     type: '민사',
     status: c.status,

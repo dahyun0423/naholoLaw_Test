@@ -19,14 +19,18 @@ import { useToast } from '../context/ToastContext.jsx'
 import { useWorkspace } from '../context/WorkspaceContext.jsx'
 import { Card, cx } from '../components/ui.jsx'
 import Modal from '../components/Modal.jsx'
+import CaseNewModal from '../components/CaseNewModal.jsx'
 import HelpMedia from '../components/HelpMedia.jsx'
 import {
   dashboardSchedule, recentActivity, helpContents, popularFaq,
   activeCase, ddayOf, dateLabel, dayOffset,
 } from '../data/mock.js'
 import { caseEvidence, caseDocs, caseUpcoming } from '../lib/casebook.js'
-import { Check, Clock, ArrowRight, ChevronRight, Video, Book, FileText, HelpCircle } from '../components/icons.jsx'
+import { Check, Clock, ArrowRight, ChevronRight, Video, Book, FileText, HelpCircle, Folder } from '../components/icons.jsx'
 import aiSpark from '../assets/dash/ai-spark.png'
+import gavelImg from '../assets/dash/gavel.png'
+import notebookImg from '../assets/dash/notebook.png'
+import calendarImg from '../assets/dash/calendar.png'
 
 const WEEK = ['월', '화', '수', '목', '금', '토', '일']
 
@@ -39,6 +43,7 @@ export default function Dashboard() {
   const { rawCases, activeRaw } = useWorkspace()
   const [help, setHelp] = useState(null)
   const [faq, setFaq] = useState(null)
+  const [newCase, setNewCase] = useState(false)
 
   const now = new Date()
   const dateStr = now.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })
@@ -59,6 +64,17 @@ export default function Dashboard() {
   const week = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(mon); d.setDate(mon.getDate() + i); return d
   })
+
+  // 사건이 하나도 없는데 "진행 중인 사건 2건"을 보여주면 거짓말이 된다.
+  // Figma 「대시보드 처음」이 그 자리를 위한 화면이다.
+  if (rawCases.length === 0) {
+    return (
+      <>
+        <FirstRun name={user?.name || '고객'} dateStr={dateStr} timeStr={timeStr} onNew={() => setNewCase(true)} />
+        <CaseNewModal open={newCase} onClose={() => setNewCase(false)} onCreated={(c) => navigate(`/app/cases/${c.id}`)} />
+      </>
+    )
+  }
 
   const kpis = [
     { label: '진행 중인 사건', value: `${running}건`, badge: '1건 기일 임박', to: '/app/cases' },
@@ -272,6 +288,75 @@ export default function Dashboard() {
           가이드로 가기 <ArrowRight size={14} />
         </Link>
       </Modal>
+    </div>
+  )
+}
+
+/* ══════════════ 첫 화면 ══════════════
+   Figma 「대시보드 처음」(1696:29818) 그대로.
+   인사 30 SemiBold / 부제 18 Regular grey700
+   빈 상태 제목 28 Bold blue500 · 설명 14 Medium grey500
+   안내 카드 제목 18 SemiBold grey700 · 설명 12 Medium grey600 */
+
+const START_CARDS = [
+  { title: '사건 등록', desc: '소송 유형·상대방·청구금액을 입력해 사건을 만들어요.', img: gavelImg, action: true },
+  { title: '문서 작성', desc: 'AI가 소장·준비서면·증거목록 초안을 형식에 맞춰 생성해요.', img: notebookImg, to: '/app/documents' },
+  { title: '증거·일정 관리', desc: '증거를 정리하고 변론기일·제출기한 알림을 받아요.', img: calendarImg, to: '/app/evidence' },
+]
+
+function FirstRun({ name, dateStr, timeStr, onNew }) {
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-5">
+        <div>
+          <h1 className="text-[30px] font-semibold leading-tight text-ink-900">안녕하세요, {name}님</h1>
+          <p className="mt-1.5 text-[18px] font-normal text-ink-700">첫 사건을 등록하고 소송 준비를 시작해보세요.</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[14px] font-normal text-ink-700">{dateStr}</p>
+          <p className="mt-0.5 text-[14px] font-semibold text-ink-800">{timeStr}</p>
+        </div>
+      </div>
+
+      <Card className="relative rounded-[20px] px-8 py-16">
+        <button
+          type="button"
+          onClick={onNew}
+          className="absolute right-8 top-8 inline-flex h-14 items-center gap-2 rounded-[20px] border border-ink-200 bg-white px-6 text-[18px] font-bold text-ink-600 transition-colors hover:border-brand-200 hover:text-brand-400"
+        >
+          새 사건 등록하기 <span className="text-ink-400">↗</span>
+        </button>
+
+        <div className="grid place-items-center gap-4 text-center">
+          <span className="grid h-[54px] w-[54px] place-items-center rounded-full bg-brand-50 text-brand-400">
+            <Folder size={26} />
+          </span>
+          <p className="text-[28px] font-bold text-brand-500">아직 진행 중인 사건이 없어요</p>
+          <p className="text-[14px] font-medium leading-relaxed text-ink-500">
+            사건을 등록하면 일정·문서·증거를 한 곳에서 관리하고,<br />
+            AI가 소송 준비를 단계별로 도와드려요.
+          </p>
+        </div>
+      </Card>
+
+      <Card className="rounded-[20px] p-6">
+        <div className="grid gap-5 md:grid-cols-3">
+          {START_CARDS.map((c) => {
+            const Comp = c.action ? 'button' : Link
+            return (
+            <Comp
+              key={c.title}
+              {...(c.action ? { type: 'button', onClick: onNew } : { to: c.to })}
+              className="group relative flex h-[164px] flex-col overflow-hidden rounded-[16px] border border-ink-200 bg-white p-5 text-left transition-colors hover:border-brand-200 hover:bg-brand-50"
+            >
+              <span className="relative z-[1] text-[18px] font-semibold text-ink-700 transition-colors group-hover:text-brand-400">{c.title}</span>
+              <span className="relative z-[1] mt-1.5 max-w-[70%] text-[12px] font-medium leading-relaxed text-ink-600">{c.desc}</span>
+              <img src={c.img} alt="" aria-hidden className="pointer-events-none absolute -bottom-2 right-2 h-[104px] w-[104px] object-contain" />
+            </Comp>
+            )
+          })}
+        </div>
+      </Card>
     </div>
   )
 }

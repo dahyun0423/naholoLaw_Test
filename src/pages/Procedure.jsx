@@ -14,14 +14,13 @@
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Card, Badge, Button, Progress, inputCls, cx } from '../components/ui.jsx'
+import { Card, Badge, Button, inputCls, cx } from '../components/ui.jsx'
 import Modal from '../components/Modal.jsx'
-import Stepper from '../components/Stepper.jsx'
-import { procedureSchedule, submitDocs } from '../data/mock.js'
 import { useWorkspace } from '../context/WorkspaceContext.jsx'
-import { caseFlow, flowIndex, caseTasks, caseEvidence, caseUpcoming } from '../lib/casebook.js'
+import { useToast } from '../context/ToastContext.jsx'
+import { caseFlow, flowIndex, caseTasks, caseTitle } from '../lib/casebook.js'
 import { stampFee, serviceFee, won, fmtDate, findType, completeness, savedAgo, SERVICE_FEE_IS_ESTIMATE } from '../lib/complaint.js'
-import { Check, Circle, Calendar, Upload, FileText, AlertTriangle, ArrowRight } from '../components/icons.jsx'
+import { Check, Clock, Folder, Upload, FileText, AlertTriangle, ArrowRight } from '../components/icons.jsx'
 
 /**
  * 사건 고르기 카드 — Figma 문서 유형 카드와 같은 컴포넌트를 쓴다.
@@ -57,7 +56,7 @@ function CasePick({ c, sum, onPick }) {
       {/* 제목·부제 — @25,14 */}
       <span className="absolute left-[7.8%] right-[7.8%] top-[4.9%]">
         <span className="block truncate text-[24px] font-semibold leading-snug text-ink-700 transition-colors group-hover:text-brand-400">
-          {type ? `${type.title} 청구` : '작성 중인 사건'}
+          {caseTitle(c)}
         </span>
         <span className="mt-0.5 block truncate text-[15px] font-medium text-ink-600">
           {[c.form?.court || '법원 미정', c.caseNo || '사건번호 없음'].join(' | ')}
@@ -70,6 +69,40 @@ function CasePick({ c, sum, onPick }) {
       </span>
     </button>
   )
+}
+
+/**
+ * 단계마다 걸리는 **법정 기한**.
+ *
+ * 우리는 법원 시스템을 조회할 수 없어서 송달일·기일을 알 수 없다. 대신
+ * "무엇을 기준으로 며칠인지"를 알려 주고, 사용자가 기준일을 넣으면 계산해 준다.
+ * 날짜를 아는 척하는 것보다 세는 법을 알려 주는 편이 정직하고 실제로 쓸모 있다.
+ */
+const DEADLINES = {
+  file: [
+    { key: 'fix', label: '보정명령 이행', base: '보정명령을 받은 날', days: 7, law: '법원이 정한 기간', who: '원고',
+      note: '기간은 명령서에 적힌 것을 따르세요. 넘기면 소장이 각하될 수 있어요.' },
+  ],
+  trial: [
+    { key: 'answer', label: '답변서 제출', base: '소장 부본을 송달받은 날', days: 30, law: '민사소송법 제256조 제1항', who: '피고',
+      note: '피고가 30일 안에 답변서를 내지 않으면 변론 없이 판결이 날 수 있어요.' },
+    { key: 'brief', label: '준비서면 제출', base: '변론기일', days: -7, law: '민사소송규칙 제69조의4', who: '양쪽',
+      note: '상대방이 준비할 시간을 두고 미리 냅니다.' },
+  ],
+  judge: [
+    { key: 'appeal', label: '항소', base: '판결서를 송달받은 날', days: 14, law: '민사소송법 제396조', who: '진 쪽',
+      note: '2주가 지나면 판결이 확정돼 더는 다툴 수 없어요.' },
+  ],
+}
+
+/** 단계마다 실제로 손에 들고 있어야 하는 것 */
+const MATERIALS = {
+  deal: ['계약서·차용증 등 원본', '이체내역·영수증', '문자·카톡 대화 기록'],
+  notice: ['내용증명 3부 (상대방·우체국·본인)', '배달증명 영수증'],
+  draft: ['당사자 인적사항 (주소·주민등록번호)', '갑호증으로 낼 자료', '인지대·송달료'],
+  file: ['소장 정본 1부 + 부본 (피고 수만큼)', '증거 사본 (피고 수 + 1부)', '인지·송달료 납부 영수증'],
+  trial: ['상대방 답변서·준비서면', '반박할 증거', '준비서면 (상대방 수 + 1부)'],
+  judge: ['판결정본', '송달증명원·확정증명원', '(강제집행 시) 집행문'],
 }
 
 /**
@@ -115,16 +148,11 @@ export default function Procedure() {
 
   const steps = mine ? caseFlow(activeRaw) : caseFlow(null)
   const cur = mine ? flowIndex(activeRaw) : 0
-  const [pick, setPick] = useState(null)              // 눌러서 다른 단계를 볼 수도 있다
-  const shown = pick ?? cur
 
   const type = mine ? findType(activeRaw.typeKey) : null
   const pct = mine && type ? completeness(type, activeRaw.form || {}) : 0
   const tasks = mine ? caseTasks(activeRaw).filter((t) => !t.done) : []
-  const evidence = mine ? caseEvidence(activeRaw) : []
-  const upcoming = mine ? caseUpcoming(activeRaw).slice(0, 3) : []
 
-  const [upload, setUpload] = useState(false)
   const [checklist, setChecklist] = useState(false)
   const [calc, setCalc] = useState(false)
   const [amount, setAmount] = useState('')
@@ -135,20 +163,28 @@ export default function Procedure() {
   const fee = amount ? stampFee(Number(amount)) : 0
   const postage = amount ? serviceFee(2) : 0
 
-  const docs = mine
-    ? [
-        { name: '소장', done: pct >= 60 },
-        { name: '당사자 표시', done: !!(activeRaw.form?.pName && activeRaw.form?.dName) },
-        { name: '증거자료', done: evidence.length > 0 },
-        { name: '입증취지', done: evidence.length > 0 && evidence.every((e) => e.purpose) },
-        { name: '서명 · 날인', done: !!activeRaw.form?.signature },
-      ]
-    : submitDocs
-  const doneCount = docs.filter((d) => d.done).length
 
-  const step = steps[shown]
-  const guide = GUIDE[step?.key] || { desc: '', items: [] }
-  const isNow = shown === cur
+
+  if (rawCases.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-ink-900">소송 절차 안내</h1>
+          <p className="mt-1 text-sm text-ink-500">소송 진행 단계를 한눈에 확인하고 다음 단계를 준비하세요</p>
+        </div>
+        <Card className="grid place-items-center gap-4 px-6 py-16 text-center">
+          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-brand-50 text-brand-300"><FileText size={24} /></span>
+          <p className="text-lg font-bold text-ink-900">먼저 사건을 만들어 주세요</p>
+          <p className="max-w-md text-[13px] leading-relaxed text-ink-500">
+            절차는 사건마다 다릅니다. 어떤 소송인지·어디까지 왔는지를 알아야
+            <b className="text-ink-700"> 지금 무엇을 해야 하는지</b>를 안내할 수 있어요.
+            소장을 쓰기 시작하면 사건이 만들어집니다.
+          </p>
+          <Button as={Link} to="/app/documents" className="mt-1">소장 작성하러 가기 <ArrowRight size={16} /></Button>
+        </Card>
+      </div>
+    )
+  }
 
   if (!chosen && rawCases.length > 0) {
     return (
@@ -185,7 +221,7 @@ export default function Procedure() {
         <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-ink-200 bg-white px-4 py-2.5">
           <FileText size={15} className="shrink-0 text-brand-300" />
           <span className="text-[13px] font-bold text-ink-900">
-            {mine && type ? `${type.title} 청구` : activeCase?.title || '예시 사건'}
+            {mine ? caseTitle(activeRaw) : activeCase?.title || '예시 사건'}
           </span>
           <span className="text-[12px] text-ink-500">{activeRaw?.caseNo || '사건번호 없음 (접수 전)'}</span>
           {!mine && <Badge tone="gray">예시</Badge>}
@@ -193,136 +229,102 @@ export default function Procedure() {
         </div>
       </div>
 
-      {/* ── 주인공: 가로 진행 스텝퍼 ── */}
-      <Card className="px-6 pb-6 pt-7">
-        <Stepper
-          steps={steps.map((x) => ({
-            ...x,
-            note: x.at ? fmtDate(x.at) : x.pct !== undefined && !x.done ? `${x.pct}%` : '',
-          }))}
-          current={cur}
-          picked={shown}
-          onPick={setPick}
-        />
-      </Card>
-
-      <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
-        {/* ── 고른 단계에서 할 일 ── */}
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+        {/* ── 주인공: 세로 진행 단계 — 전 단계를 한 번에 본다 ── */}
         <Card className="p-6">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-[17px] font-bold text-ink-900">{step?.label}</h2>
-            {isNow ? <Badge tone="blue">지금 여기</Badge> : step?.done ? <Badge tone="gray">지난 단계</Badge> : <Badge tone="gray">앞으로</Badge>}
-            {!isNow && (
-              <button type="button" onClick={() => setPick(null)} className="ml-auto text-[12px] font-semibold text-brand-500 hover:underline">
-                지금 단계로
-              </button>
-            )}
+          <div className="flex flex-wrap items-baseline gap-2">
+            <h2 className="text-[17px] font-bold text-ink-900">소송 진행 단계</h2>
+            <span className="text-xs text-ink-400">지금 어디인지와 각 단계에서 할 일을 함께 봅니다</span>
           </div>
-          <p className="mt-1.5 text-[13px] leading-relaxed text-ink-600">{guide.desc}</p>
 
-          <ul className="mt-4 space-y-2">
-            {guide.items.map((it) => (
-              <li key={it} className="flex items-start gap-2 text-[13px] leading-relaxed text-ink-700">
-                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-300" />{it}
-              </li>
-            ))}
-          </ul>
+          <ol className="mt-5">
+            {steps.map((s, i) => {
+              const now = i === cur
+              const g = GUIDE[s.key] || { desc: '', items: [] }
+              const last = i === steps.length - 1
+              return (
+                <li key={s.key} className="relative flex gap-4 pb-7 last:pb-0">
+                  {/* 점과 선 — 가로 스텝퍼와 같은 모양, 방향만 세로 */}
+                  <span className="relative flex w-[15px] shrink-0 justify-center">
+                    {!last && (
+                      <span aria-hidden className={cx('absolute top-4 bottom-[-28px] w-1 rounded-full', i < cur ? 'bg-brand-300' : 'bg-ink-200')} />
+                    )}
+                    <span
+                      className={cx(
+                        'relative z-[1] mt-1 rounded-full',
+                        // 앞 칸은 건너뛰었더라도 '지나온 것'이다 — 선과 점이 따로 놀면 안 된다
+                        now ? 'step-now h-[15px] w-[15px] bg-brand-300'
+                          : (s.done || i < cur) ? 'h-[11px] w-[11px] bg-brand-300' : 'h-[11px] w-[11px] bg-ink-300',
+                      )}
+                    />
+                  </span>
 
-          {/* 못 채운 것은 따로 경고하지 않고 이 단계의 할 일로 붙인다 */}
-          {isNow && tasks.length > 0 && (
-            <div className="mt-5 border-t border-ink-200 pt-4">
-              <p className="text-[12px] font-bold text-ink-700">이 사건에서 아직 안 채운 것 <span className="text-red-500">{tasks.length}개</span></p>
-              <div className="mt-2.5 flex flex-wrap gap-1.5">
-                {tasks.map((t) => (
-                  <Link
-                    key={t.key} to={t.to}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-3 py-1.5 text-[12px] text-ink-700 transition-colors hover:border-brand-300 hover:bg-brand-50"
-                  >
-                    <span className="grid h-4 w-4 place-items-center rounded-full bg-ink-100 text-[10px] font-bold tabular-nums text-ink-600">{t.missing}</span>
-                    {t.label}
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className={cx('text-[15px] font-bold', now ? 'text-brand-500' : s.done ? 'text-ink-800' : 'text-ink-500')}>
+                        {s.label}
+                      </h3>
+                      {s.optional && <span className="text-[10px] text-ink-400">선택</span>}
+                      {now && <Badge tone="blue">지금 여기</Badge>}
+                      {(s.done || i < cur) && !now && <Check size={13} className="text-brand-300" />}
+                      <span className="text-[11px] tabular-nums text-ink-400">
+                        {s.at ? fmtDate(s.at) : s.pct !== undefined && !s.done ? `${s.pct}%` : ''}
+                      </span>
+                    </div>
 
-          {guide.to && (
-            <Button as={Link} to={guide.to} variant="soft" size="sm" className="mt-5">
-              이 단계 이어서 하기 <ArrowRight size={14} />
-            </Button>
-          )}
+                    <p className="mt-1 text-[13px] leading-relaxed text-ink-600">{g.desc}</p>
+
+                    <ul className="mt-2 space-y-1">
+                      {g.items.map((it) => (
+                        <li key={it} className="flex items-start gap-2 text-[12.5px] leading-relaxed text-ink-700">
+                          <span className={cx('mt-1.5 h-1 w-1 shrink-0 rounded-full', now ? 'bg-brand-300' : 'bg-ink-300')} />{it}
+                        </li>
+                      ))}
+                    </ul>
+
+                    {/* 못 채운 것은 지금 단계에만 붙인다 */}
+                    {now && tasks.length > 0 && (
+                      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] text-ink-500">아직 안 채운 것</span>
+                        {tasks.map((t) => (
+                          <Link
+                            key={t.key} to={t.to}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 py-1 text-[12px] text-ink-700 transition-colors hover:border-brand-300 hover:bg-brand-50"
+                          >
+                            <span className="grid h-4 w-4 place-items-center rounded-full bg-ink-100 text-[10px] font-bold tabular-nums text-ink-600">{t.missing}</span>
+                            {t.label}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+
+                    {now && g.to && (
+                      <Button as={Link} to={g.to} variant="soft" size="sm" className="mt-3">
+                        이 단계 이어서 하기 <ArrowRight size={14} />
+                      </Button>
+                    )}
+                  </div>
+                </li>
+              )
+            })}
+          </ol>
         </Card>
 
         {/* ── 곁정보 ── */}
         <div className="space-y-5">
-          <Card className="p-5">
-            <div className="flex items-center gap-2">
-              <Calendar size={15} className="text-brand-300" />
-              <h3 className="text-[13px] font-bold text-ink-900">예정된 일정</h3>
-            </div>
-            <div className="mt-3 space-y-2">
-              {(upcoming.length ? upcoming : procedureSchedule).map((e) => (
-                <div key={e.id || e.title} className="flex items-center gap-3 rounded-xl border border-ink-200 px-3 py-2.5">
-                  {e.dday !== undefined && (
-                    <span className={cx('shrink-0 rounded-md px-2 py-1 text-[11px] font-bold tabular-nums', e.dday < 0 ? 'bg-red-50 text-red-500' : e.dday <= 3 ? 'bg-brand-50 text-brand-600' : 'bg-ink-100 text-ink-600')}>
-                      {e.dday < 0 ? `D+${-e.dday}` : e.dday === 0 ? 'D-DAY' : `D-${e.dday}`}
-                    </span>
-                  )}
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-semibold text-ink-800">{e.text || e.title}</span>
-                    <span className="block text-[11px] text-ink-400">{e.due ? fmtDate(e.due) : e.date}{e.place && ` · ${e.place}`}</span>
-                  </span>
-                </div>
-              ))}
-            </div>
-          </Card>
+          <DeadlineCard step={steps[cur]} caseId={activeRaw?.id} />
+          <MaterialCard step={steps[cur]} />
 
           <Card className="p-5">
-            <div className="flex items-center gap-2">
-              <h3 className="text-[13px] font-bold text-ink-900">제출 서류</h3>
-              <span className="ml-auto text-[12px] font-bold tabular-nums text-ink-600">{doneCount}/{docs.length}</span>
-            </div>
-            <div className="mt-3"><Progress value={(doneCount / docs.length) * 100} /></div>
-            <div className="mt-3 space-y-1">
-              {docs.map((d) => (
-                <div key={d.name} className="flex items-center justify-between py-1">
-                  <span className={cx('text-[13px]', d.done ? 'text-ink-700' : 'text-ink-500')}>{d.name}</span>
-                  {d.done ? <Check size={15} className="text-brand-300" /> : <Circle size={15} className="text-ink-300" />}
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 flex gap-2">
-              <Button size="sm" className="flex-1" onClick={() => setUpload(true)}><Upload size={15} /> 업로드</Button>
-              <Button size="sm" variant="neutral" className="flex-1" onClick={() => setChecklist(true)}>체크리스트</Button>
+            <h3 className="text-[13px] font-bold text-ink-900">도구</h3>
+            <div className="mt-3 space-y-2">
+              <Button size="sm" variant="neutral" className="w-full" onClick={() => setChecklist(true)}>소장 제출 전 체크리스트</Button>
+              <Button size="sm" variant="neutral" className="w-full" onClick={() => setCalc(true)}>소송 비용 계산기</Button>
+              <Button as={Link} to="/app/evidence" size="sm" variant="ghost" className="w-full">증빙자료 올리러 가기 <ArrowRight size={14} /></Button>
             </div>
           </Card>
         </div>
       </div>
-
-      {/* upload */}
-      <Modal
-        open={upload} onClose={() => setUpload(false)}
-        title="서류 업로드" sub={`${activeCase?.title || '사건'}에 대한 서류를 업로드합니다.`}
-        footer={<><Button variant="neutral" onClick={() => setUpload(false)}>취소</Button><Button onClick={() => { setUpload(false); flash('서류가 업로드되었습니다') }}>업로드</Button></>}
-      >
-        <div className="space-y-4">
-          <label className="block"><span className="mb-1.5 block text-sm font-medium text-ink-700">서류 종류</span>
-            <select className={inputCls}><option>준비서면</option><option>증거목록</option><option>소장</option><option>기타 신청서</option></select>
-          </label>
-          <div className="grid place-items-center rounded-xl border-2 border-dashed border-ink-200 bg-ink-50 py-10 text-center">
-            <Upload className="text-ink-400" size={28} />
-            <p className="mt-2 text-sm font-medium text-ink-600">파일을 드래그하거나 클릭하여 업로드</p>
-            <p className="text-xs text-ink-400">PDF, DOCX (최대 10MB)</p>
-          </div>
-          <label className="block"><span className="mb-1.5 block text-sm font-medium text-ink-700">제출 기한</span>
-            <input type="date" className={inputCls} />
-          </label>
-          <div className="flex items-start gap-2 rounded-xl bg-red-50 p-3 text-xs leading-relaxed text-red-500">
-            <AlertTriangle size={15} className="mt-0.5 shrink-0" />
-            <span>서류는 법원 제출용 원본과 동일해야 합니다. 제출 기한을 반드시 확인하고, 서명·날인이 필요한 서류는 완료 후 업로드하세요.</span>
-          </div>
-        </div>
-      </Modal>
 
       {/* checklist */}
       <Modal
@@ -389,5 +391,112 @@ export default function Procedure() {
 
       {toast && <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-ink-900 px-5 py-2.5 text-sm font-medium text-white shadow-lg">{toast}</div>}
     </div>
+  )
+}
+
+/* ══════════════ 이 단계에서 챙길 기한 ══════════════
+   전자소송포털과 연결되어 있지 않아 송달일·기일을 알 수 없다.
+   그래서 날짜를 보여주는 대신 **세는 법**을 알려 주고, 기준일을 넣으면 계산한다. */
+
+function DeadlineCard({ step, caseId }) {
+  const { addTodo } = useWorkspace()
+  const toast = useToast()
+  const [base, setBase] = useState({})
+  const items = DEADLINES[step?.key] || []
+
+  const dueOf = (d) => {
+    const from = base[d.key]
+    if (!from) return null
+    const t = new Date(from)
+    t.setDate(t.getDate() + d.days)
+    const iso = t.toISOString().slice(0, 10)
+    const dday = Math.round((t - new Date(new Date().toISOString().slice(0, 10))) / 86400000)
+    return { iso, dday }
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2">
+        <Clock size={15} className="text-brand-300" />
+        <h3 className="text-[13px] font-bold text-ink-900">이 단계에서 챙길 기한</h3>
+      </div>
+
+      {items.length === 0 ? (
+        <p className="mt-3 rounded-xl bg-ink-50 p-4 text-center text-[12.5px] leading-relaxed text-ink-500">
+          이 단계에는 법으로 정해진 기한이 없어요.<br />다만 청구권은 시효로 사라지니 미루지 마세요.
+        </p>
+      ) : (
+        <div className="mt-3 space-y-3">
+          {items.map((d) => {
+            const r = dueOf(d)
+            return (
+              <div key={d.key} className="rounded-xl border border-ink-200 p-3.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[13px] font-bold text-ink-800">{d.label}</span>
+                  <span className="rounded bg-ink-100 px-1.5 py-0.5 text-[10px] font-semibold text-ink-600">{d.who}</span>
+                </div>
+                <p className="mt-1 text-[12px] text-ink-600">
+                  {d.base}부터 <b className="font-bold text-brand-500">{Math.abs(d.days)}일 {d.days < 0 ? '전' : ''}</b>
+                </p>
+                <p className="mt-0.5 text-[11px] text-ink-400">{d.law}</p>
+                {d.note && <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-500">{d.note}</p>}
+
+                <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                  <input
+                    type="date"
+                    aria-label={`${d.base} 입력`}
+                    value={base[d.key] || ''}
+                    onChange={(e) => setBase((b) => ({ ...b, [d.key]: e.target.value }))}
+                    className="h-9 rounded-lg border border-ink-200 bg-white px-2.5 text-[12px] text-ink-700 outline-none focus:border-brand-300"
+                  />
+                  {r && (
+                    <>
+                      <span className={cx('rounded-md px-2 py-1 text-[11px] font-bold tabular-nums', r.dday < 0 ? 'bg-red-50 text-red-500' : r.dday <= 3 ? 'bg-brand-50 text-brand-600' : 'bg-ink-100 text-ink-600')}>
+                        {fmtDate(r.iso)} · {r.dday < 0 ? `D+${-r.dday}` : r.dday === 0 ? 'D-DAY' : `D-${r.dday}`}
+                      </span>
+                      {caseId && (
+                        <button
+                          type="button"
+                          onClick={() => { addTodo(caseId, d.label, r.iso); toast('준비사항에 담았어요') }}
+                          className="text-[12px] font-semibold text-brand-500 hover:underline"
+                        >
+                          준비사항에 담기
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-relaxed text-ink-400">
+        <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+        송달일·기일은 법원이 정해 알려 줍니다. 저희가 조회할 수 없으니 통지서를 보고 직접 넣어 주세요.
+      </p>
+    </Card>
+  )
+}
+
+/* ══════════════ 이 단계 준비물 ══════════════ */
+
+function MaterialCard({ step }) {
+  const items = MATERIALS[step?.key] || []
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2">
+        <Folder size={15} className="text-brand-300" />
+        <h3 className="text-[13px] font-bold text-ink-900">이 단계 준비물</h3>
+      </div>
+      <ul className="mt-3 space-y-2">
+        {items.map((m) => (
+          <li key={m} className="flex items-start gap-2 text-[12.5px] leading-relaxed text-ink-700">
+            <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-brand-300" />{m}
+          </li>
+        ))}
+      </ul>
+    </Card>
   )
 }

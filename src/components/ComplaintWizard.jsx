@@ -384,8 +384,10 @@ function Writer({ typeKey, form, setForm, onBack, onDone }) {
   const [saveFailed, setSaveFailed] = useState(false)
   const firstRender = useRef(true)
   // 사건은 소장 초안과 같은 것이다. 한 번 만들어진 사건 id를 계속 물고 간다.
-  const { saveCase } = useWorkspace()
-  const caseIdRef = useRef(null)
+  const { saveCase, activeCaseId } = useWorkspace()
+  // 사건이 이미 있으면 그 사건의 소장이다. null로 두면 새 사건이 또 하나 생겨
+  // 같은 분쟁이 둘로 쪼개진다.
+  const caseIdRef = useRef(activeCaseId)
 
   const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }))
   const extras = useMemo(() => makeComplaintExtras(type), [type])

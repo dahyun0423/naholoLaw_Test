@@ -12,10 +12,11 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useWorkspace } from '../context/WorkspaceContext.jsx'
-import { spineOf, shortLabelOf, caseTodoList, overdueTodos, caseFlow, flowIndex, caseEvidence, caseDocs } from '../lib/casebook.js'
+import { spineOf, shortLabelOf, caseTitle, caseTodoList, overdueTodos, caseFlow, flowIndex, caseEvidence, caseDocs } from '../lib/casebook.js'
 import { findType, savedAgo } from '../lib/complaint.js'
 import { Card, Button, cx } from '../components/ui.jsx'
 import CaseRail from '../components/CaseRail.jsx'
+import CaseNewModal from '../components/CaseNewModal.jsx'
 import { Plus, ArrowRight, AlertTriangle } from '../components/icons.jsx'
 
 const SORTS = [
@@ -27,6 +28,7 @@ export default function Cases() {
   const { rawCases, myCases, hasMyCase } = useWorkspace()
   const navigate = useNavigate()
   const [sort, setSort] = useState('recent')
+  const [newCase, setNewCase] = useState(false)
 
   const items = useMemo(() => rawCases.map((c) => {
     const sum = myCases.find((m) => m.id === c.id)
@@ -34,7 +36,7 @@ export default function Cases() {
     const todos = caseTodoList(c)
     return {
       id: c.id,
-      title: type ? `${type.title} 청구` : '작성 중인 사건',
+      title: caseTitle(c),
       short: shortLabelOf(c),          // 접힌 막대에 세로로 적을 짧은 이름
       caseNo: c.caseNo || '',
       parties: [c.form?.pName, c.form?.dName].filter(Boolean).join(' → '),
@@ -87,7 +89,7 @@ export default function Cases() {
         )}
       </div>
 
-      {!hasMyCase ? <Empty /> : (
+      {!hasMyCase ? <Empty onNew={() => setNewCase(true)} /> : (
         <>
           {attention.length > 0 && (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-red-200 bg-red-50 px-5 py-3.5">
@@ -104,29 +106,37 @@ export default function Cases() {
           <CaseRail
             items={sorted}
             onOpen={(id) => navigate(`/app/cases/${id}`)}
-            onNew={() => navigate('/app/documents')}
+            onNew={() => setNewCase(true)}
           />
           <p className="text-center text-xs text-ink-400">
             마우스를 올리면 사건이 펼쳐집니다 · 펼쳐진 카드를 누르면 들어가요 · ← → 키로도 고를 수 있어요
           </p>
         </>
       )}
+
+      {/* 사건은 소장보다 먼저 만든다 — 소송을 할지 정하기 전에도 분쟁은 존재한다 */}
+      <CaseNewModal
+        open={newCase}
+        onClose={() => setNewCase(false)}
+        onCreated={(c) => navigate(`/app/cases/${c.id}`)}
+      />
     </div>
   )
 }
 
 /* ────────────────────── 아직 사건이 없을 때 ────────────────────── */
 
-function Empty() {
+function Empty({ onNew }) {
   return (
     <Card className="grid place-items-center gap-4 px-6 py-16 text-center">
       <div className="grid h-14 w-14 place-items-center rounded-2xl bg-brand-50 text-brand-300"><Plus size={24} /></div>
       <p className="text-lg font-bold text-ink-900">아직 사건이 없어요</p>
       <p className="max-w-md text-[13px] leading-relaxed text-ink-500">
-        소장을 쓰기 시작하면 사건이 하나 만들어집니다. 사건번호가 없어도 괜찮아요 —
-        <b className="text-ink-700"> 사건은 접수 전에 이미 존재</b>하고, 번호는 나중에 붙는 속성일 뿐입니다.
+        상대방과 다툼이 생긴 순간부터가 사건이에요. 소송을 할지 정하지 않았어도 괜찮습니다.
+        <b className="text-ink-700"> 먼저 사건을 만들어 두면</b> 자료·일정·문서가 그 사건에 모입니다.
+        사건번호는 접수한 뒤에 붙는 속성일 뿐이에요.
       </p>
-      <Button as={Link} to="/app/documents" className="mt-1">첫 사건 시작하기 <ArrowRight size={16} /></Button>
+      <Button onClick={onNew} className="mt-1">첫 사건 만들기 <ArrowRight size={16} /></Button>
     </Card>
   )
 }

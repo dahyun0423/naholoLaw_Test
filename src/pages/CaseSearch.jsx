@@ -21,6 +21,7 @@ import { useWorkspace } from '../context/WorkspaceContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
 import { precedents, precedentFullText, winrate } from '../data/mock.js'
 import { findType } from '../lib/complaint.js'
+import { caseTitle } from '../lib/casebook.js'
 import {
   Search, Star, ExternalLink, FileText, Copy, Scale, TrendingUp, Book,
   Lightbulb, Check, HelpCircle, AlertTriangle, X,
@@ -35,11 +36,14 @@ export default function CaseSearch() {
   const navigate = useNavigate()
   const toast = useToast()
   const {
-    activeCase, activeRaw,
+    activeCase, activeRaw, rawCases,
     savedNos, toggleSave, citedNos, addCitation, removeCitation, savedList, citedList,
   } = useWorkspace()
 
-  const [tab, setTab] = useState(TABS[0])
+  // 내 사건이 없으면 「내 사건과 비슷한 판례」는 성립하지 않는다.
+  // 데모 사건을 '분석 기준 사건'이라고 보여주면 남의 사건으로 분석한 결과가 된다.
+  const hasCase = rawCases.length > 0
+  const [tab, setTab] = useState(hasCase ? TABS[0] : TABS[1])
   const [query, setQuery] = useState('')
   const [sent, setSent] = useState('')
   const [kind, setKind] = useState('전체')
@@ -50,7 +54,7 @@ export default function CaseSearch() {
 
   const toggleScope = (s) => setScope((v) => (v.includes(s) ? v.filter((x) => x !== s) : [...v, s]))
 
-  const similar = useMemo(() => precedents.slice(0, 3), [])
+  const similar = useMemo(() => (hasCase ? precedents.slice(0, 3) : []), [hasCase])
 
   const results = useMemo(() => {
     if (!sent.trim()) return null
@@ -68,8 +72,10 @@ export default function CaseSearch() {
   useEffect(() => { setOpenNo(null) }, [tab, view, sent])
 
   const onCite = (p) => {
+    if (!hasCase) { toast('먼저 사건을 만들어 주세요 — 인용은 사건별로 담깁니다', 'error'); return }
     if (citedNos.includes(p.no)) { toast('이미 인용 목록에 있습니다'); return }
-    addCitation(p.no); toast('인용 목록에 담았습니다', 'success')
+    addCitation(p.no, p.title)
+    toast(`「${caseTitle(activeRaw)}」에 담았습니다`, 'success')
   }
   const onSave = (p) => {
     const was = savedNos.includes(p.no)
@@ -89,7 +95,7 @@ export default function CaseSearch() {
           <p className="mt-1 text-sm text-ink-500">AI가 관련 판례와 법령을 분석하여 핵심 내용을 제공합니다</p>
         </div>
         <Button variant="outline" size="sm" onClick={() => setCiteModal(true)}>
-          <FileText size={15} /> 내 인용 목록
+          <FileText size={15} /> 인용 목록
           <span className={cx('ml-1 grid h-[18px] min-w-[18px] place-items-center rounded-full px-1 text-[11px] font-bold', citedNos.length ? 'bg-brand-300 text-white' : 'bg-ink-200 text-ink-500')}>
             {citedNos.length}
           </span>
@@ -132,10 +138,26 @@ export default function CaseSearch() {
         </Card>
       )}
 
+      {/* 기준이 될 사건이 없으면 「내 사건과 비슷한 판례」는 성립하지 않는다 */}
+      {tab === TABS[0] && !hasCase && (
+        <Card className="grid place-items-center gap-4 px-6 py-16 text-center">
+          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-brand-50 text-brand-300"><Scale size={24} /></span>
+          <p className="text-lg font-bold text-ink-900">아직 기준이 될 사건이 없어요</p>
+          <p className="max-w-md text-[13px] leading-relaxed text-ink-500">
+            이 탭은 <b className="text-ink-700">내 사건의 쟁점·금액을 기준으로</b> 비슷한 판례를 찾아 줍니다.
+            사건을 먼저 만들면 자동으로 분석해 드려요. 지금 찾아보고 싶다면 키워드로 검색하세요.
+          </p>
+          <div className="mt-1 flex flex-wrap justify-center gap-2">
+            <Button onClick={() => setTab(TABS[1])}><Search size={15} /> 키워드로 검색하기</Button>
+            <Button onClick={() => navigate('/app/documents')} variant="neutral">소장 작성하러 가기</Button>
+          </div>
+        </Card>
+      )}
+
       {/* 왼쪽 목록 · 오른쪽 펼침 */}
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
+      <div className={cx('grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]', tab === TABS[0] && !hasCase && 'hidden')}>
         <div className="space-y-3">
-          {tab === TABS[0] && <BasisBanner activeCase={activeCase} activeRaw={activeRaw} />}
+          {tab === TABS[0] && hasCase && <BasisBanner activeCase={activeCase} activeRaw={activeRaw} />}
 
           <div className="flex flex-wrap items-center gap-2 px-1">
             <h2 className="text-[15px] font-bold text-ink-900">
@@ -191,8 +213,8 @@ export default function CaseSearch() {
 
       <Modal
         open={citeModal} onClose={() => setCiteModal(false)} maxW="max-w-lg"
-        title={`내 인용 목록 (${citedList.length})`}
-        sub="문서 생성 시 청구원인·준비서면에 자동으로 반영됩니다."
+        title={`인용 목록 (${citedList.length})`}
+        sub={activeRaw ? `「${caseTitle(activeRaw)}」에 담긴 판례예요. 이 사건 문서에만 들어갑니다.` : '사건을 만들면 사건별로 담을 수 있어요.'}
         footer={
           <>
             <Button variant="neutral" onClick={() => setCiteModal(false)}>닫기</Button>
@@ -205,7 +227,7 @@ export default function CaseSearch() {
         {citedList.length === 0 ? (
           <div className="grid place-items-center py-10 text-center text-sm text-ink-400">
             <FileText size={28} className="mb-2 text-ink-300" />
-            아직 인용한 판례가 없습니다.<br />판례를 열고 [내 문서에 인용]을 눌러 담아보세요.
+            {hasCase ? <>이 사건에 담은 판례가 없습니다.<br />판례를 열고 [내 문서에 인용]을 눌러 담아보세요.</> : <>사건을 먼저 만들어 주세요.<br />인용 목록은 사건마다 따로 관리됩니다.</>}
           </div>
         ) : (
           <div className="space-y-2">
@@ -346,7 +368,7 @@ function BasisBanner({ activeCase, activeRaw }) {
       <span className="min-w-0 flex-1">
         <span className="block text-[11px] text-brand-600">분석 기준 사건</span>
         <span className="block truncate text-[13px] font-bold text-ink-900">
-          {type ? `${type.title} 청구` : activeCase?.title || '사건 없음'}
+          {activeRaw ? caseTitle(activeRaw) : activeCase?.title || '사건 없음'}
           <span className="ml-1.5 font-normal text-ink-500">{activeRaw?.caseNo || '사건번호 없음'}</span>
         </span>
       </span>

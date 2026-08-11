@@ -178,7 +178,7 @@ function NewItem({ open, onFocus, onOpen }) {
             새 사건 시작
           </span>
           <span className={cx('text-[11px] text-ink-400 transition-opacity duration-200', open ? 'opacity-100 delay-150' : 'hidden opacity-0')}>
-            소장을 쓰면 사건이 만들어져요
+            다툼이 생겼다면 먼저 등록하세요
           </span>
         </span>
       </span>

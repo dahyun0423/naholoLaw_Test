@@ -14,7 +14,7 @@ export default function Modal({ open, onClose, title, sub, children, footer, max
           <button onClick={onClose} className="-mr-1 -mt-1 rounded-lg p-1.5 text-ink-400 hover:bg-ink-100"><X size={20} /></button>
         </div>
         <div className="mt-5">{children}</div>
-        {footer && <div className="mt-6 flex justify-end gap-2">{footer}</div>}
+        {footer && <div className="mt-6 flex flex-wrap items-center justify-end gap-2">{footer}</div>}
       </div>
     </div>
   )

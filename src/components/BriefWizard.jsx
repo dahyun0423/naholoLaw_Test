@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useToast } from '../context/ToastContext.jsx'
 import { useWorkspace } from '../context/WorkspaceContext.jsx'
-import { Card, Badge, cx } from './ui.jsx'
+import { Card, Badge, Button, cx } from './ui.jsx'
 import { GenericPaper, Note, Label, WizardShell, CitationPicker } from './docform.jsx'
 import { FileText, Lightbulb, Check } from './icons.jsx'
 import { loadDraft, findType, savedAgo } from '../lib/complaint.js'
 import { saveFormDraft, loadFormDraft } from '../lib/docschema.js'
 import { citationPolicy, suggestPrecedents, matchedIssue } from '../lib/citation.js'
-import { briefSteps, buildBrief, briefCompleteness, briefSummary, emptyBrief, stages, defenses } from '../lib/brief.js'
+import { briefSteps, buildBrief, briefCompleteness, briefSummary, emptyBrief, stages, defenses, detectDefenses } from '../lib/brief.js'
 
 /* 소장 초안 · 진행 중 사건에서 당사자 정보를 그대로 끌어온다 */
 function CaseLoader({ setField, form }) {
@@ -86,8 +86,74 @@ function CaseLoader({ setField, form }) {
   )
 }
 
+/**
+ * 상대방 서면 분석기.
+ *
+ * 우리는 PDF를 읽지 못한다. 대신 포털에서 **본문을 복사해 붙여넣으면**
+ * 어떤 항변이 들어 있는지 찾아 항변 체크와 반박 뼈대를 만들어 준다.
+ * 읽는 척하지 않고, 실제로 세어서 보여주는 방식이다.
+ */
+function OpponentAnalyzer({ form, setField }) {
+  const text = form.opponentText || ''
+  const found = detectDefenses(text)
+  const already = form.defenses || []
+  const fresh = found.filter((d) => !already.includes(d))
+
+  const apply = () => {
+    setField('defenses', [...new Set([...already, ...found])])
+    // 찾은 항변마다 반박 뼈대를 한 줄씩 깔아 둔다 — 빈 화면보다 고쳐 쓰는 편이 쉽다
+    const rows = form.rebuttals || []
+    const have = new Set(rows.map((r) => r.claim))
+    const added = found
+      .filter((d) => !have.has(d))
+      .map((d) => ({ claim: d, answer: defenses[d] || '', evidence: '', citation: '' }))
+    if (added.length) setField('rebuttals', [...rows, ...added])
+  }
+
+  return (
+    <div className="rounded-xl border border-ink-200 bg-ink-50 p-4">
+      <Label info={'포털에서 서면을 열고 본문을 그대로 복사해 붙여넣으세요.\n파일은 우리가 읽지 못하지만, 붙여넣은 글에서는 항변을 찾아낼 수 있어요.'}>
+        상대방 서면 본문 붙여넣기
+      </Label>
+      <textarea
+        rows={5}
+        value={text}
+        onChange={(e) => setField('opponentText', e.target.value)}
+        placeholder="예) 피고는 원고로부터 금원을 차용한 사실이 없고, 설령 채무가 있다 하더라도 이미 소멸시효가 완성되었습니다."
+        className={cx('mt-1 w-full rounded-xl border border-ink-200 bg-white px-3.5 py-2.5 text-[13px] leading-relaxed text-ink-700 outline-none transition placeholder:text-ink-300 focus:border-brand-300')}
+      />
+
+      {text.trim().length >= 20 && (
+        <div className="mt-3">
+          {found.length === 0 ? (
+            <p className="text-[12.5px] text-ink-500">
+              흔한 항변 표현을 찾지 못했어요. 아래에서 직접 골라 주세요.
+            </p>
+          ) : (
+            <>
+              <p className="text-[12.5px] text-ink-600">
+                항변 <b className="font-bold text-brand-500">{found.length}개</b>를 찾았어요
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {found.map((d) => (
+                  <span key={d} className="rounded-full bg-brand-50 px-2.5 py-1 text-[12px] font-semibold text-brand-600">{d}</span>
+                ))}
+              </div>
+              <Button size="sm" className="mt-3" onClick={apply} disabled={fresh.length === 0}>
+                {fresh.length ? `항변 ${fresh.length}개 담고 반박 뼈대 만들기` : '이미 다 담았어요'}
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function makeBriefExtras(cited) {
   return function briefExtras(f, form, setField) {
+  if (f.kind === 'opponentAnalyzer') return <OpponentAnalyzer form={form} setField={setField} />
+
   if (f.kind === 'caseLoader') return <CaseLoader form={form} setField={setField} />
 
   if (f.kind === 'citation') {

@@ -17,7 +17,7 @@ import { useWorkspace } from '../context/WorkspaceContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
 import {
   caseEvidence, caseTodoList, caseDocs, casePrecedentNos,
-  caseTasks, caseFlow, flowIndex, caseUpcoming, caseInsights, spineOf, overdueTodos,
+  caseTasks, caseFlow, flowIndex, caseUpcoming, caseInsights, spineOf, overdueTodos, caseTitle,
 } from '../lib/casebook.js'
 import { findType, fmtDate, savedAgo, completeness } from '../lib/complaint.js'
 import { precedents } from '../data/mock.js'
@@ -117,7 +117,7 @@ function Hero({ c, onDrop }) {
 
         <div className="min-w-[220px] flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-[26px] font-bold leading-tight text-ink-900">{type ? `${type.title} 청구` : '작성 중인 사건'}</h1>
+            <h1 className="text-[26px] font-bold leading-tight text-ink-900">{caseTitle(c)}</h1>
             <Badge tone={TONE[c.status] || 'gray'}>{c.status}</Badge>
           </div>
           <p className="mt-1 text-[13px] text-ink-500">

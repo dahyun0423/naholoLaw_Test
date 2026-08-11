@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { Card, Badge, Button, cx } from '../components/ui.jsx'
 import Modal from '../components/Modal.jsx'
 import { upcoming, dayOffset } from '../data/mock.js'
+import { useWorkspace } from '../context/WorkspaceContext.jsx'
+import { caseUpcoming, caseTitle } from '../lib/casebook.js'
+import { fmtDate } from '../lib/complaint.js'
 import { Calendar, Upload, Plus, ChevronRight } from '../components/icons.jsx'
 
 // 날짜는 오늘 기준 상대일. 고정해 두면 시연할 때마다 달력이 과거로 열린다.
@@ -41,6 +44,13 @@ export default function Schedule() {
 
   const selDate = new Date(selected)
   const selLabel = selDate.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' })
+  const { rawCases } = useWorkspace()
+  // 사건에 적어 둔 기한이 진짜 내 일정이다. mock은 그 아래 예시로 남긴다.
+  const mine = rawCases
+    .flatMap((c) => caseUpcoming(c).map((t) => ({ ...t, caseName: caseTitle(c) })))
+    .sort((a, b) => a.dday - b.dday)
+    .slice(0, 5)
+
   const selEvents = events[selected] || []
 
   return (
@@ -107,8 +117,33 @@ export default function Schedule() {
           </Card>
 
           <Card className="p-5">
-            <h3 className="text-sm font-bold text-ink-900">다가오는 일정</h3>
-            <div className="mt-3 space-y-3">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold text-ink-900">다가오는 일정</h3>
+              {mine.length === 0 && <Badge tone="gray">예시</Badge>}
+            </div>
+
+            {/* 내 사건의 기한부터 — 예시보다 앞에 둔다 */}
+            {mine.length > 0 && (
+              <div className="mt-3 space-y-3">
+                {mine.map((u) => (
+                  <div key={u.id} className="flex items-start gap-3">
+                    <span className={cx('mt-1 h-2.5 w-2.5 shrink-0 rounded-full', u.dday < 0 ? 'bg-red-300' : u.dday <= 3 ? 'bg-brand-300' : 'bg-ink-300')} />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="min-w-0 truncate text-sm font-semibold text-ink-800">{u.text}</p>
+                        <Badge tone={u.dday < 0 ? 'red' : 'blue'}>
+                          {u.dday < 0 ? `D+${-u.dday}` : u.dday === 0 ? 'D-DAY' : `D-${u.dday}`}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-ink-400">{fmtDate(u.due)} · {u.caseName}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className={cx('space-y-3', mine.length ? 'mt-4 border-t border-ink-100 pt-4' : 'mt-3')}>
+              {mine.length > 0 && <p className="text-[11px] text-ink-400">아래는 화면 구성을 보여주는 예시예요</p>}
               {upcoming.map((u) => (
                 <div key={u.title} className="flex items-start gap-3">
                   <span className={cx('mt-1 h-2.5 w-2.5 shrink-0 rounded-full', dotTone[u.tone])} />

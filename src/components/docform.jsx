@@ -147,7 +147,7 @@ export function Note({ tone = 'info', children }) {
   return (
     <div className={cx('flex gap-2 rounded-xl border p-3 text-[13px] leading-relaxed', noteTone[tone])}>
       <Icon size={15} className="mt-0.5 shrink-0" />
-      <span>{children}</span>
+      <span>{emph(children)}</span>
     </div>
   )
 }
@@ -158,6 +158,17 @@ export function Note({ tone = 'info', children }) {
  * 안내를 전부 펼쳐 두면 화면이 안내로 뒤덮여 정작 입력칸이 안 보인다.
  * 필요한 사람만 열어보게 하고, 기본은 접어 둔다.
  */
+/**
+ * 안내 문구 안의 **강조**를 굵게 만든다.
+ *
+ * 스키마 문자열에 `<b>`를 적으면 React가 이스케이프해 화면에 태그가 글자로 찍힌다.
+ * HTML 대신 마크다운식 표시를 쓰고 여기서 한 번에 바꾼다.
+ */
+export function emph(text) {
+  if (typeof text !== 'string') return text
+  return text.split('**').map((part, i) => (i % 2 ? <b key={i} className="font-semibold">{part}</b> : part))
+}
+
 export function InfoTip({ children, label = '설명 보기' }) {
   const [open, setOpen] = useState(false)
   return (
@@ -175,8 +186,8 @@ export function InfoTip({ children, label = '설명 보기' }) {
         i
       </button>
       {open && (
-        <div className="order-last mt-1.5 w-full rounded-xl border border-brand-100 bg-brand-50/60 px-3.5 py-2.5 text-[12px] leading-relaxed text-brand-600">
-          {children}
+        <div className="order-last mt-1.5 w-full whitespace-pre-line rounded-xl border border-brand-100 bg-brand-50/60 px-3.5 py-2.5 text-[12px] leading-relaxed text-brand-600">
+          {emph(children)}
         </div>
       )}
     </>
@@ -685,7 +696,7 @@ function downscale(dataUrl) {
   })
 }
 
-export function SignatureUpload({ value, onChange }) {
+export function SignatureUpload({ value, onChange, info }) {
   const inputRef = useRef(null)
   const read = (file) => {
     if (!file) return
@@ -695,7 +706,7 @@ export function SignatureUpload({ value, onChange }) {
   }
   return (
     <div>
-      <Label>서명 · 도장 이미지</Label>
+      <Label info={info}>서명 · 도장 이미지</Label>
       {value ? (
         <div className="flex items-center gap-3 rounded-xl border border-ink-200 bg-white p-3">
           <img src={value} alt="업로드한 서명" className="h-14 w-auto max-w-[8rem] object-contain" />
@@ -882,7 +893,7 @@ export function FieldOne({ field: f, form, setField, renderExtra }) {
     case 'address':
       return <AddressField field={f} form={form} setField={setField} />
     case 'signature':
-      return <SignatureUpload value={v} onChange={set} />
+      return <SignatureUpload value={v} onChange={set} info={f.info} />
     case 'files':
       return <FileField field={f} form={form} setField={setField} />
     case 'repeat':

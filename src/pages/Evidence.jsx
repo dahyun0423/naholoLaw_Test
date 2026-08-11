@@ -9,10 +9,7 @@ import {
   evidenceList, evidenceAi, activeCase, courtUrl,
   evidenceFolders, evidenceStorage, evidenceRecent, evidenceTips,
 } from '../data/mock.js'
-import {
-  Upload, Folder, FileText, Image, AlertTriangle, Sparkles, Check, Plus, Eye,
-  ArrowLeft, ExternalLink,
-} from '../components/icons.jsx'
+import { Upload, Folder, FileText, Image, AlertTriangle, Sparkles, Check, Plus, Eye, ArrowLeft, ExternalLink, ChevronDown, ArrowRight } from '../components/icons.jsx'
 
 const statusTone = { 제출완료: 'green', 제출예정: 'blue', 보완필요: 'amber', 미제출: 'gray', 대기중: 'gray', 검토중: 'blue' }
 const today = new Date().toISOString().slice(0, 10)
@@ -255,120 +252,131 @@ export default function Evidence() {
       {/* ─────────── 법률 증거 관리 뷰 ─────────── */}
       {view === 'list' && (
         <>
-          <CaseBar right={<Button as={Link} to="/app/procedure" variant="neutral" size="sm">절차 안내</Button>} />
-
-          {/* 소장 6단계에서 올린 파일이 그대로 갑호증이 된다 — 따로 다시 올릴 필요가 없다 */}
-          {mine.length > 0 ? (
-            <Card className="border-brand-200 bg-brand-50/60 p-5">
-              <div className="flex flex-wrap items-center gap-2">
-                <Check size={16} className="text-brand-500" />
-                <h3 className="text-sm font-bold text-brand-800">소장에 올린 증거 {mine.length}건이 여기 등록돼 있어요</h3>
-                <Button as={Link} to="/app/documents" size="sm" variant="neutral" className="ml-auto">소장에서 수정</Button>
+          {/* AI 제안은 맨 위에 — 표를 다 훑고 나서야 보이면 이미 늦다 */}
+          {evidenceAi.length > 0 && (
+            <Card className="border-red-200 bg-red-50 p-4">
+              <div className="flex items-center gap-2 text-red-500">
+                <Sparkles size={15} />
+                <h3 className="text-[13px] font-bold">AI 제안</h3>
+                <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-red-500">{evidenceAi.length}</span>
               </div>
-              <div className="mt-3 space-y-1.5">
-                {mine.map((e) => (
-                  <div key={e.no} className="flex flex-wrap items-center gap-2 rounded-lg bg-white px-3 py-2 text-[13px]">
-                    <span className="rounded-md bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand-500">{e.code}</span>
-                    <span className="font-medium text-ink-800">{e.file}</span>
-                    {e.size && <span className="text-xs text-ink-400">{e.size}</span>}
-                    <span className={cx('ml-auto text-xs font-semibold', e.purpose ? 'text-brand-600' : 'text-red-500')}>
-                      {e.purpose || '입증취지를 아직 안 적었어요'}
-                    </span>
-                  </div>
+              <ol className="mt-2.5 space-y-1.5">
+                {evidenceAi.map((t, i) => (
+                  <li key={i} className="flex gap-2 text-[12.5px] leading-relaxed text-red-500">
+                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-red-300" />{t}
+                  </li>
                 ))}
-              </div>
-              <p className="mt-3 text-[12px] leading-relaxed text-brand-700">
-                입증취지는 증거목록(증거설명서)에서 채웁니다. 서증명은 <b className="font-semibold">청구원인에 적은 이름과 똑같이</b> 맞춰야
-                재판부가 대조할 수 있어요.
-              </p>
-            </Card>
-          ) : (
-            <Card className="flex flex-wrap items-center justify-between gap-3 border-brand-200 bg-brand-50/50 p-4">
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                <span className="font-bold text-ink-800">아래는 화면 구성을 보여주는 예시예요</span>
-                <span className="text-ink-500">증거 {list.length}개 · 제출률 {rate}% · 미제출 {notSubmitted}개</span>
-              </div>
-              <Button as={Link} to="/app/documents" size="sm">소장 작성하고 내 증거 등록하기</Button>
+              </ol>
             </Card>
           )}
 
-          <Card className="border-red-200 bg-red-50/60 p-5">
-            <div className="flex items-center gap-2 text-red-500"><Sparkles size={16} /><h3 className="text-sm font-bold">AI 제안 사항</h3></div>
-            <ol className="mt-3 space-y-2">
-              {evidenceAi.map((t, i) => (
-                <li key={i} className="flex gap-2 text-[13px] leading-relaxed text-red-500">
-                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-red-200/70 text-[11px] font-bold text-red-500">{i + 1}</span>{t}
-                </li>
-              ))}
-            </ol>
+          {/* 표 위 한 줄 — 어느 사건인지, 몇 건인지, 예시인지 */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <h2 className="text-[15px] font-bold text-ink-900">
+              증거 목록 <span className="text-brand-500">{list.length}건</span>
+            </h2>
+            {!real && <Badge tone="gray">예시</Badge>}
+            <span className="text-[12px] text-ink-500">
+              제출완료 {submitted} · 미제출 {notSubmitted} · 입증취지 없음 {list.filter((e) => !e.purpose).length}
+            </span>
+            <div className="ml-auto flex gap-2">
+              {!real && <Button as={Link} to="/app/documents" size="sm">소장 작성하고 내 증거 등록하기</Button>}
+              {real && <Button as={Link} to="/app/documents" size="sm" variant="neutral">소장에서 자료 추가</Button>}
+              <Button as={Link} to="/app/procedure" size="sm" variant="ghost">절차 안내 <ArrowRight size={14} /></Button>
+            </div>
+          </div>
+
+          {/* ── 표 — 노션 데이터베이스처럼 한 줄에 하나 ── */}
+          <Card className="overflow-hidden p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px] border-collapse text-left">
+                <thead>
+                  <tr className="border-b border-ink-200 bg-ink-50 text-[11px] font-medium text-ink-500">
+                    <Th className="w-[112px] whitespace-nowrap">호증</Th>
+                    <Th className="w-[220px]">서증명</Th>
+                    <Th>입증취지</Th>
+                    <Th className="w-[132px]">제출 상태</Th>
+                    <Th className="w-[136px] whitespace-nowrap">기한 · 제출일</Th>
+                    <Th className="w-[92px]">크기</Th>
+                    <Th className="w-[112px]" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {list.map((e) => {
+                    const Icon = isImage(e.file) ? Image : FileText
+                    return (
+                      <tr key={e.no} className="group border-b border-ink-100 align-middle transition-colors last:border-0 hover:bg-ink-50">
+                        <Td>
+                          <span className="flex items-center gap-2">
+                            <span className="grid h-5 w-5 shrink-0 place-items-center rounded bg-brand-50 text-[10px] font-bold text-brand-500">{e.no}</span>
+                            <span className="whitespace-nowrap text-[12.5px] font-bold text-ink-800">{e.code}</span>
+                          </span>
+                        </Td>
+
+                        <Td>
+                          <button
+                            type="button"
+                            onClick={() => setPreview({ title: e.code, file: e.file, size: e.size, status: e.status })}
+                            className="flex w-full min-w-0 items-center gap-1.5 text-left"
+                          >
+                            <Icon size={13} className="shrink-0 text-ink-400" />
+                            <span className="min-w-0 truncate text-[12.5px] text-ink-800 group-hover:underline">{e.file}</span>
+                          </button>
+                          {e.warn && (
+                            <span className="mt-1 flex items-start gap-1 text-[11px] leading-snug text-red-500">
+                              <AlertTriangle size={11} className="mt-0.5 shrink-0" />{e.warn}
+                            </span>
+                          )}
+                        </Td>
+
+                        <Td>
+                          <button type="button" onClick={() => openEdit(e)} className="w-full text-left">
+                            {e.purpose
+                              ? <span className="line-clamp-2 text-[12.5px] leading-snug text-ink-700">{e.purpose}</span>
+                              : <span className="text-[12.5px] text-red-500">비어 있음 — 채워야 증거목록에 들어가요</span>}
+                          </button>
+                        </Td>
+
+                        {/* 상태는 셀 안에서 바로 바꾼다 — 노션의 select 열처럼 */}
+                        <Td>
+                          <StatusCell e={e} onPick={(st) => moveStatus(e, st)} />
+                        </Td>
+
+                        <Td>
+                          <span className={cx('block whitespace-nowrap text-[12px] tabular-nums', e.dateLabel === '기한' ? 'font-semibold text-red-500' : 'text-ink-500')}>
+                            {e.date ? `${e.dateLabel ? e.dateLabel + ' ' : ''}${e.date}` : '—'}
+                          </span>
+                        </Td>
+
+                        <Td><span className="text-[12px] tabular-nums text-ink-400">{e.size || '—'}</span></Td>
+
+                        <Td>
+                          <span className="flex justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                            {e.status !== '제출완료' && (
+                              <IconBtn label="전자소송에서 제출" onClick={() => setSubmitTarget(e)}><Upload size={14} /></IconBtn>
+                            )}
+                            <IconBtn label="수정" onClick={() => openEdit(e)}><FileText size={14} /></IconBtn>
+                            <IconBtn label="미리보기" onClick={() => setPreview({ title: e.code, file: e.file, size: e.size, status: e.status })}><Eye size={14} /></IconBtn>
+                          </span>
+                        </Td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {list.length === 0 && (
+              <p className="px-6 py-14 text-center text-[13px] text-ink-400">
+                아직 등록된 증거가 없어요. 소장 6단계에서 파일을 올리면 여기 모입니다.
+              </p>
+            )}
           </Card>
 
-          <div className="space-y-3">
-            {list.map((e) => {
-              const Icon = isImage(e.file) ? Image : FileText
-              return (
-                <Card key={e.no} className="p-5">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex gap-3">
-                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-50 text-sm font-bold text-brand-500">{e.no}</span>
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-bold text-ink-900">{e.code}</span>
-                          <Badge tone={statusTone[e.status]}>{e.status}</Badge>
-                        </div>
-                        <p className="mt-0.5 flex items-center gap-1.5 text-sm text-ink-600"><Icon size={14} className="text-ink-400" /> {e.file}</p>
-                      </div>
-                    </div>
-                    <div className="text-right text-xs text-ink-400">
-                      <p className={cx(e.dateLabel === '기한' && 'font-semibold text-red-400')}>{e.dateLabel}: {e.date}</p>
-                      <p>{e.size}</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 rounded-xl bg-ink-50 px-3.5 py-2.5">
-                    <p className="text-xs text-ink-400">입증 취지</p>
-                    {e.purpose
-                      ? <p className="text-[13px] text-ink-700">{e.purpose}</p>
-                      : <p className="text-[13px] text-red-500">아직 비어 있어요 — 채워야 증거목록에 들어갑니다</p>}
-                  </div>
-
-                  {e.warn && (
-                    <div className="mt-2 flex items-start gap-2 rounded-xl bg-red-50 px-3.5 py-2.5 text-xs leading-relaxed text-red-500">
-                      <AlertTriangle size={14} className="mt-0.5 shrink-0" /><span><b>보안 사항</b> — {e.warn}</span>
-                    </div>
-                  )}
-
-                  {/* 제출 상태는 법원 시스템에만 있어서 조회할 수 없다 — 사용자가 직접 옮긴다 */}
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <span className="text-[11px] text-ink-500">제출 상태</span>
-                    <div className="inline-flex gap-1 rounded-lg bg-ink-100 p-1">
-                      {EVIDENCE_STATUS.map((st) => (
-                        <button
-                          key={st}
-                          type="button"
-                          onClick={() => moveStatus(e, st)}
-                          className={cx(
-                            'rounded-md px-2.5 py-1 text-[12px] font-semibold transition-colors',
-                            e.status === st ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-700',
-                          )}
-                        >
-                          {st}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {e.status !== '제출완료'
-                      ? <Button size="sm" onClick={() => setSubmitTarget(e)}><Upload size={14} /> 전자소송에서 제출</Button>
-                      : <Button size="sm" variant="soft"><Check size={14} /> 제출완료</Button>}
-                    <Button size="sm" variant="neutral" onClick={() => openEdit(e)}>수정</Button>
-                    <Button size="sm" variant="ghost" onClick={() => setPreview({ title: e.code, file: e.file, size: e.size, status: e.status })}><Eye size={14} /> 미리보기</Button>
-                  </div>
-                </Card>
-              )
-            })}
-          </div>
+          <p className="px-1 text-[11.5px] leading-relaxed text-ink-400">
+            서증명은 <b className="font-semibold text-ink-600">청구원인에 적은 이름과 똑같이</b> 맞춰야 재판부가 대조할 수 있어요.
+            제출 상태는 법원 시스템에만 있어 저희가 조회할 수 없으니 직접 표시해 주세요.
+          </p>
         </>
       )}
 
@@ -639,5 +647,72 @@ export default function Evidence() {
 
       {toast && <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-ink-900 px-5 py-2.5 text-sm font-medium text-white shadow-lg">{toast}</div>}
     </div>
+  )
+}
+
+/* ────────────── 표 조각 ──────────────
+   노션 데이터베이스의 셀처럼 촘촘하게. 색·간격은 우리 디자인 시스템 그대로다. */
+
+const Th = ({ className, children }) => (
+  <th className={cx('px-4 py-2.5 font-medium', className)}>{children}</th>
+)
+
+const Td = ({ className, children }) => (
+  <td className={cx('px-4 py-3 align-middle', className)}>{children}</td>
+)
+
+const IconBtn = ({ label, onClick, children }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    aria-label={label}
+    title={label}
+    className="grid h-7 w-7 place-items-center rounded-md text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700"
+  >
+    {children}
+  </button>
+)
+
+/** 상태 셀 — 누르면 그 자리에서 고른다 (노션 select 열) */
+function StatusCell({ e, onPick }) {
+  const [open, setOpen] = useState(false)
+  const tone = {
+    미제출: 'bg-ink-100 text-ink-600',
+    제출예정: 'bg-brand-50 text-brand-600',
+    제출완료: 'bg-brand-300 text-white',
+    보완필요: 'bg-red-50 text-red-500',
+  }
+  return (
+    <span className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={cx('inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11.5px] font-semibold transition-opacity hover:opacity-80', tone[e.status] || tone['미제출'])}
+      >
+        {e.status}
+        <ChevronDown size={11} />
+      </button>
+      {open && (
+        <>
+          <span className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <span className="absolute left-0 z-20 mt-1 block w-[124px] rounded-lg border border-ink-200 bg-white py-1 shadow-lg">
+            {EVIDENCE_STATUS.map((st) => (
+              <button
+                key={st}
+                type="button"
+                onClick={() => { onPick(st); setOpen(false) }}
+                className={cx(
+                  'flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[12px] transition-colors hover:bg-ink-50',
+                  e.status === st ? 'font-bold text-ink-900' : 'text-ink-600',
+                )}
+              >
+                <span className={cx('h-2 w-2 rounded-full', tone[st].split(' ')[0])} />
+                {st}
+              </button>
+            ))}
+          </span>
+        </>
+      )}
+    </span>
   )
 }

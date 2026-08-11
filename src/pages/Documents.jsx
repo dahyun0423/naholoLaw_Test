@@ -12,7 +12,7 @@
 //   신청서   — 절차적 목적           → 유형별 입력
 
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useToast } from '../context/ToastContext.jsx'
 import { useWorkspace } from '../context/WorkspaceContext.jsx'
 import { Card, Button, Badge, inputCls, cx } from '../components/ui.jsx'
@@ -22,9 +22,10 @@ import BriefWizard from '../components/BriefWizard.jsx'
 import EvidenceListBuilder from '../components/EvidenceListBuilder.jsx'
 import PetitionWizard from '../components/PetitionWizard.jsx'
 import { recentDocs, writingTips } from '../data/mock.js'
-import { caseDocs } from '../lib/casebook.js'
+import { caseDocs, caseTitle } from '../lib/casebook.js'
+import { checkDoc } from '../lib/docgate.js'
 import { stampFee, serviceFee, won, savedAgo, SERVICE_FEE_IS_ESTIMATE } from '../lib/complaint.js'
-import { ArrowRight, FileText, AlertTriangle } from '../components/icons.jsx'
+import { ArrowRight, FileText, AlertTriangle, Check } from '../components/icons.jsx'
 
 import calcImg from '../assets/doc/calculator.png'
 import guideImg from '../assets/doc/guidebook.png'
@@ -49,11 +50,21 @@ const DOC_TYPES = [
 
 export default function Documents() {
   const toast = useToast()
-  const { activeRaw } = useWorkspace()
+  const navigate = useNavigate()
+  const { activeRaw, rawCases, setActiveCaseId } = useWorkspace()
   const [selected, setSelected] = useState(null)
   const [wizard, setWizard] = useState(null)
+  const [gate, setGate] = useState(null)      // 전제가 안 맞을 때 띄우는 안내
+  const [pickCase, setPickCase] = useState(false)
   const [calc, setCalc] = useState(false)
   const [amount, setAmount] = useState('')
+
+  /** 문서를 열기 전에 전제를 확인한다 — 안 맞으면 막지 않고 알린다 */
+  const openDoc = (kind) => {
+    const g = checkDoc(kind, rawCases)
+    if (g) { setGate({ ...g, kind }); return }
+    setWizard(kind)
+  }
 
   if (wizard) {
     const Wizard = wizards[wizard]
@@ -73,14 +84,38 @@ export default function Documents() {
     { key: 'calc', title: '소송 비용 계산기', desc: '청구 금액에 따른 인지대와 송달료를 자동으로 계산합니다.', img: calcImg, on: () => setCalc(true) },
     { key: 'guide', title: '소장 비용 가이드', desc: '소장 제출 전 필수 준비사항과 체크리스트를 확인하세요.', img: guideImg, to: '/app/procedure' },
     { key: 'tpl', title: '템플릿 보기', desc: '각 문서 유형의 기본 템플릿을 미리 확인할 수 있습니다.', img: magnifierImg, on: () => toast('각 문서 유형의 기본 템플릿을 불러옵니다') },
-    { key: 'ai', title: 'AI 맞춤 추천', desc: '현재 진행 중인 소송에 필요한 문서를 AI가 추천해드립니다.', img: laptopImg, on: () => { setSelected('brief'); setWizard('brief'); toast('지금 단계에서는 준비서면을 자주 작성합니다') } },
+    { key: 'ai', title: 'AI 맞춤 추천', desc: '현재 진행 중인 소송에 필요한 문서를 AI가 추천해드립니다.', img: laptopImg, on: () => { setSelected('brief'); openDoc('brief'); toast('지금 단계에서는 준비서면을 자주 작성합니다') } },
   ]
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-ink-900">법률 문서 작성 도우미</h1>
-        <p className="mt-1 text-sm text-ink-500">필요한 정보를 입력하면 AI가 자동으로 법률 문서를 작성합니다</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-ink-900">법률 문서 작성 도우미</h1>
+          <p className="mt-1 text-sm text-ink-500">필요한 정보를 입력하면 AI가 자동으로 법률 문서를 작성합니다</p>
+        </div>
+
+        {/* 문서는 반드시 어떤 사건에 붙는다. 어느 사건인지 안 보이면
+            사건이 여러 건일 때 남의 사건 소장을 덮어쓴다. */}
+        {activeRaw ? (
+          <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-ink-200 bg-white px-4 py-2.5">
+            <FileText size={15} className="shrink-0 text-brand-300" />
+            <span className="text-[12px] text-ink-500">이 사건의 문서</span>
+            <span className="text-[13px] font-bold text-ink-900">{caseTitle(activeRaw)}</span>
+            <span className="text-[12px] text-ink-500">{activeRaw.caseNo || '사건번호 없음'}</span>
+            {rawCases.length > 1 && (
+              <button type="button" onClick={() => setPickCase(true)} className="text-[12px] font-semibold text-brand-500 hover:underline">
+                사건 바꾸기
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-brand-200 bg-brand-50 px-4 py-2.5">
+            <AlertTriangle size={15} className="shrink-0 text-brand-300" />
+            <span className="text-[12.5px] text-brand-600">아직 사건이 없어요 — 문서를 만들면 새 사건이 함께 생깁니다</span>
+            <Link to="/app/cases" className="text-[12px] font-semibold text-brand-600 hover:underline">사건 먼저 만들기</Link>
+          </div>
+        )}
       </div>
 
       {/* ── 1. 무엇을 만들 것인가 ── */}
@@ -93,13 +128,13 @@ export default function Documents() {
               d={d}
               on={selected === d.key}
               onClick={() => setSelected(d.key)}
-              onOpen={() => setWizard(d.key)}
+              onOpen={() => openDoc(d.key)}
             />
           ))}
         </div>
         <div className="mt-5 flex items-center justify-end gap-3">
           {selected && <span className="text-[13px] text-ink-500">{DOC_TYPES.find((d) => d.key === selected)?.axis}</span>}
-          <Button disabled={!selected} onClick={() => setWizard(selected)}>다음 <ArrowRight size={16} /></Button>
+          <Button disabled={!selected} onClick={() => openDoc(selected)}>다음 <ArrowRight size={16} /></Button>
         </div>
       </Card>
 
@@ -151,6 +186,111 @@ export default function Documents() {
           </ul>
         </Card>
       </div>
+
+      {/* 어느 사건의 문서인지 바꾼다 */}
+      <Modal
+        open={pickCase}
+        onClose={() => setPickCase(false)}
+        maxW="max-w-md"
+        title="어느 사건의 문서인가요?"
+        sub="고른 사건에 이 문서가 붙습니다."
+        footer={<Button variant="neutral" onClick={() => setPickCase(false)}>닫기</Button>}
+      >
+        <div className="space-y-2">
+          {rawCases.map((c) => {
+            const on = c.id === activeRaw?.id
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => { setActiveCaseId(c.id); setPickCase(false); toast(`「${caseTitle(c)}」 기준으로 봅니다`) }}
+                className={cx(
+                  'flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors',
+                  on ? 'border-brand-300 bg-brand-50' : 'border-ink-200 hover:border-ink-300 hover:bg-ink-50',
+                )}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[14px] font-bold text-ink-900">{caseTitle(c)}</span>
+                  <span className="block truncate text-[12px] text-ink-500">
+                    {[c.caseNo || '사건번호 없음', c.form?.court, c.status].filter(Boolean).join(' · ')}
+                  </span>
+                </span>
+                {on && <Check size={16} className="shrink-0 text-brand-400" />}
+              </button>
+            )
+          })}
+        </div>
+      </Modal>
+
+      {/* 전제 안내 — 이 문서를 언제 쓰는 것인지 */}
+      <Modal
+        open={!!gate}
+        onClose={() => setGate(null)}
+        maxW="max-w-lg"
+        title={gate?.title}
+        footer={
+          <div className="flex w-full flex-wrap items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => { const k = gate.kind; setGate(null); setWizard(k) }}
+              className="text-[13px] font-semibold text-ink-500 underline underline-offset-2 hover:text-ink-700"
+            >
+              {gate?.proceed}
+            </button>
+            <div className="flex flex-wrap gap-2">
+              {gate?.actions?.map((a) => (
+                <Button
+                  key={a.label}
+                  onClick={() => {
+                    setGate(null)
+                    if (a.pick) { setSelected(a.pick); setWizard(a.pick) }
+                    else if (a.to) navigate(a.to)
+                  }}
+                >
+                  {a.label} <ArrowRight size={15} />
+                </Button>
+              ))}
+            </div>
+          </div>
+        }
+      >
+        {gate && (
+          <div className="space-y-4">
+            <p className="text-[13px] leading-relaxed text-ink-600">
+              {gate.why.split('**').map((part, i) => (i % 2 ? <b key={i} className="text-ink-800">{part}</b> : part))}
+            </p>
+
+            <div className="flex flex-wrap gap-2">
+              {gate.facts.map(([k, v]) => (
+                <span key={k} className="rounded-lg bg-ink-50 px-3 py-2 text-[12px] text-ink-600">
+                  {k} <b className="ml-1 font-bold tabular-nums text-ink-800">{v}</b>
+                </span>
+              ))}
+            </div>
+
+            {/* 순서를 보여주면 "지금 내가 어디인지"가 바로 잡힌다 */}
+            <div>
+              <p className="text-[12px] font-bold text-ink-700">이 문서까지 가는 순서</p>
+              <ol className="mt-2 space-y-1.5">
+                {gate.order.map((step, i) => {
+                  const last = i === gate.order.length - 1
+                  return (
+                    <li key={step} className="flex items-center gap-2 text-[13px]">
+                      <span className={cx(
+                        'grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold',
+                        last ? 'bg-brand-300 text-white' : 'bg-ink-100 text-ink-500',
+                      )}>
+                        {i + 1}
+                      </span>
+                      <span className={last ? 'font-semibold text-ink-800' : 'text-ink-600'}>{step}</span>
+                    </li>
+                  )
+                })}
+              </ol>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* 소송 비용 계산기 */}
       <Modal

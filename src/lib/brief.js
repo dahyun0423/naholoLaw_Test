@@ -39,6 +39,31 @@ export const stages = [
   },
 ]
 
+/**
+ * 상대방 서면 본문에서 항변을 찾아내는 단서.
+ *
+ * PDF를 우리가 읽을 수는 없다. 대신 포털에서 **본문을 복사해 붙여넣으면**
+ * 아래 단어로 어떤 항변이 들어있는지 짚어 준다. 읽는 척이 아니라 실제로 세는 것이다.
+ */
+export const DEFENSE_CUES = {
+  '전부 부인 (그런 사실 없다)': ['부인한다', '사실이 없다', '차용한 사실이 없', '빌린 사실이 없', '부인합니다'],
+  '변제 항변 (이미 갚았다)': ['변제', '이미 지급', '갚았', '상환하였', '완제'],
+  '소멸시효 항변': ['소멸시효', '시효가 완성', '시효완성', '제척기간'],
+  '상계 항변': ['상계', '반대채권', '대등액'],
+  '동시이행 항변': ['동시이행', '이행제공', '선이행'],
+  '공제 주장 (원상회복비 등)': ['공제', '원상회복', '수리비', '차감'],
+  '과실상계 주장': ['과실상계', '과실 비율', '기여도'],
+}
+
+/** 붙여넣은 본문에서 항변을 찾는다 */
+export function detectDefenses(text) {
+  const t = String(text || '')
+  if (t.trim().length < 20) return []
+  return Object.entries(DEFENSE_CUES)
+    .filter(([, cues]) => cues.some((c) => t.includes(c)))
+    .map(([name]) => name)
+}
+
 /* 상대방이 흔히 드는 항변 — 고르면 반박 방향을 안내한다 */
 export const defenses = {
   '전부 부인 (그런 사실 없다)': '부인은 증명책임을 원고에게 돌리는 것뿐이에요. 계약서·이체내역 같은 객관적 자료로 사실을 다시 못 박으면 됩니다.',
@@ -63,19 +88,32 @@ export const briefSteps = [
       text('defendant', '피고', { required: true, half: true, placeholder: '김철수' }),
       radio('side', '나는 어느 쪽인가요?', ['원고', '피고'], { required: true }),
       text('agent', '대리인 (있으면)', { half: true, placeholder: '변호사 ○○○', hint: '준비서면 기재사항이에요. 본인이 직접 하면 비워두세요.' }),
-      radio('stage', '지금 소송이 어느 단계인가요?', stages.map((s) => s.label), { required: true }),
+      radio('stage', '지금 소송이 어느 단계인가요?', stages.map((s) => s.label), {
+        required: true,
+        info: '적시제출주의(민사소송법 제146조·제147조) — 재판장이 정한 기간을 넘기면 정당한 사유가 없는 한 주장을 더 내거나 증거를 신청할 수 없어요.',
+      }),
       { kind: 'stageAdvice' },
-      note('warn', '준비서면을 내지 않거나 <b>준비서면에 적지 않은 사실은, 상대방이 변론기일에 나오지 않으면 변론에서 주장할 수 없습니다.</b> 하고 싶은 말은 미리 다 적어두세요.'),
-      note('info', '적시제출주의(민사소송법 제146조·제147조) — 재판장이 정한 기간을 넘기면 정당한 사유가 없는 한 주장을 더 내거나 증거를 신청할 수 없어요.'),
+      note('warn', '상대방이 변론기일에 나오지 않으면, **준비서면에 적어 두지 않은 내용은 그날 말할 수 없어요.** 하고 싶은 말은 미리 다 적어 두세요. (민사소송법 제276조)'),
       text('round', '준비서면 회차', { half: true, placeholder: '예: 준비서면(1)' }),
       date('dueDate', '제출 기한 / 다음 변론기일', { half: true }),
     ],
   },
   {
     title: '상대방은 뭐라고 했나요?',
+    hint: '전자소송이면 서류가 올라올 때 이메일·문자로 알려 줍니다. 포털에서 내려받아 여기 올리고, 본문을 붙여넣으면 항변을 찾아 드려요.',
     fields: [
-      select('opponentDoc', '상대방이 낸 서면', ['답변서', '준비서면(1)', '준비서면(2)', '증거설명서', '기타'], { required: true }),
-      date('opponentDate', '받은 날 (도달일)', { half: true }),
+      select('opponentDoc', '상대방이 낸 서면', ['답변서', '준비서면(1)', '준비서면(2)', '증거설명서', '기타'], {
+        required: true,
+        info: '상대방이 나에게 직접 보내는 게 아니라 **법원이 부본을 송달**합니다(민사소송법 제273조).\n· 전자소송에 동의했으면 — 포털에 등재되고 이메일·문자로 알려 줍니다. 「나의전자소송 > 송달문서확인」에서 내려받으세요.\n· 동의 전이거나 종이 소송이면 — 우편으로 옵니다.',
+      }),
+      date('opponentDate', '받은 날 (도달일)', {
+        half: true,
+        info: '전자송달은 **포털에서 열어 본 때** 송달된 것으로 봅니다. 다만 등재 통지일부터 **1주 안에 열지 않으면 1주가 지난 날 송달된 것으로 처리**돼요(전자문서법 제11조 제4항). 기한은 이 날짜부터 셉니다.',
+      }),
+      files('opponentFiles', '받은 서면 파일', {
+        info: '포털에서 내려받은 PDF를 올려 두면 사건에 함께 보관됩니다. 파일 자체를 읽어 분석하지는 않아요 — 분석은 아래에 본문을 붙여넣으면 됩니다.',
+      }),
+      { kind: 'opponentAnalyzer' },
       area('opponentClaim', '상대방 주장 요약', {
         rows: 4, required: true,
         placeholder: '예) 피고는 원고로부터 돈을 빌린 사실이 없고, 받은 돈은 투자금이었다고 주장합니다.',
@@ -94,8 +132,10 @@ export const briefSteps = [
         { key: 'answer', label: '나의 반박', kind: 'area', rows: 3, placeholder: '예) 이체 당시 “빌려준다”는 문자를 보냈고, 원리금 상환 계획까지 주고받았습니다.' },
         { key: 'evidence', label: '근거 증거', placeholder: '예: 갑 제3호증 문자메시지 사본' },
         { key: 'citation', label: '인용 판례 (선택)', placeholder: '예: 대법원 2020다112233 — 4단계에서 고르면 사건번호가 보입니다' },
-      ], { required: true, itemLabel: '쟁점', addLabel: '반박 포인트 추가', empty: '반박할 쟁점을 하나씩 추가해 주세요.' }),
-      note('info', '“상대방 주장 → 반박 → 근거”를 한 세트로 쓰면 재판부가 읽기 쉬워요. 감정적인 표현은 빼고 사실과 법리만 적으세요.'),
+      ], {
+        required: true, itemLabel: '쟁점', addLabel: '반박 포인트 추가', empty: '반박할 쟁점을 하나씩 추가해 주세요.',
+        info: '“상대방 주장 → 반박 → 근거”를 한 세트로 쓰면 재판부가 읽기 쉬워요. 감정적인 표현은 빼고 사실과 법리만 적으세요.',
+      }),
       area('conclusion', '결론', { rows: 2, placeholder: '비워두면 “원고의 청구는 이유 있으므로 인용되어야 합니다.”로 들어갑니다.' }),
     ],
   },
@@ -108,12 +148,10 @@ export const briefSteps = [
       ], { itemLabel: '증거', addLabel: '증거 추가', empty: '이번 준비서면과 함께 낼 증거가 있으면 추가하세요.' }),
       text('evidenceStart', '이어서 매길 호증 번호', { half: true, placeholder: '예: 4 (갑 제4호증부터)' }),
       { kind: 'citation', key: 'citations' },
-      note('warn', '인용한 판례는 <b>증거도 첨부서류도 아닙니다.</b> 별도 파일로 올리지 마시고, 준비서면 본문의 「관련 법리」에 사건번호와 요지를 적는 것으로 충분해요. 전자소송에서 판례를 입증서류로 올리면 서증 번호만 낭비됩니다.'),
-      files('briefFiles', '파일 업로드'),
-      note('ok', '준비서면은 소장과 달라요. 「민사소송 등에서의 전자문서 이용 등에 관한 규칙」 제11조 제1항이 "해당란에 직접 입력하거나 전자문서를 등재하는 방식"을 모두 허용해서, 전자소송에서 한글·PDF 파일로 첨부해 낼 수 있습니다. 실무에서도 파일로 내는 경우가 많아요.'),
-      note('info', '준비서면에는 기명날인 또는 서명이 필요합니다(민사소송법 제274조 제1항). 전자소송은 제출할 때 공동인증서 전자서명으로 갈음해요.'),
-      note('ok', '준비서면을 낼 때 <b>송달료를 따로 내지 않습니다.</b> 「송달료규칙의 시행에 따른 업무처리요령」 제6조 제4항이 답변서·준비서면 같은 중간 서류는 따로 예납하지 않는다고 정하고 있어요. 소장 낼 때 예납한 금액에서 씁니다.'),
-      signature(),
+      files('briefFiles', '파일 업로드', {
+        info: '판례는 파일로 올리지 않아요 — 증거도 첨부서류도 아니라서 본문 「관련 법리」에 사건번호와 요지만 적으면 됩니다.\n준비서면 자체는 전자소송에서 한글·PDF로 첨부해 낼 수 있어요. (전자문서규칙 제11조 제1항)\n제출할 때 돈은 따로 들지 않습니다 — 소장 낼 때 넣어 둔 송달료에서 나가요.',
+      }),
+      { ...signature(), info: '준비서면에는 기명날인 또는 서명이 필요해요(민사소송법 제274조 제1항). 전자소송은 제출할 때 공동인증서 전자서명으로 갈음합니다.' },
     ],
   },
 ]
@@ -200,6 +238,7 @@ export const briefCompleteness = (form) => completenessOf(briefSteps, form)
 export const briefSummary = (i, form) => summaryOf(briefSteps[i], form)
 
 export const emptyBrief = {
+  opponentText: '', opponentFiles: [],
   court: '', caseNo: '', caseName: '', plaintiff: '', defendant: '',
   side: '원고', stage: '', round: '', dueDate: '',
   opponentDoc: '', opponentDate: '', opponentClaim: '', defenses: [], admitted: '',

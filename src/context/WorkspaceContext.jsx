@@ -4,7 +4,7 @@ import {
   listCases, caseSummary, saveComplaintAsCase, setCaseStatus, removeCase,
   addTodo, toggleTodo, updateTodo, removeTodo,
   addUserEvent, removeEvent, linkPrecedent, unlinkPrecedent, attachDoc, setFiling,
-  setEvidenceStatus, updateEvidence,
+  setEvidenceStatus, updateEvidence, createCase, casePrecedentNos,
 } from '../lib/casebook.js'
 
 const WorkspaceContext = createContext(null)
@@ -28,11 +28,12 @@ export function WorkspaceProvider({ children }) {
   // 담아둔 판례는 새로고침해도 남아야 한다.
   // 판례 검색에서 담고 → 문서 생성으로 넘어가는 흐름 자체가 페이지를 오가는 일이라,
   // 메모리에만 두면 사용자가 담은 게 사라진 것처럼 보인다.
+  // 저장(북마크)은 사건과 무관한 개인 목록이라 전역이 맞다.
+  // 인용은 다르다 — **문서에 실제로 들어가는 것**이라 사건에 매여야 한다.
+  // 전에는 둘 다 전역이라, A사건에서 담은 판례가 B사건 준비서면에 인용됐다.
   const [savedNos, setSavedNos] = useState(() => readNos('naholo_saved_precedents'))
-  const [citedNos, setCitedNos] = useState(() => readNos('naholo_cited_precedents'))
 
   useEffect(() => { writeNos('naholo_saved_precedents', savedNos) }, [savedNos])
-  useEffect(() => { writeNos('naholo_cited_precedents', citedNos) }, [citedNos])
 
   const refreshCases = useCallback(() => setMyCases(listCases()), [])
 
@@ -49,6 +50,13 @@ export function WorkspaceProvider({ children }) {
   const updateStatus = useCallback((id, status) => {
     setCaseStatus(id, status)
     setMyCases(listCases())
+  }, [])
+
+  /** 소장 없이 사건만 먼저 등록한다 */
+  const addCase = useCallback((fields) => {
+    const c = createCase(fields)
+    if (c) { setMyCases(listCases()); setActiveCaseId(c.id) }
+    return c
   }, [])
 
   const dropCase = useCallback((id) => {
@@ -103,16 +111,23 @@ export function WorkspaceProvider({ children }) {
     setSavedNos((s) => (s.includes(no) ? s.filter((x) => x !== no) : [...s, no]))
   }, [])
 
-  const addCitation = useCallback((no) => {
-    setCitedNos((c) => (c.includes(no) ? c : [...c, no]))
-  }, [])
+  /** 인용은 지금 보고 있는 사건에 담긴다. 사건이 없으면 담을 곳이 없다. */
+  const addCitation = useCallback((no, title = '') => {
+    if (!activeCaseId) return false
+    linkPrecedent(activeCaseId, no, title)
+    setMyCases(listCases())
+    return true
+  }, [activeCaseId])
 
   const removeCitation = useCallback((no) => {
-    setCitedNos((c) => c.filter((x) => x !== no))
-  }, [])
+    if (!activeCaseId) return
+    unlinkPrecedent(activeCaseId, no)
+    setMyCases(listCases())
+  }, [activeCaseId])
 
   const byNo = (no) => precedents.find((p) => p.no === no)
   const savedList = savedNos.map(byNo).filter(Boolean)
+  const citedNos = activeRaw ? casePrecedentNos(activeRaw) : []
   const citedList = citedNos.map(byNo).filter(Boolean)
 
   return (
@@ -123,7 +138,7 @@ export function WorkspaceProvider({ children }) {
         activeCase, activeCaseId: activeCase?.id ?? null, setActiveCaseId,
         activeRaw,                        // 원본 (form 포함) — 증거·절차 화면에서 쓴다
         rawCases: myCases,                // 사건 상세는 요약이 아니라 원본이 필요하다
-        saveCase, updateStatus, dropCase, refreshCases,
+        saveCase, addCase, updateStatus, dropCase, refreshCases,
         ...caseActions,
         // 판례
         savedNos, toggleSave,
