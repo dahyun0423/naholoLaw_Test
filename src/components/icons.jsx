@@ -19,11 +19,42 @@ const make = (paths) => function Icon({ size = 20, className = '', ...rest }) {
 }
 
 export const Logo = ({ size = 30, className = '' }) => (
-  <svg width={size} height={size} viewBox="0 0 32 32" fill="none" className={className}>
-    <path d="M16 5 L26 13 V26 H6 V13 Z" fill="#e8f3ff" stroke="#64a8ff" strokeWidth="2" strokeLinejoin="round" />
-    <path d="M16 13 v8 M11 17 h10" stroke="#64a8ff" strokeWidth="2" strokeLinecap="round" />
-    <circle cx="16" cy="11.5" r="1.6" fill="#64a8ff" />
-  </svg>
+  <img
+    width={size}
+    height={size}
+    src="/figma/landing/logo.svg"
+    alt=""
+    aria-hidden="true"
+    className={`block shrink-0 ${className}`}
+  />
+)
+
+// Figma 1696:27821 — symbol + Paperlogy wordmark are one brand lockup.
+// Keep the geometry here so headers and sidebars cannot silently drift apart.
+export const BrandLogo = ({
+  markSize = 30,
+  wordmarkSize = 18,
+  gap = 8,
+  className = '',
+}) => (
+  <span
+    className={`inline-flex shrink-0 items-center text-brand-300 ${className}`}
+    style={{ gap }}
+  >
+    <Logo size={markSize} />
+    <span
+      className="whitespace-nowrap"
+      style={{
+        fontFamily: 'Paperlogy, Pretendard, sans-serif',
+        fontSize: wordmarkSize,
+        fontWeight: 700,
+        letterSpacing: '-0.025em',
+        lineHeight: 1.6,
+      }}
+    >
+      나홀로법에
+    </span>
+  </span>
 )
 
 export const Home = make(<><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /></>)

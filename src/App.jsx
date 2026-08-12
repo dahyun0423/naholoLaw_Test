@@ -22,6 +22,37 @@ import Notifications from './pages/Notifications.jsx'
 import Guide from './pages/Guide.jsx'
 import MyPage from './pages/MyPage.jsx'
 
+function FigmaCaptureBridge() {
+  useEffect(() => {
+    if (!import.meta.env.DEV || !window.location.hash.includes('figmacapture=')) return undefined
+    const root = document.documentElement
+    const body = document.body
+    const before = { rootWidth: root.style.width, rootMinWidth: root.style.minWidth, bodyWidth: body.style.width, bodyMinWidth: body.style.minWidth, bodyMinHeight: body.style.minHeight }
+    root.style.width = '1440px'
+    root.style.minWidth = '1440px'
+    body.style.width = '1440px'
+    body.style.minWidth = '1440px'
+    body.style.minHeight = '1024px'
+    const timer = window.setTimeout(() => {
+      if (document.querySelector('script[data-figma-capture]')) return
+      const script = document.createElement('script')
+      script.src = 'https://mcp.figma.com/mcp/html-to-design/capture.js'
+      script.async = true
+      script.dataset.figmaCapture = 'true'
+      document.head.appendChild(script)
+    }, 1200)
+    return () => {
+      window.clearTimeout(timer)
+      root.style.width = before.rootWidth
+      root.style.minWidth = before.rootMinWidth
+      body.style.width = before.bodyWidth
+      body.style.minWidth = before.bodyMinWidth
+      body.style.minHeight = before.bodyMinHeight
+    }
+  }, [])
+  return null
+}
+
 function ScrollManager() {
   const { pathname, hash } = useLocation()
   useEffect(() => {
@@ -38,6 +69,7 @@ export default function App() {
   return (
     <>
       <ScrollManager />
+      <FigmaCaptureBridge />
       <Routes>
         <Route element={<PublicLayout />}>
           <Route path="/" element={<Landing />} />

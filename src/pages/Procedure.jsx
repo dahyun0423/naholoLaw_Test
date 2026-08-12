@@ -20,7 +20,7 @@ import { useWorkspace } from '../context/WorkspaceContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
 import { caseFlow, flowIndex, caseTasks, caseTitle } from '../lib/casebook.js'
 import { stampFee, serviceFee, won, fmtDate, findType, completeness, savedAgo, SERVICE_FEE_IS_ESTIMATE } from '../lib/complaint.js'
-import { Check, Clock, Folder, Upload, FileText, AlertTriangle, ArrowRight } from '../components/icons.jsx'
+import { Check, FileText, AlertTriangle, ArrowRight, ArrowLeft } from '../components/icons.jsx'
 
 /**
  * 사건 고르기 카드 — Figma 문서 유형 카드와 같은 컴포넌트를 쓴다.
@@ -70,6 +70,13 @@ function CasePick({ c, sum, onPick }) {
     </button>
   )
 }
+
+/** Figma 「numbering」 — 곁정보 카드 세 장을 1·2·3으로 세어 준다 */
+const StepNum = ({ n }) => (
+  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand-50 text-[13px] font-bold text-brand-300">
+    {n}
+  </span>
+)
 
 /**
  * 단계마다 걸리는 **법정 기한**.
@@ -141,10 +148,14 @@ const GUIDE = {
 
 export default function Procedure() {
   const { activeCase, activeRaw, rawCases, myCases, setActiveCaseId } = useWorkspace()
-  // Figma 「소송절차안내」 시작 화면 — 어느 사건의 절차인지부터 고른다.
-  // 절차는 사건마다 다르므로, 사건을 안 고른 채로 단계를 보여주면 남의 절차를 읽는 셈이다.
-  const [chosen, setChosen] = useState(false)
-  const mine = !!activeRaw
+  // Figma 「소송절차안내」 시작 화면 — 사건이 있으면 어느 사건의 절차인지부터 고른다.
+  // 절차의 **내용**은 사건마다 크게 다르지 않다. 다른 건 "지금 어디냐"뿐이다.
+  // 그래서 사건이 없으면 문을 잠그지 않고, 아직 아무 칸도 지나지 않은 상태로
+  // 일반 민사 소송 절차를 그대로 보여준다. 절차를 알아야 사건을 만들 마음이 든다.
+  //   pick : 사건 고르기   ·   case : 고른 사건의 절차   ·   general : 사건 없는 기본 절차
+  const [mode, setMode] = useState(() => (rawCases.length === 0 ? 'general' : 'pick'))
+  const general = mode === 'general'
+  const mine = !general && !!activeRaw
 
   const steps = mine ? caseFlow(activeRaw) : caseFlow(null)
   const cur = mine ? flowIndex(activeRaw) : 0
@@ -165,28 +176,7 @@ export default function Procedure() {
 
 
 
-  if (rawCases.length === 0) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-ink-900">소송 절차 안내</h1>
-          <p className="mt-1 text-sm text-ink-500">소송 진행 단계를 한눈에 확인하고 다음 단계를 준비하세요</p>
-        </div>
-        <Card className="grid place-items-center gap-4 px-6 py-16 text-center">
-          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-brand-50 text-brand-300"><FileText size={24} /></span>
-          <p className="text-lg font-bold text-ink-900">먼저 사건을 만들어 주세요</p>
-          <p className="max-w-md text-[13px] leading-relaxed text-ink-500">
-            절차는 사건마다 다릅니다. 어떤 소송인지·어디까지 왔는지를 알아야
-            <b className="text-ink-700"> 지금 무엇을 해야 하는지</b>를 안내할 수 있어요.
-            소장을 쓰기 시작하면 사건이 만들어집니다.
-          </p>
-          <Button as={Link} to="/app/documents" className="mt-1">소장 작성하러 가기 <ArrowRight size={16} /></Button>
-        </Card>
-      </div>
-    )
-  }
-
-  if (!chosen && rawCases.length > 0) {
+  if (mode === 'pick') {
     return (
       <div className="space-y-6">
         <div>
@@ -194,14 +184,24 @@ export default function Procedure() {
           <p className="mt-1 text-sm text-ink-500">소송 진행 단계를 한눈에 확인하고 다음 단계를 준비하세요</p>
         </div>
         <Card className="p-6">
-          <h2 className="text-[17px] font-bold text-ink-900">현재 진행 중인 소송을 선택해주세요.</h2>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-[17px] font-bold text-ink-900">현재 진행 중인 소송을 선택해주세요.</h2>
+            {/* 사건을 고르지 않고도 절차 자체는 읽을 수 있어야 한다 */}
+            <button
+              type="button"
+              onClick={() => setMode('general')}
+              className="text-[13px] font-semibold text-brand-500 hover:underline"
+            >
+              사건 없이 기본 절차만 보기
+            </button>
+          </div>
           <div className="mt-5 grid justify-items-center gap-5 sm:grid-cols-2 xl:grid-cols-3">
             {rawCases.map((c) => (
               <CasePick
                 key={c.id}
                 c={c}
                 sum={myCases.find((m) => m.id === c.id)}
-                onPick={() => { setActiveCaseId(c.id); setChosen(true) }}
+                onPick={() => { setActiveCaseId(c.id); setMode('case') }}
               />
             ))}
           </div>
@@ -212,22 +212,46 @@ export default function Procedure() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-ink-900">소송 절차 안내</h1>
-          <p className="mt-1 text-sm text-ink-500">지금 어느 단계에 있고, 그 단계에서 무엇을 해야 하는지 보여줍니다.</p>
-        </div>
-        {/* 사건 표시는 여기 한 줄뿐 — 아래에 배너를 또 두지 않는다 */}
-        <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-ink-200 bg-white px-4 py-2.5">
-          <FileText size={15} className="shrink-0 text-brand-300" />
-          <span className="text-[13px] font-bold text-ink-900">
-            {mine ? caseTitle(activeRaw) : activeCase?.title || '예시 사건'}
+      <div>
+        {/* Figma: 제목 위 한 줄. 사건이 없으면 돌아갈 곳이 없으니 대신 무엇을 보고 있는지 밝힌다 */}
+        {rawCases.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setMode('pick')}
+              className="flex items-center gap-1 text-[13px] font-medium text-ink-500 hover:text-brand-500"
+            >
+              <ArrowLeft size={16} /> 사건 다시 고르기
+            </button>
+            <span className="text-[13px] text-ink-400">
+              {general ? '일반 민사 소송 절차' : caseTitle(activeRaw) || activeCase?.title}
+            </span>
+          </div>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-ink-100 px-3 py-1 text-[12px] font-semibold text-ink-600">
+            일반 민사 소송 절차
           </span>
-          <span className="text-[12px] text-ink-500">{activeRaw?.caseNo || '사건번호 없음 (접수 전)'}</span>
-          {!mine && <Badge tone="gray">예시</Badge>}
-          <button type="button" onClick={() => setChosen(false)} className="text-[12px] font-semibold text-brand-500 hover:underline">사건 바꾸기</button>
-        </div>
+        )}
+
+        <h1 className="mt-2 text-2xl font-bold text-ink-900">소송 절차 안내</h1>
+        <p className="mt-1 text-sm text-ink-500">
+          {general
+            ? '등록된 사건이 없어도 괜찮아요. 민사 소송이 어떤 순서로 흘러가는지 먼저 보여드립니다.'
+            : '지금 어느 단계에 있고, 그 단계에서 무엇을 해야 하는지 보여줍니다.'}
+        </p>
       </div>
+
+      {/* 사건이 없을 때만 — 지금 보는 것이 '내 절차'가 아니라는 걸 분명히 한다 */}
+      {general && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3">
+          <FileText size={16} className="shrink-0 text-brand-300" />
+          <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-ink-700">
+            아직 등록된 사건이 없어 <b className="font-bold">아무 단계도 지나지 않은 상태</b>로 보여드리고 있어요.
+            사건을 만들면 지금 서 있는 칸과 남은 기한이 여기에 표시됩니다.
+          </p>
+          <Button as={Link} to="/app/documents" size="sm" className="shrink-0">소장 작성하러 가기 <ArrowRight size={14} /></Button>
+        </div>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         {/* ── 주인공: 세로 진행 단계 — 전 단계를 한 번에 본다 ── */}
@@ -265,7 +289,7 @@ export default function Procedure() {
                         {s.label}
                       </h3>
                       {s.optional && <span className="text-[10px] text-ink-400">선택</span>}
-                      {now && <Badge tone="blue">지금 여기</Badge>}
+                      {now && <Badge tone="blue">지금은 여기!</Badge>}
                       {(s.done || i < cur) && !now && <Check size={13} className="text-brand-300" />}
                       <span className="text-[11px] tabular-nums text-ink-400">
                         {s.at ? fmtDate(s.at) : s.pct !== undefined && !s.done ? `${s.pct}%` : ''}
@@ -312,11 +336,14 @@ export default function Procedure() {
 
         {/* ── 곁정보 ── */}
         <div className="space-y-5">
-          <DeadlineCard step={steps[cur]} caseId={activeRaw?.id} />
+          <DeadlineCard step={steps[cur]} caseId={general ? null : activeRaw?.id} />
           <MaterialCard step={steps[cur]} />
 
           <Card className="p-5">
-            <h3 className="text-[13px] font-bold text-ink-900">도구</h3>
+            <div className="flex items-center gap-2">
+              <StepNum n={3} />
+              <h3 className="text-[15px] font-bold text-ink-900">도구</h3>
+            </div>
             <div className="mt-3 space-y-2">
               <Button size="sm" variant="neutral" className="w-full" onClick={() => setChecklist(true)}>소장 제출 전 체크리스트</Button>
               <Button size="sm" variant="neutral" className="w-full" onClick={() => setCalc(true)}>소송 비용 계산기</Button>
@@ -417,8 +444,8 @@ function DeadlineCard({ step, caseId }) {
   return (
     <Card className="p-5">
       <div className="flex items-center gap-2">
-        <Clock size={15} className="text-brand-300" />
-        <h3 className="text-[13px] font-bold text-ink-900">이 단계에서 챙길 기한</h3>
+        <StepNum n={1} />
+        <h3 className="text-[15px] font-bold text-ink-900">이 단계에서 챙길 기한</h3>
       </div>
 
       {items.length === 0 ? (
@@ -487,8 +514,8 @@ function MaterialCard({ step }) {
   return (
     <Card className="p-5">
       <div className="flex items-center gap-2">
-        <Folder size={15} className="text-brand-300" />
-        <h3 className="text-[13px] font-bold text-ink-900">이 단계 준비물</h3>
+        <StepNum n={2} />
+        <h3 className="text-[15px] font-bold text-ink-900">이 단계 준비물은?</h3>
       </div>
       <ul className="mt-3 space-y-2">
         {items.map((m) => (

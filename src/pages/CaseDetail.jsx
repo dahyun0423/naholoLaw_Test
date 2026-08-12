@@ -17,12 +17,12 @@ import { useWorkspace } from '../context/WorkspaceContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
 import {
   caseEvidence, caseTodoList, caseDocs, casePrecedentNos,
-  caseTasks, caseFlow, flowIndex, caseUpcoming, caseInsights, spineOf, overdueTodos, caseTitle,
+  caseTasks, caseFlow, flowIndex, caseUpcoming, caseInsights, spineOf, caseTitle, caseLog,
 } from '../lib/casebook.js'
 import { findType, fmtDate, savedAgo, completeness } from '../lib/complaint.js'
 import { precedents } from '../data/mock.js'
 import { Card, Button, Badge, Progress, cx } from '../components/ui.jsx'
-import CaseStatus, { LawyerNote } from '../components/CaseStatus.jsx'
+import CaseStatus, { CASE_FLOW, LawyerNote } from '../components/CaseStatus.jsx'
 import Modal from '../components/Modal.jsx'
 import Stepper from '../components/Stepper.jsx'
 import {
@@ -57,8 +57,8 @@ export default function CaseDetail() {
   return (
     <div className="space-y-6">
       <Hero c={c} onDrop={() => setDrop(true)} />
+      <ManagementOverview c={c} onOpenTodos={() => setSheet('todos')} />
       <Flow c={c} />
-      <Summary c={c} onOpen={setSheet} />
 
       {/* 기능 카드 — 하나에 목적 하나 */}
       <div className="grid gap-5 xl:grid-cols-3">
@@ -128,10 +128,64 @@ function Hero({ c, onDrop }) {
         <Stat label="현재 단계" value={stage?.label || '—'} />
         <Stat label="소장 작성" value={`${pct}%`} bar={pct} />
         <Stat label="접수까지 남은 작업" value={left} unit="건" alert={left > 0} />
+        <StatusControl c={c} />
 
         <Button size="sm" variant="ghost" className="text-ink-400" onClick={onDrop} aria-label="사건 지우기"><Trash size={15} /></Button>
       </div>
     </div>
+  )
+}
+
+function StatusControl({ c }) {
+  const { updateStatus } = useWorkspace()
+  const toast = useToast()
+  const [pending, setPending] = useState('')
+  const nextIndex = CASE_FLOW.indexOf(pending)
+  const needsFiling = nextIndex >= CASE_FLOW.indexOf('접수함') && !c.caseNo
+
+  const confirm = () => {
+    if (!pending) return
+    updateStatus(c.id, pending)
+    toast(`사건 상태를 「${pending}」으로 바꿨어요`)
+    setPending('')
+  }
+
+  return (
+    <>
+      <label className="min-w-[136px]">
+        <span className="block text-[11px] text-ink-500">사건 상태 직접 관리</span>
+        <select
+          value={c.status}
+          onChange={(e) => { if (e.target.value !== c.status) setPending(e.target.value) }}
+          className="mt-1 h-9 w-full rounded-lg border border-ink-200 bg-white px-2.5 text-[13px] font-semibold text-ink-800 outline-none transition focus:border-brand-300 focus:ring-4 focus:ring-brand-100"
+          aria-label="사건 상태 변경"
+        >
+          {CASE_FLOW.map((status) => <option key={status} value={status}>{status}</option>)}
+        </select>
+      </label>
+
+      <Modal
+        open={!!pending}
+        onClose={() => setPending('')}
+        title={`사건 상태를 「${pending}」으로 바꿀까요?`}
+        sub="변경 내용은 최근 변화와 사건 타임라인에 바로 기록됩니다."
+        footer={
+          <>
+            <Button variant="neutral" onClick={() => setPending('')}>취소</Button>
+            <Button onClick={confirm}>상태 변경</Button>
+          </>
+        }
+      >
+        <div className="rounded-xl border border-ink-200 bg-ink-50 p-4 text-[13px] leading-relaxed text-ink-600">
+          <p><b className="text-ink-800">현재 상태</b> {c.status} → <b className="text-ink-800">변경 후</b> {pending}</p>
+          {needsFiling && (
+            <p className="mt-2 text-red-500">
+              접수 이후 상태에는 법원이 부여한 사건번호가 필요합니다. 상태를 바꾸면 아래의 접수 정보 입력란이 열립니다.
+            </p>
+          )}
+        </div>
+      </Modal>
+    </>
   )
 }
 
@@ -146,6 +200,168 @@ function Stat({ label, value, unit, bar, alert }) {
     </div>
   )
 }
+
+/* ══════════════════ 첫 화면 관리 요약 ══════════════════ */
+
+function ManagementOverview({ c, onOpenTodos }) {
+  const todos = caseTodoList(c)
+  const openTodos = todos.filter((t) => !t.done)
+  const upcoming = caseUpcoming(c)
+  const nextDeadline = upcoming[0] || null
+  const docs = caseDocs(c)
+  const evidence = caseEvidence(c)
+  const readyEvidence = evidence.filter((item) => item.purpose).length
+  const recent = caseLog(c).slice(0, 4)
+
+  return (
+    <section aria-label="사건 관리 요약" className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(260px,.75fr)_minmax(280px,.8fr)]">
+      <NowCard c={c} todos={openTodos} nextDeadline={nextDeadline} onOpenTodos={onOpenTodos} />
+
+      <Card className="p-5">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-[15px] font-bold text-ink-900">자료·일정 현황</h2>
+          <span className="text-[11px] text-ink-400">이 사건 기준</span>
+        </div>
+        <div className="mt-4 divide-y divide-ink-100">
+          <OverviewLink to="/app/documents" label="문서" value={`${docs.length}개`} sub={docs[0] ? `${docs[0].title} ${docs[0].progress}%` : '아직 없음'} />
+          <OverviewLink to="/app/evidence" label="증빙자료" value={`${evidence.length}개`} sub={evidence.length ? `입증취지 ${readyEvidence}/${evidence.length}건 작성` : '아직 없음'} alert={readyEvidence < evidence.length} />
+          <OverviewLink to="/app/schedule" label="일정" value={`${upcoming.length}건`} sub={nextDeadline ? `${fmtDate(nextDeadline.due)} · ${nextDeadline.text}` : '등록된 기한 없음'} alert={nextDeadline?.dday < 0} />
+        </div>
+      </Card>
+
+      <Card className="p-5">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-[15px] font-bold text-ink-900">최근 변화</h2>
+          <span className="text-[11px] text-ink-400">자동 기록</span>
+        </div>
+        {recent.length ? (
+          <ol className="mt-4 space-y-3">
+            {recent.map((event) => (
+              <li key={event.id} className="border-l-2 border-ink-200 pl-3">
+                <p className="text-[12.5px] font-semibold leading-snug text-ink-800">{event.title}</p>
+                {event.desc && <p className="mt-0.5 line-clamp-1 text-[11.5px] text-ink-500">{event.desc}</p>}
+                <p className="mt-1 text-[10.5px] text-ink-400">{savedAgo(event.at)}</p>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="mt-4 rounded-xl bg-ink-50 px-4 py-6 text-center text-[12.5px] text-ink-500">
+            상태 변경, 할 일 완료, 문서·증빙 수정이 여기에 기록됩니다.
+          </p>
+        )}
+      </Card>
+    </section>
+  )
+}
+
+function NowCard({ c, todos, nextDeadline, onOpenTodos }) {
+  const { addTodo, toggleTodo } = useWorkspace()
+  const toast = useToast()
+  const [text, setText] = useState('')
+  const [due, setDue] = useState('')
+  const generated = caseTasks(c).find((task) => !task.done)
+
+  const add = (e) => {
+    e.preventDefault()
+    if (!text.trim()) return
+    addTodo(c.id, text, due)
+    toast('할 일을 추가했어요')
+    setText('')
+    setDue('')
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[15px] font-bold text-ink-900">지금 해야 할 일</h2>
+          <p className="mt-1 text-[12px] text-ink-500">완료하면 최근 변화에 자동으로 남습니다.</p>
+        </div>
+        {nextDeadline ? (
+          <Link
+            to="/app/schedule"
+            className={cx(
+              'rounded-lg px-2.5 py-1.5 text-right transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300',
+              nextDeadline.dday < 0 ? 'bg-red-50 text-red-500' : 'bg-brand-50 text-brand-600 hover:bg-brand-100',
+            )}
+          >
+            <span className="block text-[10.5px] font-semibold">다음 기한</span>
+            <span className="block text-[12px] font-bold tabular-nums">{deadlineLabel(nextDeadline)} · {fmtDate(nextDeadline.due)}</span>
+          </Link>
+        ) : (
+          <Link to="/app/schedule" className="rounded-lg bg-ink-50 px-2.5 py-1.5 text-[11.5px] font-semibold text-ink-500 hover:bg-ink-100">
+            기한 등록하기
+          </Link>
+        )}
+      </div>
+
+      <div className="mt-4">
+        {todos.length ? (
+          <ul className="space-y-1">
+            {todos.slice(0, 3).map((todo) => {
+              const late = todo.due && todo.due < TODAY()
+              return (
+                <li key={todo.id}>
+                  <button
+                    type="button"
+                    onClick={() => { toggleTodo(c.id, todo.id); toast('할 일을 완료했어요') }}
+                    className="group flex min-h-11 w-full items-center gap-3 rounded-xl px-2 text-left transition-colors hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+                    aria-label={`${todo.text} 완료로 표시`}
+                  >
+                    <span aria-hidden="true" className="grid h-5 w-5 shrink-0 place-items-center rounded-[6px] border border-ink-300 bg-white text-white group-hover:border-brand-300">
+                      <Check size={11} />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink-800">{todo.text}</span>
+                    {todo.due && <span className={cx('shrink-0 text-[11px] font-semibold tabular-nums', late ? 'text-red-500' : 'text-ink-500')}>{fmtDate(todo.due)}</span>}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        ) : generated ? (
+          <Link to={generated.to} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50 px-3.5 text-[13px] font-semibold text-brand-600 hover:bg-brand-100">
+            <span>{generated.label} 입력을 마무리하세요</span>
+            <span className="shrink-0 text-[11px]">빈칸 {generated.missing}개</span>
+          </Link>
+        ) : (
+          <p className="rounded-xl bg-brand-50 px-4 py-3 text-[13px] font-semibold text-brand-600">지금 등록된 할 일은 모두 끝났어요.</p>
+        )}
+      </div>
+
+      <form onSubmit={add} className="mt-4 flex flex-wrap gap-2 border-t border-ink-100 pt-4">
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="할 일 추가"
+          aria-label="새 할 일"
+          className="h-10 min-w-[180px] flex-1 rounded-lg border border-ink-200 bg-white px-3 text-[13px] text-ink-700 outline-none placeholder:text-ink-300 focus:border-brand-300 focus:ring-4 focus:ring-brand-100"
+        />
+        <input
+          type="date"
+          value={due}
+          onChange={(e) => setDue(e.target.value)}
+          aria-label="할 일 기한"
+          className="h-10 w-[142px] rounded-lg border border-ink-200 bg-white px-2.5 text-[12px] text-ink-700 outline-none focus:border-brand-300 focus:ring-4 focus:ring-brand-100"
+        />
+        <Button size="sm" type="submit" disabled={!text.trim()}>추가</Button>
+        <button type="button" onClick={onOpenTodos} className="h-10 px-2 text-[12px] font-semibold text-brand-500 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300">전체 관리</button>
+      </form>
+    </Card>
+  )
+}
+
+function OverviewLink({ to, label, value, sub, alert }) {
+  return (
+    <Link to={to} className="flex min-h-[62px] items-center gap-3 py-2.5 transition-colors hover:text-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300">
+      <span className="w-16 shrink-0 text-[12px] font-semibold text-ink-500">{label}</span>
+      <span className="w-11 shrink-0 text-right text-[17px] font-bold tabular-nums text-ink-900">{value}</span>
+      <span className={cx('min-w-0 flex-1 truncate text-[11.5px]', alert ? 'font-semibold text-red-500' : 'text-ink-500')}>{sub}</span>
+      <ChevronRight size={14} className="shrink-0 text-ink-300" />
+    </Link>
+  )
+}
+
+const deadlineLabel = (item) => item.dday < 0 ? `D+${-item.dday}` : item.dday === 0 ? '오늘' : `D-${item.dday}`
 
 /* ══════════════════ 가로 진행 스텝퍼 ══════════════════ */
 // 분쟁 발생 → 내용증명 → 소장 작성 → 법원 접수 → 변론 → 판결
@@ -163,48 +379,6 @@ function Flow({ c }) {
         current={flowIndex(c)}
       />
     </Card>
-  )
-}
-
-/* ══════════════════ Summary 카드 줄 ══════════════════ */
-// 숫자만 크게. 누르면 그 자리로 간다.
-
-function Summary({ c, onOpen }) {
-  const todos = caseTodoList(c)
-  const left = todos.filter((t) => !t.done).length
-  const late = overdueTodos(c).length
-  const soon = caseUpcoming(c).filter((t) => t.dday >= 0 && t.dday <= 7).length
-  const ev = caseEvidence(c)
-  const noPurpose = ev.filter((e) => !e.purpose).length
-  const ai = caseInsights(c).length
-
-  const cells = [
-    { label: '오늘 할 일', v: left, unit: '건', sub: todos.length ? `${todos.length - left}/${todos.length} 완료` : '아직 없음', on: () => onOpen('todos') },
-    { label: '기한 임박', v: late || soon, unit: '건', sub: late ? '기한 지남' : soon ? '7일 이내' : '없음', alert: late > 0, on: () => onOpen('todos') },
-    { label: '생성한 문서', v: caseDocs(c).length, unit: '개', sub: '문서 생성으로', to: '/app/documents' },
-    { label: '증빙자료', v: ev.length, unit: '개', sub: noPurpose ? `입증취지 ${noPurpose}개 부족` : '정리 완료', alert: noPurpose > 0, to: '/app/evidence' },
-    { label: 'AI 검토', v: ai, unit: '건', sub: ai ? '조치 필요' : '이상 없음', alert: ai > 0, on: () => onOpen('ai') },
-  ]
-
-  const cls = 'rounded-2xl border border-ink-200 bg-white px-5 py-4 text-left transition-colors hover:border-ink-300 hover:bg-ink-50'
-
-  return (
-    <div className="grid gap-4 sm:grid-cols-3 xl:grid-cols-5">
-      {cells.map((x) => {
-        const inner = (
-          <>
-            <p className="text-[11px] text-ink-500">{x.label}</p>
-            <p className={cx('mt-1.5 text-[28px] font-bold leading-none tabular-nums', x.alert ? 'text-red-500' : 'text-ink-900')}>
-              {x.v}<span className="ml-0.5 text-[13px] font-semibold text-ink-400">{x.unit}</span>
-            </p>
-            <p className={cx('mt-2 truncate text-[11px]', x.alert ? 'text-red-500' : 'text-ink-500')}>{x.sub}</p>
-          </>
-        )
-        return x.to
-          ? <Link key={x.label} to={x.to} className={cls}>{inner}</Link>
-          : <button key={x.label} type="button" onClick={x.on} className={cls}>{inner}</button>
-      })}
-    </div>
   )
 }
 
@@ -393,8 +567,11 @@ function PrecedentCard({ c }) {
 
 function FilingCard({ c }) {
   const [open, setOpen] = useState(!c.caseNo && c.status === '접수함')
+  useEffect(() => {
+    if (!c.caseNo && CASE_FLOW.indexOf(c.status) >= CASE_FLOW.indexOf('접수함')) setOpen(true)
+  }, [c.caseNo, c.status])
   return (
-    <Card className="p-5">
+    <Card id="filing" className="p-5">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

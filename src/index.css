@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "Paperlogy";
+  src: url("/fonts/Paperlogy-7Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
 /* ── 색 ────────────────────────────────────────────────────────
    Figma 「나홀로법에」 변수 컬렉션 `color` 를 그대로 옮긴 값이다.
    여기 없는 색은 화면에 쓰지 않는다 — 팔레트는 grey · blue · red 셋뿐이다.

@@ -244,12 +244,24 @@ export const caseTodoList = (c) =>
     return a.createdAt - b.createdAt
   })
 
-export function addTodo(id, text, due = '') {
+export function addTodo(id, text, due = '', meta = {}) {
   const t = String(text || '').trim()
   if (!t) return null
   return patch(id, (c) => {
     c.todos = c.todos || []
-    c.todos.push({ id: uid('td'), text: t, due, done: false, createdAt: Date.now() })
+    const duplicate = c.todos.some((item) => !item.done && item.text === t && item.due === due)
+    if (duplicate) return
+    c.todos.push({
+      id: uid('td'), text: t, due, done: false, createdAt: Date.now(),
+      ...Object.fromEntries(Object.entries(meta || {}).filter(([, value]) => value !== undefined)),
+    })
+    if (meta?.source === 'court-notice') {
+      logInto(c, {
+        kind: 'schedule', title: `법원 통지서 일정 등록 — ${t}`,
+        desc: [due, meta.time, meta.noticeName].filter(Boolean).join(' · '),
+        source: 'user', fresh: true,
+      })
+    }
   })
 }
 
@@ -353,6 +365,8 @@ export function caseEvidence(c) {
     file: f.name || `증거 ${i + 1}`,
     size: f.size ? `${(f.size / 1024 / 1024).toFixed(1)} MB` : '',
     thumb: f.thumb || '',
+    blobPathname: f.blobPathname || '',
+    url: f.url || '',
     // 입증취지는 증거목록 문서에서 채운다. 비어 있으면 그 자체가 할 일이다.
     purpose: f.purpose || '',
     // 제출 상태는 사용자가 직접 옮긴다 (법원 시스템을 조회할 수 없다)
@@ -360,12 +374,62 @@ export function caseEvidence(c) {
     tone: EVIDENCE_TONE[f.status || '미제출'],
     due: f.due || '',
     submittedAt: f.submittedAt || '',
+    createdAt: f.createdAt || f.lastModified || c?.createdAt || '',
+    updatedAt: f.updatedAt || f.createdAt || f.lastModified || c?.updatedAt || '',
+    versions: f.versions || [],
     ready: !!f.purpose,          // 증거목록에 넣을 수 있는가
   }))
 }
 
 /** 증거 중 아직 입증취지가 없는 것 — 화면에서 "할 일"로 보여준다 */
 export const evidenceTodo = (c) => caseEvidence(c).filter((e) => !e.purpose)
+
+/* ─────────────────── 증빙자료 서류 종류 ───────────────────
+   자료는 사건별로 묶고, 그 안에서 서류 종류로 나눈다 — 종이 서류철과 같은 순서다.
+   사용자가 종류를 일일이 고르게 하면 대부분 '기타'에 쌓이므로, 파일명으로 먼저 짐작하고
+   틀렸으면 옮길 수 있게 한다. 순서가 곧 우선순위다 — 위에서부터 먼저 맞는 것을 쓴다. */
+
+export const EVIDENCE_KINDS = [
+  { key: 'complaint', name: '소장·서면', hint: '소장·준비서면·답변서·신청서', match: /소장|준비서면|답변서|신청서|증거목록|의견서|보정/ },
+  { key: 'contract', name: '계약서', hint: '계약서·약정서·차용증', match: /계약|약정|차용|각서|합의/ },
+  { key: 'receipt', name: '영수증·입금증', hint: '영수증·입금증·거래내역', match: /영수증|입금|송금|이체|납부|거래내역|명세|견적|계산서|정산/ },
+  { key: 'chat', name: '대화기록', hint: '카톡·문자·통화·이메일', match: /카톡|카카오|문자|메시지|메신저|통화|녹취|녹음|메일/ },
+  { key: 'photo', name: '사진', hint: '현장·하자 사진', match: /사진|이미지|캡처|\.(jpe?g|png|gif|webp|heic)$/i },
+  { key: 'etc', name: '기타 자료', hint: '어디에도 들지 않는 자료', match: null },
+]
+
+export const evidenceKindName = (key) => EVIDENCE_KINDS.find((k) => k.key === key)?.name || '기타 자료'
+
+/** 파일명으로 서류 종류를 짐작한다. 못 맞히면 '기타 자료'다 — 빈 폴더보다 낫다. */
+export function evidenceKindOf(fileName = '') {
+  const name = String(fileName)
+  const hit = EVIDENCE_KINDS.find((k) => k.match && k.match.test(name))
+  return hit ? hit.key : 'etc'
+}
+
+/** 사건 하나의 증거를 서류 종류 폴더로 묶는다. 비어 있는 종류는 만들지 않는다. */
+export function caseEvidenceFolders(c) {
+  const items = caseEvidence(c)
+  return EVIDENCE_KINDS
+    .map((kind) => ({
+      key: kind.key,
+      name: kind.name,
+      tags: [],
+      files: items
+        .filter((e) => evidenceKindOf(e.file) === kind.key)
+        .map((e) => ({
+          name: e.file,
+          desc: e.purpose || `${e.code} · 입증취지 없음`,
+          size: e.size || '—',
+          date: e.submittedAt || e.due || '',
+          status: e.status,
+          thumb: e.thumb,
+          blobPathname: e.blobPathname,
+          url: e.url,
+        })),
+    }))
+    .filter((f) => f.files.length > 0)
+}
 
 /* ─────────────────── 증빙자료 상태 ───────────────────
    증거는 올려 두면 끝이 아니다. 실제로는 이렇게 움직인다.
@@ -401,6 +465,20 @@ export function updateEvidence(id, no, patchFields) {
   return patch(id, (c) => {
     const f = (c.form?.evidenceFiles || [])[no - 1]
     if (f) Object.assign(f, patchFields)
+  })
+}
+
+/**
+ * 증거 파일을 사건에서 지운다.
+ * 갑호증 번호는 순서로 매기므로 뒤 번호가 하나씩 당겨진다 — 지우기 전에 사용자에게 알린다.
+ */
+export function removeEvidence(id, no) {
+  return patch(id, (c) => {
+    const files = c.form?.evidenceFiles || []
+    const f = files[no - 1]
+    if (!f) return
+    files.splice(no - 1, 1)
+    logInto(c, { kind: 'evidence', title: `증거 삭제 — ${f.name || `갑 제${no}호증`}`, fresh: true })
   })
 }
 
@@ -512,6 +590,54 @@ const DOC_LABEL = {
   answer: '답변서',
 }
 
+/* ─────────────────── 문서의 제출 상태 ───────────────────
+   증거와 마찬가지로 문서도 "만들었다"가 끝이 아니다. 쓰고 → 낼 날을 정하고 → 낸다.
+   소장은 접수 여부가 곧 제출 상태라 사건에서 끌어오고, 나머지는 여기에 적어 둔다. */
+
+export const DOC_STATUS = ['작성 중', '제출예정', '제출완료', '보완필요']
+
+export function docMeta(c, docId) {
+  const m = (c?.docMeta || {})[docId] || {}
+  const fallback = docId === 'complaint' && (c?.filedAt || c?.caseNo) ? '제출완료' : '작성 중'
+  return {
+    status: m.status || fallback,
+    due: m.due || '',
+    submittedAt: m.submittedAt || (docId === 'complaint' ? c?.filedAt || '' : ''),
+  }
+}
+
+/** 제출 상태·기한처럼 문서에 붙는 값을 고친다 */
+export function setDocMeta(id, docId, fields) {
+  return patch(id, (c) => {
+    c.docMeta = c.docMeta || {}
+    const prev = c.docMeta[docId] || {}
+    const next = { ...prev, ...fields }
+    if (fields.status) {
+      next.submittedAt = fields.status === '제출완료' ? new Date().toISOString().slice(0, 10) : ''
+      logInto(c, { kind: 'doc', title: `${(c.docs || []).find((d) => d.id === docId)?.title || DOC_LABEL[docId] || '문서'} — ${fields.status}`, fresh: true })
+    }
+    c.docMeta[docId] = next
+    const d = (c.docs || []).find((x) => x.id === docId)
+    if (d && fields.title) d.title = fields.title
+    if (d && (fields.status === '제출완료' || fields.submittedAt)) {
+      d.versions = Array.isArray(d.versions) && d.versions.length
+        ? d.versions
+        : [{ version: 1, createdAt: d.createdAt || d.updatedAt, note: '최초 생성본' }]
+      const latest = d.versions[d.versions.length - 1]
+      latest.submittedAt = fields.submittedAt || next.submittedAt || new Date().toISOString().slice(0, 10)
+    }
+  })
+}
+
+/** 문서를 사건에서 지운다. 소장은 사건 그 자체라 지울 수 없다. */
+export function removeDoc(id, docId) {
+  if (docId === 'complaint') return null
+  return patch(id, (c) => {
+    c.docs = (c.docs || []).filter((d) => d.id !== docId)
+    if (c.docMeta) delete c.docMeta[docId]
+  })
+}
+
 export function caseDocs(c) {
   if (!c) return []
   const type = findType(c.typeKey)
@@ -525,7 +651,9 @@ export function caseDocs(c) {
     label: DOC_LABEL.complaint,
     title: type ? `${type.title} 소장` : '소장',
     progress: type ? completeness(type, form) : 0,
+    createdAt: c.createdAt,
     updatedAt: c.updatedAt,
+    versions: c.docVersions?.complaint || [],
     to: '/app/documents',
   })
 
@@ -537,7 +665,9 @@ export function caseDocs(c) {
       label: DOC_LABEL[d.kind] || '문서',
       title: d.title || DOC_LABEL[d.kind] || '문서',
       progress: d.progress ?? 0,
+      createdAt: d.createdAt || d.updatedAt,
       updatedAt: d.updatedAt,
+      versions: d.versions || [],
       to: '/app/documents',
     })
   }
@@ -550,8 +680,19 @@ export function attachDoc(id, { kind, title, progress = 0, docId }) {
     c.docs = c.docs || []
     const key = docId || kind
     const prev = c.docs.find((d) => d.id === key)
-    if (prev) Object.assign(prev, { title, progress, updatedAt: Date.now() })
-    else c.docs.push({ id: key, kind, title, progress, updatedAt: Date.now() })
+    const now = Date.now()
+    if (prev) {
+      const versions = Array.isArray(prev.versions) && prev.versions.length
+        ? [...prev.versions]
+        : [{ version: 1, createdAt: prev.createdAt || prev.updatedAt, note: '최초 생성본' }]
+      versions.push({ version: versions.length + 1, createdAt: now, note: '새로 생성한 파일' })
+      Object.assign(prev, { title, progress, updatedAt: now, versions })
+    } else {
+      c.docs.push({
+        id: key, kind, title, progress, createdAt: now, updatedAt: now,
+        versions: [{ version: 1, createdAt: now, note: '최초 생성본' }],
+      })
+    }
     logInto(c, { kind: 'doc', title: `${DOC_LABEL[kind] || '문서'} 작성` })
   })
 }

@@ -1,10 +1,11 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
-import { cases as demoCases, precedents } from '../data/mock.js'
+import { cases as demoCases, precedents, figmaWorkspaceCases } from '../data/mock.js'
 import {
   listCases, caseSummary, saveComplaintAsCase, setCaseStatus, removeCase,
   addTodo, toggleTodo, updateTodo, removeTodo,
   addUserEvent, removeEvent, linkPrecedent, unlinkPrecedent, attachDoc, setFiling,
-  setEvidenceStatus, updateEvidence, createCase, casePrecedentNos,
+  setEvidenceStatus, updateEvidence, removeEvidence, setDocMeta, removeDoc,
+  createCase, casePrecedentNos,
 } from '../lib/casebook.js'
 
 const WorkspaceContext = createContext(null)
@@ -21,9 +22,23 @@ const writeNos = (key, list) => {
   try { localStorage.setItem(key, JSON.stringify(list)) } catch { /* 저장소 접근 불가 시 무시 */ }
 }
 
+const readPrecedentItems = () => {
+  try {
+    const stored = JSON.parse(localStorage.getItem('naholo_precedent_items') || '{}')
+    const legacy = readNos('naholo_saved_precedents')
+    const seeded = Object.fromEntries(precedents.map((item) => [item.no, item]))
+    const merged = { ...seeded, ...(stored && typeof stored === 'object' ? stored : {}) }
+    legacy.forEach((no) => { if (seeded[no]) merged[no] = seeded[no] })
+    return merged
+  } catch {
+    return Object.fromEntries(precedents.map((item) => [item.no, item]))
+  }
+}
+
 export function WorkspaceProvider({ children }) {
+  const figmaPreview = import.meta.env.DEV && new URLSearchParams(window.location.search).get('figma') === '1'
   // 내가 실제로 만든 사건 (소장 작성에서 생성) — 화면들이 공유하는 한 줄기
-  const [myCases, setMyCases] = useState(() => listCases())
+  const [myCases, setMyCases] = useState(() => (figmaPreview ? figmaWorkspaceCases : listCases()))
   const [activeCaseId, setActiveCaseId] = useState(null)
   // 담아둔 판례는 새로고침해도 남아야 한다.
   // 판례 검색에서 담고 → 문서 생성으로 넘어가는 흐름 자체가 페이지를 오가는 일이라,
@@ -32,8 +47,10 @@ export function WorkspaceProvider({ children }) {
   // 인용은 다르다 — **문서에 실제로 들어가는 것**이라 사건에 매여야 한다.
   // 전에는 둘 다 전역이라, A사건에서 담은 판례가 B사건 준비서면에 인용됐다.
   const [savedNos, setSavedNos] = useState(() => readNos('naholo_saved_precedents'))
+  const [precedentItems, setPrecedentItems] = useState(readPrecedentItems)
 
   useEffect(() => { writeNos('naholo_saved_precedents', savedNos) }, [savedNos])
+  useEffect(() => { writeNos('naholo_precedent_items', precedentItems) }, [precedentItems])
 
   const refreshCases = useCallback(() => setMyCases(listCases()), [])
 
@@ -86,6 +103,9 @@ export function WorkspaceProvider({ children }) {
     saveFiling: mutate(setFiling),
     saveEvidenceStatus: mutate(setEvidenceStatus),
     saveEvidence: mutate(updateEvidence),
+    dropEvidence: mutate(removeEvidence),
+    saveDocMeta: mutate(setDocMeta),
+    dropDoc: mutate(removeDoc),
   }), [mutate])
 
   // 내 사건을 앞에, 데모 사건을 뒤에. 데모는 표시를 남겨 헷갈리지 않게 한다.
@@ -107,9 +127,21 @@ export function WorkspaceProvider({ children }) {
     return () => window.removeEventListener('storage', onStorage)
   }, [refreshCases])
 
-  const toggleSave = useCallback((no) => {
-    setSavedNos((s) => (s.includes(no) ? s.filter((x) => x !== no) : [...s, no]))
+  const registerPrecedents = useCallback((items) => {
+    const list = Array.isArray(items) ? items.filter((item) => item?.no) : []
+    if (!list.length) return
+    setPrecedentItems((current) => ({
+      ...current,
+      ...Object.fromEntries(list.map((item) => [item.no, item])),
+    }))
   }, [])
+
+  const toggleSave = useCallback((precedent) => {
+    const no = typeof precedent === 'string' ? precedent : precedent?.no
+    if (!no) return
+    if (typeof precedent === 'object') registerPrecedents([precedent])
+    setSavedNos((s) => (s.includes(no) ? s.filter((x) => x !== no) : [...s, no]))
+  }, [registerPrecedents])
 
   /** 인용은 지금 보고 있는 사건에 담긴다. 사건이 없으면 담을 곳이 없다. */
   const addCitation = useCallback((no, title = '') => {
@@ -125,7 +157,7 @@ export function WorkspaceProvider({ children }) {
     setMyCases(listCases())
   }, [activeCaseId])
 
-  const byNo = (no) => precedents.find((p) => p.no === no)
+  const byNo = (no) => precedentItems[no] || precedents.find((p) => p.no === no)
   const savedList = savedNos.map(byNo).filter(Boolean)
   const citedNos = activeRaw ? casePrecedentNos(activeRaw) : []
   const citedList = citedNos.map(byNo).filter(Boolean)
@@ -141,7 +173,7 @@ export function WorkspaceProvider({ children }) {
         saveCase, addCase, updateStatus, dropCase, refreshCases,
         ...caseActions,
         // 판례
-        savedNos, toggleSave,
+        savedNos, toggleSave, registerPrecedents,
         citedNos, addCitation, removeCitation,
         savedList, citedList,
       }}
