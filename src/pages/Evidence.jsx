@@ -77,13 +77,18 @@ export default function Evidence() {
     saveEvidenceStatus, saveEvidence, dropEvidence, saveDocMeta, dropDoc,
   } = useWorkspace()
 
-  const [view, setView] = useState(() => (figmaPreview && previewParams.get('view') === 'folder' ? 'folder' : 'list')) // 'list' | 'folder'
+  // 사건 상세에서 「파일 올리기」로 들어오면 폴더 보기의 업로드까지 한 번에 연다.
+  // 업로드 UI 자체는 여기 한 곳에만 둔다 — 두 화면에 같은 업로더를 두면 어느 사건에
+  // 올라가는지가 흐려지고, 저장공간·용량 안내도 두 벌이 된다.
+  const wantsFolder = previewParams.get('view') === 'folder'
+  const wantsUpload = previewParams.get('action') === 'upload'
+  const [view, setView] = useState(() => (wantsFolder || wantsUpload ? 'folder' : 'list')) // 'list' | 'folder'
   const [toast, setToast] = useState('')
   const [preview, setPreview] = useState(null)
   const [noticeOpen, setNoticeOpen] = useState(false)
   const [storageOpen, setStorageOpen] = useState(false)
   const [focus, setFocus] = useState(() => (initialCaseKey ? { caseKey: initialCaseKey } : null)) // 알림·URL에서 눌러 찾아간 줄
-  const [pendingExplorerAction, setPendingExplorerAction] = useState(null)
+  const [pendingExplorerAction, setPendingExplorerAction] = useState(() => (wantsUpload ? 'upload' : null))
   const explorerRef = useRef(null)
   const previewPushed = useRef(false)
   const flash = (m) => { setToast(m); setTimeout(() => setToast(''), 1800) }
@@ -94,6 +99,11 @@ export default function Evidence() {
     const frame = requestAnimationFrame(() => {
       explorerRef.current?.[pendingExplorerAction]?.()
       setPendingExplorerAction(null)
+      if (previewParams.get('action')) {
+        const next = new URLSearchParams(previewParams)
+        next.delete('action')
+        setPreviewParams(next, { replace: true })
+      }
     })
     return () => cancelAnimationFrame(frame)
   }, [view, pendingExplorerAction])

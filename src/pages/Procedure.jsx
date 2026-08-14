@@ -102,15 +102,55 @@ const DEADLINES = {
   ],
 }
 
-/** 단계마다 실제로 손에 들고 있어야 하는 것 */
-const MATERIALS = {
-  deal: ['계약서·차용증 등 원본', '이체내역·영수증', '문자·카톡 대화 기록'],
+/**
+ * 단계마다 실제로 손에 들고 있어야 하는 것.
+ *
+ * 사건 유형이 다르면 준비물도 다르다. 대여금 사건에 「임대차계약서」를 챙기라고 하면
+ * 안내가 아니라 잡음이다. 그래서 절차 공통으로 필요한 것(BASE)에 유형별로 다른 것을
+ * 덮어쓴다. 유형을 모르는 사건은 BASE만 본다.
+ *
+ * 접수·변론·판결처럼 **절차 자체가 정하는 준비물**은 유형과 무관해서 BASE에만 둔다.
+ * 분쟁 발생·내용증명·소장 작성은 무엇을 다투느냐에 따라 갈리므로 유형별로 적는다.
+ */
+const BASE_MATERIALS = {
+  deal: ['계약서 등 권리의 근거가 되는 원본', '돈이 오간 내역 (이체·영수증)', '문자·카톡 대화 기록'],
   notice: ['내용증명 3부 (상대방·우체국·본인)', '배달증명 영수증'],
   draft: ['당사자 인적사항 (주소·주민등록번호)', '갑호증으로 낼 자료', '인지대·송달료'],
   file: ['소장 정본 1부 + 부본 (피고 수만큼)', '증거 사본 (피고 수 + 1부)', '인지·송달료 납부 영수증'],
   trial: ['상대방 답변서·준비서면', '반박할 증거', '준비서면 (상대방 수 + 1부)'],
   judge: ['판결정본', '송달증명원·확정증명원', '(강제집행 시) 집행문'],
 }
+
+const MATERIALS_BY_TYPE = {
+  deposit: {
+    deal: ['임대차계약서 원본', '보증금 입금증·이체내역', '목적물 인도 당시 사진', '전입세대확인서·확정일자'],
+    notice: ['내용증명 3부 (임대인·우체국·본인)', '배달증명 영수증', '임차권등기명령 신청 검토'],
+    draft: ['당사자 인적사항', '임대차계약서·입금증·인도 사진 (갑호증)', '공제 주장에 대한 반박 자료', '인지대·송달료'],
+  },
+  loan: {
+    deal: ['차용증·금전소비대차계약서', '대여금 계좌이체 확인증', '변제 독촉 문자·카톡', '일부 변제가 있었다면 그 입금내역'],
+    notice: ['내용증명 3부 (채무자·우체국·본인)', '배달증명 영수증', '소액이면 지급명령(독촉)도 함께 검토'],
+    draft: ['당사자 인적사항', '차용증·이체확인증 (갑호증)', '변제기·이자 약정 정리', '인지대·송달료'],
+  },
+  wage: {
+    deal: ['근로계약서', '급여명세서·급여 이체내역', '근태기록·출퇴근 기록', '사내 메신저 등 업무 지시 내역'],
+    notice: ['고용노동부 진정 접수증·처리결과', '체불금품 확인원', '내용증명 3부 + 배달증명'],
+    draft: ['당사자 인적사항 (법인이면 법인등기부)', '근로계약서·급여내역 (갑호증)', '미지급 항목별 계산 내역', '인지대·송달료'],
+  },
+  tort: {
+    deal: ['사고사실확인원·사고 경위서', '진단서·치료비 영수증', '사진·블랙박스 영상', '휴업손해 입증자료 (급여명세서 등)'],
+    notice: ['보험사 제시액과 산정 근거', '합의 시도 기록', '내용증명 3부 + 배달증명'],
+    draft: ['당사자 인적사항', '진단서·영수증·사고자료 (갑호증)', '적극손해·일실수입·위자료 계산 내역', '인지대·송달료'],
+  },
+  evict: {
+    deal: ['임대차계약서', '차임 연체 내역', '등기사항전부증명서 (소유 확인)', '해지 통고 내용증명·배달증명'],
+    notice: ['계약 해지 통고 내용증명 3부', '배달증명 영수증', '점유이전금지가처분 신청 검토'],
+    draft: ['부동산의 표시 (등기부 기재대로)', '계약서·연체내역·해지통고 (갑호증)', '소가 산정 근거 (목적물 가액)', '인지대·송달료'],
+  },
+}
+
+const materialsFor = (typeKey, stepKey) =>
+  MATERIALS_BY_TYPE[typeKey]?.[stepKey] || BASE_MATERIALS[stepKey] || []
 
 /**
  * 단계마다 "무엇을 하는 때인가"와 "그때 할 일".
@@ -337,7 +377,7 @@ export default function Procedure() {
         {/* ── 곁정보 ── */}
         <div data-guide="procedure-side" className="space-y-5">
           <DeadlineCard step={steps[cur]} caseId={general ? null : activeRaw?.id} />
-          <MaterialCard step={steps[cur]} />
+          <MaterialCard step={steps[cur]} typeKey={mine ? activeRaw?.typeKey : ''} />
 
           <Card data-guide="procedure-tools" className="p-5">
             <div className="flex items-center gap-2">
@@ -509,8 +549,8 @@ function DeadlineCard({ step, caseId }) {
 
 /* ══════════════ 이 단계 준비물 ══════════════ */
 
-function MaterialCard({ step }) {
-  const items = MATERIALS[step?.key] || []
+function MaterialCard({ step, typeKey }) {
+  const items = materialsFor(typeKey, step?.key)
   return (
     <Card className="p-5">
       <div className="flex items-center gap-2">

@@ -397,21 +397,95 @@ export function resolveCounted(counted, servedOn) {
   }
 }
 
-export async function readCourtNoticeFile(file) {
-  if (!file) throw new Error('파일을 선택해 주세요.')
-  if (file.type === 'text/plain' || /\.txt$/i.test(file.name)) return file.text()
-  if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
-    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
-    const worker = await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')
-    pdfjs.GlobalWorkerOptions.workerSrc = worker.default
-    const pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise
+const readableText = (value) => String(value || '').replace(/\s/g, '').length >= 20
+
+async function loadPdf(file) {
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+  const worker = await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')
+  pdfjs.GlobalWorkerOptions.workerSrc = worker.default
+  return pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise
+}
+
+async function pdfText(pdf, onProgress) {
+  const pages = []
+  for (let pageNo = 1; pageNo <= pdf.numPages; pageNo += 1) {
+    onProgress?.({ stage: 'extract', progress: pageNo / pdf.numPages, page: pageNo, pages: pdf.numPages })
+    const page = await pdf.getPage(pageNo)
+    const content = await page.getTextContent()
+    pages.push(content.items.map((item) => item.str).join(' '))
+  }
+  return pages.join('\n')
+}
+
+async function renderPdfPages(pdf, onProgress) {
+  const canvases = []
+  for (let pageNo = 1; pageNo <= pdf.numPages; pageNo += 1) {
+    onProgress?.({ stage: 'render', progress: pageNo / pdf.numPages, page: pageNo, pages: pdf.numPages })
+    const page = await pdf.getPage(pageNo)
+    const viewport = page.getViewport({ scale: 2 })
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.ceil(viewport.width)
+    canvas.height = Math.ceil(viewport.height)
+    await page.render({ canvas, canvasContext: canvas.getContext('2d'), viewport }).promise
+    canvases.push(canvas)
+  }
+  return canvases
+}
+
+async function recognizeImages(images, onProgress) {
+  const { createWorker } = await import('tesseract.js')
+  let currentPage = 0
+  const worker = await createWorker('kor+eng', undefined, {
+    logger: (message) => {
+      if (message.status !== 'recognizing text') return
+      const pageProgress = Number(message.progress || 0)
+      onProgress?.({
+        stage: 'ocr',
+        page: currentPage + 1,
+        pages: images.length,
+        progress: (currentPage + pageProgress) / images.length,
+      })
+    },
+  })
+
+  try {
     const pages = []
-    for (let pageNo = 1; pageNo <= pdf.numPages; pageNo += 1) {
-      const page = await pdf.getPage(pageNo)
-      const content = await page.getTextContent()
-      pages.push(content.items.map((item) => item.str).join(' '))
+    for (currentPage = 0; currentPage < images.length; currentPage += 1) {
+      const result = await worker.recognize(images[currentPage], { rotateAuto: true })
+      pages.push(result.data.text || '')
     }
     return pages.join('\n')
+  } finally {
+    await worker.terminate()
   }
-  throw new Error('텍스트 PDF 또는 TXT 파일만 분석할 수 있습니다. 종이로 받은 통지서는 스캔해도 글자가 없어 읽지 못하니, 내용을 붙여 넣어 주세요.')
+}
+
+/**
+ * 통지서 파일을 브라우저 안에서 읽는다.
+ *
+ * 텍스트 PDF는 빠르게 글자 레이어를 읽고, 글자 레이어가 없는 스캔 PDF와
+ * JPG·PNG는 한국어+영어 OCR로 전환한다. 원본 파일은 서버로 업로드하지 않는다.
+ */
+export async function readCourtNoticeFile(file, { onProgress } = {}) {
+  if (!file) throw new Error('파일을 선택해 주세요.')
+
+  if (file.type === 'text/plain' || /\.txt$/i.test(file.name)) {
+    onProgress?.({ stage: 'extract', progress: 1, page: 1, pages: 1 })
+    return { text: await file.text(), method: 'text', pages: 1 }
+  }
+
+  if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+    const pdf = await loadPdf(file)
+    const text = await pdfText(pdf, onProgress)
+    if (readableText(text)) return { text, method: 'pdf-text', pages: pdf.numPages }
+
+    const images = await renderPdfPages(pdf, onProgress)
+    return { text: await recognizeImages(images, onProgress), method: 'ocr', pages: pdf.numPages }
+  }
+
+  if (/^image\/(?:png|jpe?g)$/i.test(file.type) || /\.(?:png|jpe?g)$/i.test(file.name)) {
+    return { text: await recognizeImages([file], onProgress), method: 'ocr', pages: 1 }
+  }
+
+  throw new Error('PDF, JPG, PNG 또는 TXT 파일만 분석할 수 있습니다.')
 }

@@ -225,7 +225,7 @@ function ManagementOverview({ c, onOpenTodos }) {
         </div>
         <div className="mt-4 divide-y divide-ink-100">
           <OverviewLink to="/app/documents" label="문서" value={`${docs.length}개`} sub={docs[0] ? `${docs[0].title} ${docs[0].progress}%` : '아직 없음'} />
-          <OverviewLink to="/app/evidence" label="증빙자료" value={`${evidence.length}개`} sub={evidence.length ? `입증취지 ${readyEvidence}/${evidence.length}건 작성` : '아직 없음'} alert={readyEvidence < evidence.length} />
+          <OverviewLink to={`/app/evidence?case=${c.id}`} label="증빙자료" value={`${evidence.length}개`} sub={evidence.length ? `입증취지 ${readyEvidence}/${evidence.length}건 작성` : '아직 없음'} alert={readyEvidence < evidence.length} />
           <OverviewLink to="/app/schedule" label="일정" value={`${upcoming.length}건`} sub={nextDeadline ? `${fmtDate(nextDeadline.due)} · ${nextDeadline.text}` : '등록된 기한 없음'} alert={nextDeadline?.dday < 0} />
         </div>
       </Card>
@@ -577,7 +577,21 @@ function EvidenceCard({ c }) {
   const ev = caseEvidence(c)
   const ok = ev.filter((e) => e.purpose).length
   return (
-    <Tile icon={Folder} title="증빙자료" right={<Count>{ev.length}개</Count>} foot={<Go to="/app/evidence">증빙자료에서 보기</Go>}>
+    <Tile
+      icon={Folder}
+      title="증빙자료"
+      right={<Count>{ev.length}개</Count>}
+      foot={(
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <Go to={`/app/evidence?case=${c.id}`}>증빙자료에서 보기</Go>
+          {/* 업로드 화면을 여기 통째로 들이지 않는다 — 이 카드의 목적은 「얼마나 모였나」다.
+              대신 그 사건이 선택된 폴더 보기의 업로드를 바로 열어 준다. */}
+          <Link to={`/app/evidence?case=${c.id}&view=folder&action=upload`} className="inline-flex items-center gap-1 text-[12px] font-semibold text-ink-500 hover:text-brand-500 hover:underline">
+            <Plus size={12} /> 파일 올리기
+          </Link>
+        </span>
+      )}
+    >
       {ev.length === 0 ? <Blank>소장 6단계에서 올리면 모여요</Blank> : (
         <>
           <div className="flex items-baseline gap-2">

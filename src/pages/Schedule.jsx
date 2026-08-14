@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Card, Badge, Button, KebabMenu, cx } from '../components/ui.jsx'
 import Modal from '../components/Modal.jsx'
 import { useWorkspace } from '../context/WorkspaceContext.jsx'
@@ -42,44 +42,51 @@ const remindOf = (form) => (form.remindOn ? Number(form.remindDays) : null)
  * 「수정하기」로 입력칸을 펼친다. 처음부터 입력칸을 늘어놓으면 무엇이
  * 읽혔는지 확인하기 어렵다.
  */
-function NoticeResultCard({ item, caseName, caseNo, editing, onEdit, onChange, onDrop }) {
+function NoticeResultCard({ item, caseName, caseNo, editing, selected, onSelect, onChange }) {
   const type = scheduleType(item.typeKey)
   const rows = [
     ['날짜', item.date ? `${fmtDate(item.date)} ${weekdayOf(item.date)}요일${item.time ? ` ${item.time}` : ''}` : '—'],
     item.place && ['장소', item.place],
     ['관련 사건', caseName],
     caseNo && ['사건번호', caseNo],
-    ['알림', remindLabel(type.remind)],
+    ['알림', `기일 ${remindLabel(type.remind)} · 1일 전`],
   ].filter(Boolean)
 
   return (
-    <div className="rounded-2xl border border-ink-200 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-[18px] font-semibold leading-[1.6] text-ink-900">{item.title}</p>
-          <p className="text-[14px] font-medium leading-[1.6] text-ink-500">{item.date ? fmtDate(item.date) : '날짜 미정'}</p>
-        </div>
-        <span className={cx(
-          'inline-flex shrink-0 items-center gap-1 rounded-xl px-3 py-1',
-          type.tone === 'red' ? 'bg-red-50 text-red-500' : type.tone === 'brand' ? 'bg-brand-50 text-brand-500' : 'bg-ink-100 text-ink-600',
-        )}>
-          <span className="h-1 w-1 rounded-full bg-current" aria-hidden="true" />
-          <span className="text-[13px] font-semibold leading-[1.6]">{type.label}</span>
-        </span>
-      </div>
-
-      <dl className="mt-3 space-y-3 rounded-xl bg-ink-50 p-4">
-        {rows.map(([label, value]) => (
-          <div key={label} className="flex gap-2.5">
-            <dt className="w-[70px] shrink-0 text-[14px] font-medium leading-[1.6] text-ink-500">{label}</dt>
-            <dd className="min-w-0 text-[16px] font-semibold leading-[1.6] text-ink-600">{value}</dd>
+    <div
+      className={cx(
+        'w-full rounded-2xl p-0 text-left outline-none transition-shadow',
+        selected && 'ring-2 ring-brand-200 ring-offset-2',
+      )}
+    >
+      <button type="button" onClick={onSelect} className="w-full rounded-2xl text-left outline-none focus-visible:ring-2 focus-visible:ring-brand-300">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-[18px] font-semibold leading-[1.6] text-ink-900">{item.title}</p>
+            <p className="text-[13px] font-medium leading-[1.6] text-ink-400">{item.date ? fmtDate(item.date) : '날짜 미정'}</p>
           </div>
-        ))}
-      </dl>
+          <span className={cx(
+            'inline-flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1',
+            type.tone === 'red' ? 'bg-red-50 text-red-500' : type.tone === 'brand' ? 'bg-brand-50 text-brand-500' : 'bg-ink-100 text-ink-600',
+          )}>
+            <span className="h-1 w-1 rounded-full bg-current" aria-hidden="true" />
+            <span className="text-[12px] font-semibold leading-[1.6]">{type.label}</span>
+          </span>
+        </div>
 
-      {item.note && <p className="mt-2 text-xs text-ink-500">{item.note}</p>}
+        <dl className="mt-3 space-y-3 rounded-xl bg-ink-50 p-4">
+          {rows.map(([label, value]) => (
+            <div key={label} className="flex gap-2.5">
+              <dt className="w-[72px] shrink-0 text-[13px] font-medium leading-[1.6] text-ink-400">{label}</dt>
+              <dd className="min-w-0 text-[14px] font-medium leading-[1.6] text-ink-700">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </button>
+
+      {item.note && <p className="mt-2 text-xs font-medium text-ink-500">{item.note}</p>}
       {item.basis && (
-        <p className="mt-1 text-xs text-ink-400">
+        <p className="mt-1 text-xs font-medium text-ink-400">
           근거: {item.basis}
           {item.basisUrl && <a href={item.basisUrl} target="_blank" rel="noopener noreferrer" className="ml-1 inline-flex items-center gap-0.5 font-semibold text-brand-500 hover:underline">원문 <ExternalLink size={10} /></a>}
         </p>
@@ -91,22 +98,18 @@ function NoticeResultCard({ item, caseName, caseNo, editing, onEdit, onChange, o
       )}
 
       {editing && (
-        <div className="mt-3 grid gap-2 rounded-xl border border-ink-200 p-3 sm:grid-cols-[minmax(0,1fr)_140px_110px]">
-          <input value={item.title} onChange={(event) => onChange({ title: event.target.value })} className="h-10 min-w-0 rounded-lg border border-ink-200 px-3 text-sm" aria-label="일정 제목" />
-          <input type="date" value={item.date} onChange={(event) => onChange({ date: event.target.value })} className="h-10 rounded-lg border border-ink-200 px-2 text-sm" aria-label="일정 날짜" />
-          <input type="time" value={item.time || ''} onChange={(event) => onChange({ time: event.target.value })} className="h-10 rounded-lg border border-ink-200 px-2 text-sm" aria-label="일정 시간" />
+        <div className="mt-3 grid gap-2 rounded-xl border border-ink-200 p-3 sm:grid-cols-[minmax(0,1fr)_140px_110px]" onClick={(event) => event.stopPropagation()}>
+          <input value={item.title} onChange={(event) => onChange({ title: event.target.value })} className="h-10 min-w-0 rounded-lg border border-ink-200 px-3 text-sm font-medium outline-none focus:border-brand-300" aria-label="일정 제목" />
+          <input type="date" value={item.date} onChange={(event) => onChange({ date: event.target.value })} className="h-10 rounded-lg border border-ink-200 px-2 text-sm font-medium outline-none focus:border-brand-300" aria-label="일정 날짜" />
+          <input type="time" value={item.time || ''} onChange={(event) => onChange({ time: event.target.value })} className="h-10 rounded-lg border border-ink-200 px-2 text-sm font-medium outline-none focus:border-brand-300" aria-label="일정 시간" />
         </div>
       )}
-
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <Button size="sm" variant="danger" onClick={onDrop}><Trash size={16} /> 삭제</Button>
-        <Button size="sm" variant="neutral" onClick={onEdit}>{editing ? '수정 마치기' : '수정하기'}</Button>
-      </div>
     </div>
   )
 }
 
 export default function Schedule() {
+  const fileInputRef = useRef(null)
   const today = todayValue()
   const {
     rawCases, activeRaw, setActiveCaseId, addTodo, updateTodo, removeTodo,
@@ -120,12 +123,16 @@ export default function Schedule() {
   const [toast, setToast] = useState('')
   const [manual, setManual] = useState(() => blankManual(today, activeRaw?.id || rawCases[0]?.id || ''))
   const [importing, setImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState({ stage: 'idle', value: 0 })
+  const [importFile, setImportFile] = useState(null)
   const [importError, setImportError] = useState('')
   const [notice, setNotice] = useState(null)
   const [pasted, setPasted] = useState('')
   const [importCaseId, setImportCaseId] = useState(activeRaw?.id || rawCases[0]?.id || '')
   const [servedOn, setServedOn] = useState(today)   // 통지서 기한을 세는 기산일
   const [editingRow, setEditingRow] = useState(null) // 결과 카드 중 입력칸을 펼친 것
+  const [selectedNoticeRowId, setSelectedNoticeRowId] = useState('')
+  const [noticeDel, setNoticeDel] = useState(null)
 
   const flash = (message) => { setToast(message); window.setTimeout(() => setToast(''), 2200) }
   const allSchedule = useMemo(() => rawCases.flatMap((c) => caseUpcoming(c).map((item) => ({
@@ -214,9 +221,11 @@ export default function Schedule() {
     flash('일정을 삭제했습니다.')
   }
 
-  const applyExtracted = (text) => {
+  const applyExtracted = (text, meta = {}) => {
     const result = extractCourtNotice(text)
-    setNotice(result)
+    setNotice({ ...result, importMeta: meta })
+    setSelectedNoticeRowId(result.events[0]?.id || result.counted[0]?.id || '')
+    setEditingRow(null)
     if (result.caseNo) {
       const matched = rawCases.find((item) => String(item.caseNo || '').replace(/\s/g, '') === result.caseNo.replace(/\s/g, ''))
       if (matched) setImportCaseId(matched.id)
@@ -231,23 +240,58 @@ export default function Schedule() {
     }
   }
 
-  const analyzeFile = async (event) => {
-    const file = event.target.files?.[0]
+  const analyzeFile = async (source) => {
+    const file = source?.target?.files?.[0] || source
     if (!file) return
+    if (file.size > 10 * 1024 * 1024) {
+      setImportError('10MB 이하 파일만 선택해 주세요.')
+      return
+    }
     setImporting(true)
+    setImportFile({ name: file.name, size: file.size })
+    setImportProgress({ stage: 'extract', value: 0 })
     setImportError('')
     setNotice(null)
     try {
-      const text = await readCourtNoticeFile(file)
-      if (text.replace(/\s/g, '').length < 20) throw new Error('PDF에 읽을 수 있는 텍스트가 없습니다. 스캔본이면 아래에 내용을 붙여 넣어 주세요.')
+      const parsed = await readCourtNoticeFile(file, {
+        onProgress: ({ stage, progress }) => setImportProgress({ stage, value: Math.round(Number(progress || 0) * 100) }),
+      })
+      const text = parsed.text
+      if (text.replace(/\s/g, '').length < 20) throw new Error('파일에서 글자를 충분히 읽지 못했습니다. 더 선명한 파일을 선택하거나 아래에 텍스트를 붙여 넣어 주세요.')
       setPasted(text)
-      applyExtracted(text)
+      applyExtracted(text, { method: parsed.method, pages: parsed.pages, fileName: file.name })
+      setImportProgress({ stage: 'done', value: 100 })
     } catch (error) {
       setImportError(error?.message || '통지서를 읽지 못했습니다.')
+      setImportProgress({ stage: 'error', value: 0 })
     } finally {
       setImporting(false)
-      event.target.value = ''
+      if (source?.target) source.target.value = ''
     }
+  }
+
+  const closeNotice = () => {
+    setAuto(false)
+    setNotice(null)
+    setImportFile(null)
+    setImportError('')
+    setImportProgress({ stage: 'idle', value: 0 })
+    setPasted('')
+    setEditingRow(null)
+    setSelectedNoticeRowId('')
+    setNoticeDel(null)
+  }
+
+  const openNotice = () => {
+    setAuto(true)
+    setImportError('')
+    setNotice(null)
+    setImportFile(null)
+    setImportProgress({ stage: 'idle', value: 0 })
+    setImportCaseId(activeRaw?.id || rawCases[0]?.id || '')
+    setEditingRow(null)
+    setSelectedNoticeRowId('')
+    setNoticeDel(null)
   }
 
   const updateNoticeEvent = (id, fields) => setNotice((current) => ({
@@ -275,6 +319,22 @@ export default function Schedule() {
     return [...notice.events, ...counted]
   }, [notice, servedOn])
 
+  const selectedNoticeRow = noticeRows.find((item) => item.id === selectedNoticeRowId) || noticeRows[0] || null
+
+  const confirmNoticeDelete = () => {
+    if (!noticeDel) return
+    const remaining = noticeRows.filter((item) => item.id !== noticeDel.id)
+    dropNoticeRow(noticeDel.id)
+    setSelectedNoticeRowId(remaining[0]?.id || '')
+    setEditingRow(null)
+    setNoticeDel(null)
+    if (!remaining.length) {
+      setNotice(null)
+      setImportFile(null)
+      setImportProgress({ stage: 'idle', value: 0 })
+    }
+  }
+
   const saveNotice = () => {
     if (!importCaseId) { setImportError('일정을 저장할 사건을 선택해 주세요.'); return }
     const chosen = noticeRows.filter((item) => item.checked && item.title.trim() && item.date)
@@ -293,9 +353,7 @@ export default function Schedule() {
     }))
     setActiveCaseId(importCaseId)
     setSelected(chosen[0].date)
-    setAuto(false)
-    setNotice(null)
-    setPasted('')
+    closeNotice()
     flash(`${chosen.length}개 일정을 사건에 등록했습니다.`)
   }
 
@@ -306,7 +364,7 @@ export default function Schedule() {
           <h1 className="text-2xl font-bold text-ink-900">일정 관리</h1>
           <p className="mt-1 text-sm text-ink-500">내 사건의 실제 기한과 법원 통지서 일정을 한곳에서 관리하세요.</p>
         </div>
-        <Button data-guide="schedule-notice" size="sm" onClick={() => { setAuto(true); setImportError(''); setNotice(null); setImportCaseId(activeRaw?.id || rawCases[0]?.id || '') }}>
+        <Button data-guide="schedule-notice" size="sm" onClick={openNotice}>
           <Upload size={15} /> 법원 통지서 등록
         </Button>
       </div>
@@ -442,58 +500,97 @@ export default function Schedule() {
       </div>
 
       <Modal
-        open={auto} onClose={() => setAuto(false)} maxW="max-w-[720px]"
-        title="법원 통지서에서 일정 등록"
-        sub="텍스트 PDF·TXT를 이 기기에서 읽고, 선택한 일정만 사건에 저장합니다."
-        footer={<><Button variant="neutral" onClick={() => setAuto(false)}>취소</Button>{noticeRows.length > 0 && <Button onClick={saveNotice}>확인한 일정 등록</Button>}</>}
+        open={auto}
+        onClose={closeNotice}
+        maxW="max-w-[560px]"
+        variant={notice ? 'scheduleResult' : 'schedule'}
+        title={notice ? '기일통지서 분석 결과' : '법원 통지서에서 일정 자동 등록'}
+        sub={notice ? undefined : 'PDF·JPG·PNG의 글자를 이 기기에서 읽고, 분석된 일정을 사건에 저장합니다.'}
+        footer={noticeRows.length > 0 ? (
+          <div className="flex w-full items-center justify-between gap-3">
+            <Button size="sm" variant="danger" onClick={() => setNoticeDel(selectedNoticeRow)} disabled={!selectedNoticeRow}>
+              <Trash size={15} /> 삭제
+            </Button>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="neutral" onClick={() => setEditingRow(editingRow === selectedNoticeRow?.id ? null : selectedNoticeRow?.id)} disabled={!selectedNoticeRow}>
+                수정하기
+              </Button>
+              <Button size="sm" onClick={saveNotice}><CheckCircle size={15} /> 등록하기</Button>
+            </div>
+          </div>
+        ) : !notice ? (
+          <Button className="w-full" disabled={importing || !importCaseId} onClick={() => fileInputRef.current?.click()}>
+            <Upload size={16} /> {importing ? '분석 중이에요' : '통지서 선택하기'}
+          </Button>
+        ) : null}
       >
-        <div className="space-y-4">
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-ink-700">등록할 사건</span>
-            <select value={importCaseId} onChange={(event) => setImportCaseId(event.target.value)} className={inputClass}>
-              <option value="">사건을 선택하세요</option>
-              {rawCases.map((item) => <option key={item.id} value={item.id}>{caseTitle(item)}{item.caseNo ? ` · ${item.caseNo}` : ''}</option>)}
-            </select>
-          </label>
+        {!notice ? (
+          <div className="space-y-3">
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-ink-700">등록할 사건</span>
+              <select value={importCaseId} onChange={(event) => setImportCaseId(event.target.value)} className={inputClass}>
+                <option value="">사건을 선택하세요</option>
+                {rawCases.map((item) => <option key={item.id} value={item.id}>{caseTitle(item)}{item.caseNo ? ` · ${item.caseNo}` : ''}</option>)}
+              </select>
+            </label>
 
-          <label className="grid cursor-pointer place-items-center rounded-xl border-2 border-dashed border-ink-200 bg-ink-50 py-8 text-center hover:border-brand-200 hover:bg-brand-50">
-            <Upload size={28} className="text-ink-400" />
-            <span className="mt-2 text-sm font-semibold text-ink-600">{importing ? '통지서를 읽고 있습니다…' : 'PDF 또는 TXT 선택'}</span>
-            <span className="mt-1 text-xs text-ink-400">파일은 외부로 전송되지 않습니다 · 스캔 PDF는 텍스트 붙여넣기 사용</span>
-            <input type="file" accept="application/pdf,text/plain,.pdf,.txt" className="sr-only" disabled={importing} onChange={analyzeFile} />
-          </label>
-
-          <details className="rounded-xl border border-ink-200 p-3">
-            <summary className="cursor-pointer text-sm font-semibold text-ink-600">스캔본이거나 추출이 안 되나요? 통지서 텍스트 붙여넣기</summary>
-            <textarea value={pasted} onChange={(event) => setPasted(event.target.value)} rows={5} placeholder="사건번호, 통지서 종류, 날짜와 시간이 포함된 부분을 붙여 넣으세요." className="mt-3 w-full rounded-xl border border-ink-200 p-3 text-sm outline-none focus:border-brand-300 focus:ring-4 focus:ring-brand-100" />
-            <Button size="sm" variant="soft" className="mt-2" disabled={!pasted.trim()} onClick={() => { setImportError(''); applyExtracted(pasted) }}>붙여넣은 내용 분석</Button>
-          </details>
-
-          {importError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-medium text-red-500">{importError}</p>}
-
-          {notice && (
-            <div className="space-y-4">
-              {/* 기한이 있는 통지서라면 기산일부터 받는다 — 발송일이 아니라 송달일이다 */}
-              {notice.counted.length > 0 && (
-                <div className="rounded-xl border border-brand-200 bg-brand-50 p-3.5">
-                  <p className="text-sm font-semibold text-ink-800">이 통지서의 기한은 <b className="text-brand-600">송달받은 날</b>부터 셉니다</p>
-                  <p className="mt-1 text-xs leading-relaxed text-ink-600">
-                    문서에 찍힌 발송일이 아닙니다. 전자소송에서 <b className="font-semibold">등재된 문서를 확인한 날</b>이 송달일이고,
-                    확인하지 않았다면 등재사실을 통지받은 날부터 1주가 지난 날 송달된 것으로 봅니다
-                    (민사소송 등에서의 전자문서 이용 등에 관한 법률 제11조 제4항).
-                  </p>
-                  <label className="mt-2.5 block">
-                    <span className="mb-1.5 block text-xs font-semibold text-ink-700">송달받은 날</span>
-                    <input type="date" value={servedOn} onChange={(event) => setServedOn(event.target.value)} className="h-10 rounded-lg border border-ink-200 bg-white px-2 text-sm" />
-                  </label>
-                  {notice.serviceMode === 'electronic' && notice.issuedAt && (
-                    <p className="mt-1.5 text-xs text-ink-500">
-                      문서의 발송·등재일은 {fmtDate(notice.issuedAt)}입니다. 확인하지 않았다면 {fmtDate(deemedServedOn(notice.issuedAt))}이 송달간주일입니다.
-                    </p>
-                  )}
-                </div>
+            <label
+              className={cx(
+                'grid min-h-[132px] cursor-pointer place-items-center rounded-[10px] border border-dashed px-4 py-6 text-center transition-colors',
+                importing ? 'border-brand-200 bg-brand-50' : 'border-ink-200 bg-ink-50 hover:border-brand-200 hover:bg-brand-50',
               )}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => { event.preventDefault(); if (!importing) analyzeFile(event.dataTransfer.files?.[0]) }}
+            >
+              <span className="flex flex-col items-center">
+                <span className="grid h-9 w-9 place-items-center rounded-full bg-white text-ink-400 shadow-sm"><Upload size={22} /></span>
+                <span className="mt-3 text-base font-semibold text-ink-600">
+                  {importing
+                    ? importProgress.stage === 'ocr' ? `OCR로 글자를 읽는 중 ${importProgress.value}%` : '문서에서 글자를 찾는 중…'
+                    : importFile?.name || 'PDF 또는 이미지 올리기'}
+                </span>
+                <span className="mt-1 text-xs font-medium text-ink-400">PDF, JPG, PNG, TXT · 최대 10MB</span>
+                {importing && <span className="mt-3 h-1.5 w-48 overflow-hidden rounded-full bg-white"><span className="block h-full rounded-full bg-brand-300 transition-[width]" style={{ width: `${Math.max(8, importProgress.value)}%` }} /></span>}
+              </span>
+              <input ref={fileInputRef} type="file" accept="application/pdf,text/plain,image/png,image/jpeg,.pdf,.txt,.png,.jpg,.jpeg" className="sr-only" disabled={importing} onChange={analyzeFile} />
+            </label>
 
+            <div className="rounded-xl bg-brand-50 px-4 py-3.5 text-[13px] font-medium leading-[1.65] text-brand-500">
+              <p className="font-bold">자동으로 추출하는 정보</p>
+              <ul className="mt-1 space-y-0.5">
+                <li>· 사건번호 및 사건명</li>
+                <li>· 변론기일 날짜 및 시간</li>
+                <li>· 법원 정보와 재판부</li>
+                <li>· 답변서·준비서면 등의 제출 기한</li>
+              </ul>
+            </div>
+
+            <details className="group">
+              <summary className="cursor-pointer list-none text-center text-xs font-medium text-ink-400 hover:text-ink-600">직접 텍스트를 붙여넣을게요</summary>
+              <textarea value={pasted} onChange={(event) => setPasted(event.target.value)} rows={4} placeholder="사건번호, 통지서 종류, 날짜와 시간이 포함된 부분을 붙여 넣으세요." className="mt-3 w-full rounded-xl border border-ink-200 p-3 text-sm font-medium outline-none focus:border-brand-300 focus:ring-4 focus:ring-brand-100" />
+              <Button size="sm" variant="soft" className="mt-2 w-full" disabled={!pasted.trim()} onClick={() => { setImportError(''); applyExtracted(pasted, { method: 'pasted', pages: 1 }) }}>붙여넣은 내용 분석하기</Button>
+            </details>
+
+            {importError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-medium text-red-500">{importError}</p>}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex flex-col items-center text-center">
+              <span className="grid h-10 w-10 place-items-center rounded-full bg-brand-300 text-white"><CheckCircle size={25} /></span>
+              <h4 className="mt-3 text-[20px] font-semibold leading-[1.6] text-brand-400">{notice.noticeName || '기일통지서'}가 분석되었어요</h4>
+              {notice.importMeta?.method === 'ocr' && <p className="mt-1 text-xs font-medium text-ink-400">OCR 결과이므로 원문과 날짜·시간을 꼭 대조해 주세요.</p>}
+            </div>
+
+            {notice.counted.length > 0 && (
+              <div className="rounded-xl bg-brand-50 p-4">
+                <p className="text-sm font-semibold text-ink-800">기한을 계산할 송달일을 확인해 주세요</p>
+                <p className="mt-1 text-xs font-medium leading-relaxed text-ink-500">발송일이 아니라 전자소송 문서를 실제로 확인한 날을 입력합니다.</p>
+                <input type="date" value={servedOn} onChange={(event) => setServedOn(event.target.value)} className="mt-3 h-10 w-full rounded-lg border border-ink-200 bg-white px-3 text-sm font-medium outline-none focus:border-brand-300" />
+                {notice.serviceMode === 'electronic' && notice.issuedAt && <p className="mt-2 text-xs font-medium text-ink-500">확인하지 않았다면 {fmtDate(deemedServedOn(notice.issuedAt))}이 송달간주일입니다.</p>}
+              </div>
+            )}
+
+            <div className="space-y-4">
               {noticeRows.map((item) => (
                 <NoticeResultCard
                   key={item.id}
@@ -501,27 +598,26 @@ export default function Schedule() {
                   caseName={caseTitle(rawCases.find((c) => c.id === importCaseId)) || '사건을 선택하세요'}
                   caseNo={notice.caseNo}
                   editing={editingRow === item.id}
-                  onEdit={() => setEditingRow(editingRow === item.id ? null : item.id)}
+                  selected={selectedNoticeRow?.id === item.id}
+                  onSelect={() => setSelectedNoticeRowId(item.id)}
                   onChange={(fields) => updateNoticeEvent(item.id, fields)}
-                  onDrop={() => dropNoticeRow(item.id)}
                 />
               ))}
-
-              {noticeRows.length > 0 && (
-                <p className="flex items-start gap-1.5 text-xs leading-relaxed text-ink-500">
-                  <CheckCircle size={14} className="mt-0.5 shrink-0 text-brand-500" />
-                  원문과 날짜·시간을 대조한 뒤 「등록하기」를 누르세요. 계산된 기한도 통지서 원문으로 반드시 확인하세요.
-                </p>
-              )}
             </div>
-          )}
-        </div>
+
+            <p className="text-center text-xs font-medium text-ink-400">분석된 일정이 모두 선택한 사건에 등록됩니다.</p>
+            {importError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-medium text-red-500">{importError}</p>}
+          </div>
+        )}
       </Modal>
 
       <Modal
         open={add}
         onClose={() => { setAdd(false); setEditing(null) }}
+        maxW="max-w-[560px]"
+        variant="schedule"
         title={editing ? '일정 수정' : '일정 추가'}
+        sub={editing ? '바뀐 내용은 선택한 사건의 일정에 바로 반영됩니다.' : '사건과 날짜를 정하면 달력과 다가오는 일정에 함께 표시됩니다.'}
         footer={<><Button size="sm" variant="neutral" onClick={() => { setAdd(false); setEditing(null) }}>취소</Button><Button size="sm" onClick={saveManual}>{editing ? '수정하기' : '일정 추가하기'}</Button></>}
       >
         <div className="space-y-4">
@@ -588,14 +684,30 @@ export default function Schedule() {
       </Modal>
 
       <Modal
-        open={!!del} onClose={() => setDel(null)} maxW="max-w-[420px]"
-        title="일정을 삭제할까요?"
-        footer={<><Button variant="neutral" onClick={() => setDel(null)}>취소</Button><Button className="bg-red-500 hover:bg-red-600" onClick={confirmDelete}>삭제</Button></>}
+        open={!!noticeDel}
+        onClose={() => setNoticeDel(null)}
+        maxW="max-w-[420px]"
+        variant="schedule"
+        title="분석 결과에서 삭제할까요?"
+        sub="이 항목만 제외되고, 원본 통지서 파일과 다른 분석 결과는 그대로 유지됩니다."
+        footer={<><Button size="sm" variant="neutral" onClick={() => setNoticeDel(null)}>취소</Button><Button size="sm" variant="danger" onClick={confirmNoticeDelete}><Trash size={15} /> 삭제</Button></>}
       >
-        <p className="text-sm leading-relaxed text-ink-600">
-          <span className="font-semibold text-ink-800">{del?.text}</span>
-          {del?.due ? ` (${fmtDate(del.due)}${del.time ? ` ${del.time}` : ''})` : ''} 일정을 사건에서 지웁니다. 되돌릴 수 없습니다.
-        </p>
+        <div className="rounded-xl bg-ink-50 p-4">
+          <p className="text-sm font-semibold text-ink-800">{noticeDel?.title}</p>
+          <p className="mt-1 text-xs font-medium text-ink-500">{noticeDel?.date ? `${fmtDate(noticeDel.date)}${noticeDel.time ? ` ${noticeDel.time}` : ''}` : '날짜 미정'}</p>
+        </div>
+      </Modal>
+
+      <Modal
+        open={!!del} onClose={() => setDel(null)} maxW="max-w-[420px]" variant="schedule"
+        title="일정을 삭제할까요?"
+        sub="삭제하면 달력과 다가오는 일정에서 함께 사라집니다."
+        footer={<><Button size="sm" variant="neutral" onClick={() => setDel(null)}>취소</Button><Button size="sm" variant="danger" onClick={confirmDelete}><Trash size={15} /> 삭제</Button></>}
+      >
+        <div className="rounded-xl bg-ink-50 p-4">
+          <p className="text-sm font-semibold text-ink-800">{del?.text}</p>
+          <p className="mt-1 text-xs font-medium text-ink-500">{del?.due ? `${fmtDate(del.due)}${del.time ? ` ${del.time}` : ''}` : '날짜 미정'}</p>
+        </div>
       </Modal>
 
       {toast && <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-ink-900 px-5 py-2.5 text-sm font-medium text-white shadow-lg">{toast}</div>}
