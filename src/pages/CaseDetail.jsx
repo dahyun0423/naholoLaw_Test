@@ -18,6 +18,7 @@ import { useToast } from '../context/ToastContext.jsx'
 import {
   caseEvidence, caseTodoList, caseDocs, casePrecedentNos,
   caseTasks, caseFlow, flowIndex, caseUpcoming, caseInsights, spineOf, caseTitle, caseLog,
+  ENTRY_POINTS, entryPoint,
 } from '../lib/casebook.js'
 import { findType, fmtDate, savedAgo, completeness } from '../lib/complaint.js'
 import { precedents } from '../data/mock.js'
@@ -61,7 +62,7 @@ export default function CaseDetail() {
       <Flow c={c} />
 
       {/* 기능 카드 — 하나에 목적 하나 */}
-      <div className="grid gap-5 xl:grid-cols-3">
+      <div data-guide="case-cards" className="grid gap-5 xl:grid-cols-3">
         <TasksCard c={c} />
         <InsightCard c={c} />
         <ScheduleCard c={c} onOpen={() => setSheet('todos')} />
@@ -214,7 +215,7 @@ function ManagementOverview({ c, onOpenTodos }) {
   const recent = caseLog(c).slice(0, 4)
 
   return (
-    <section aria-label="사건 관리 요약" className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(260px,.75fr)_minmax(280px,.8fr)]">
+    <section data-guide="case-overview" aria-label="사건 관리 요약" className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(260px,.75fr)_minmax(280px,.8fr)]">
       <NowCard c={c} todos={openTodos} nextDeadline={nextDeadline} onOpenTodos={onOpenTodos} />
 
       <Card className="p-5">
@@ -367,8 +368,19 @@ const deadlineLabel = (item) => item.dday < 0 ? `D+${-item.dday}` : item.dday ==
 // 분쟁 발생 → 내용증명 → 소장 작성 → 법원 접수 → 변론 → 판결
 // 「진행 표시」(사용자가 누르는 상태)와 달리, 이건 사건 자체가 어디까지 왔나다.
 
+/**
+ * 사건이 어디까지 왔나.
+ *
+ * 칸을 눌러 현재 위치를 직접 옮길 수 있어야 한다. 변론이 끝났는지, 판결이 났는지는 법원 시스템에만
+ * 있고 우리는 조회할 수 없어서, 사용자가 표시하지 않으면 뒤 칸은 영원히 비어 있다.
+ * 시작 지점도 여기서 바꾼다 — 소장부터 온 사람에게 「분쟁 발생」은 이미 지난 일이다.
+ */
 function Flow({ c }) {
+  const { setFlowStep, setEntryPoint } = useWorkspace()
+  const [open, setOpen] = useState(false)
   const steps = caseFlow(c)
+  const entry = entryPoint(c)
+
   return (
     <Card className="px-6 pb-6 pt-7">
       <Stepper
@@ -377,7 +389,45 @@ function Flow({ c }) {
           note: s.at ? fmtDate(s.at) : s.pct !== undefined && !s.done ? `${s.pct}%` : '',
         }))}
         current={flowIndex(c)}
+        onPick={(i) => setFlowStep(c.id, steps[i].key)}
       />
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-ink-100 pt-3">
+        <p className="text-[12px] text-ink-400">현재 단계를 누르면 그 앞은 완료, 뒤는 예정으로 정리됩니다. 법원 진행은 직접 옮겨 주세요.</p>
+        <button type="button" onClick={() => setOpen(true)} className="shrink-0 text-[12px] font-semibold text-brand-500 hover:underline">
+          시작 지점: {entry.label}
+        </button>
+      </div>
+
+      <Modal
+        open={open} onClose={() => setOpen(false)} maxW="max-w-[460px]"
+        title="어디서부터 시작하는 사건인가요?"
+        sub="고른 지점보다 앞 단계는 이미 지나온 것으로 표시합니다."
+        footer={<Button onClick={() => setOpen(false)}>확인</Button>}
+      >
+        <div className="space-y-2">
+          {ENTRY_POINTS.map((item) => (
+            <label
+              key={item.key}
+              className={cx(
+                'flex cursor-pointer items-start gap-2.5 rounded-xl border p-3.5 transition-colors',
+                entry.key === item.key ? 'border-brand-300 bg-brand-50' : 'border-ink-200 hover:bg-ink-50',
+              )}
+            >
+              <input
+                type="radio"
+                name="entry-point"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-brand-300"
+                checked={entry.key === item.key}
+                onChange={() => setEntryPoint(c.id, item.key)}
+              />
+              <span className="min-w-0">
+                <span className="block text-[13px] font-semibold text-ink-800">{item.label}</span>
+                <span className="block text-xs leading-snug text-ink-500">{item.desc}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </Modal>
     </Card>
   )
 }

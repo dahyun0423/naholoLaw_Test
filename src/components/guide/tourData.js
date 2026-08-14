@@ -1,4 +1,18 @@
+// ── 투어가 가리킬 곳을 고르는 규칙 ─────────────────────────────
+//
+// 화면 구조로 짚지 않는다. `> div > div:nth-child(3)` 같은 선택자는 그 화면을
+// 한 번만 손봐도 엉뚱한 칸을 강조하거나 아무것도 못 찾는다 — 실제로 리팩터링
+// 뒤에 문서·절차·증빙 투어가 그렇게 어긋났다. 그래서 짚을 곳에는 페이지 쪽에
+// `data-guide="…"` 를 직접 달고, 여기서는 그 이름만 부른다.
+//
+// 콤마로 여러 후보를 적지 않는다. `app()` 은 맨 앞 하나에만 접두사를 붙이므로
+// `app(r, 'a, b')` 의 `b` 는 사이드바까지 포함한 화면 전체에서 아무거나 잡는다.
+//
+// 화면 상태에 따라 아직 없는 칸을 짚을 때는 대상을 하나만 두고 본문을 그 상태에서도
+// 말이 되게 쓴다. 대상이 없으면 투어가 강조 없이 설명만 보여준다.
+
 const app = (route, selector) => `[data-app-route="${route}"] ${selector}`
+const guide = (name) => `[data-guide="${name}"]`
 
 export const TOUR_ROUTES = [
   { key: 'dashboard', path: '/app/dashboard', label: '대시보드', desc: '급한 일과 사건 현황에서 바로 다음 행동으로 이동해요.' },
@@ -35,33 +49,35 @@ export const TOUR_STEPS = {
   ],
   'case-detail': [
     { target: app('case-detail', 'h1'), title: '이 사건의 작업 공간', body: '상태, 사건번호와 법원을 확인하고 필요한 경우 정보를 수정할 수 있습니다.', place: 'bottom' },
-    { target: app('case-detail', '> div > div:nth-child(2)'), title: '현재 상황을 한눈에', body: '남은 할 일, 문서, 증거와 검토 항목을 숫자로 확인하고 각 작업으로 이동하세요.', place: 'bottom' },
-    { target: app('case-detail', 'button, a'), title: '카드 안 행동을 이용하세요', body: '할 일 추가·문서 작성·증거 정리처럼 각 카드에서 바로 다음 행동을 시작할 수 있습니다.', place: 'bottom' },
+    { target: guide('case-overview'), title: '현재 상황을 한눈에', body: '남은 할 일, 문서, 증거와 검토 항목을 숫자로 확인하고 각 작업으로 이동하세요.', place: 'bottom' },
+    { target: guide('case-cards'), title: '카드 안 행동을 이용하세요', body: '할 일 추가·문서 작성·증거 정리처럼 각 카드에서 바로 다음 행동을 시작할 수 있습니다.', place: 'top' },
     commonEnd,
   ],
   documents: [
     { target: app('documents', 'h1'), title: '법률 문서 작성 도우미', body: '먼저 문서를 붙일 사건을 확인하고 작성할 문서 유형을 선택합니다.', place: 'bottom' },
-    { target: app('documents', '> div > div:nth-child(2)'), title: '문서 유형 선택', body: '소장, 준비서면 등 필요한 문서를 고르면 단계별 작성 화면이 열립니다.', place: 'bottom' },
-    { target: app('documents', '> div > div:nth-child(3)'), title: '최근 문서 확인', body: '작성한 문서가 있으면 최근 작업을 확인하고 이어서 관리할 수 있습니다.', place: 'top' },
-    { target: app('documents', '> div > div:last-child'), title: '도구와 작성 팁', body: '비용 계산과 절차 안내를 함께 참고하면 제출 전에 빠진 내용을 줄일 수 있어요.', place: 'top' },
+    { target: guide('doc-types'), title: '문서 유형 선택', body: '소장, 준비서면 등 필요한 문서를 고르면 단계별 작성 화면이 열립니다.', place: 'bottom' },
+    { target: guide('doc-tools'), title: '만들기 전에 볼 도구', body: '비용 계산기와 절차 안내를 먼저 열어보면 제출 전에 빠진 내용을 줄일 수 있어요.', place: 'top' },
+    { target: guide('doc-recent'), title: '만든 문서와 작성 팁', body: '지금까지 만든 문서를 확인하고, 옆의 작성 팁을 참고해 이어서 고칠 수 있습니다.', place: 'top' },
   ],
   search: [
-    { target: app('search', 'h1'), title: '판례와 법령을 함께 찾습니다', body: '사건번호, 사건명이나 일상적인 표현으로 검색을 시작하세요.', place: 'bottom' },
-    { target: app('search', 'input[type="search"], input'), title: '검색어는 구체적으로', body: '분쟁 유형과 쟁점을 함께 입력하면 관련 결과를 더 빠르게 좁힐 수 있습니다.', place: 'bottom' },
-    { target: app('search', 'button[type="submit"], form button'), title: '검색 실행', body: '검색 후 판례와 법령 탭을 오가며 필요한 근거를 확인하세요.', place: 'bottom' },
-    { target: app('search', 'main section, section'), title: '결과를 내 작업으로 연결', body: '원문 출처를 확인하고 저장하거나 문서 작성 화면으로 가져갈 수 있습니다.', place: 'top' },
+    { target: app('search', 'h1'), title: '판례와 법령을 함께 찾습니다', body: '국가법령정보센터의 공개 판례를 내 사건 쟁점에 맞춰 찾아드립니다.', place: 'bottom' },
+    { target: guide('search-tabs'), title: '찾는 방법은 두 가지', body: 'AI 분석은 등록한 사건에서 쟁점을 뽑아 찾고, 키워드 검색은 직접 적은 말로 찾습니다.', place: 'bottom' },
+    { target: guide('search-body'), title: '여기서 검색을 시작하세요', body: 'AI 분석 탭에서는 분석할 사건을 고르고, 키워드 탭으로 옮기면 검색창이 열립니다.', place: 'top' },
+    { target: guide('search-side'), title: '관련 법령과 결과 요약', body: '검색과 함께 관련 법령이 정리됩니다. 원문 출처를 확인하고 내 문서에 인용해 두세요.', place: 'left' },
   ],
   procedure: [
     { target: app('procedure', 'h1'), title: '내 사건의 현재 절차', body: '사건을 고르면 실제 진행 상태에 맞춰 현재 단계와 남은 준비를 보여줍니다.', place: 'bottom' },
-    { target: app('procedure', 'ol'), title: '전체 흐름과 현재 위치', body: '분쟁 발생부터 판결까지 흐름을 보고, 강조된 현재 단계에서 할 일을 확인하세요.', place: 'right' },
-    { target: app('procedure', 'aside, > div > div > div:last-child'), title: '기한과 준비물', body: '현재 단계에 필요한 기한·자료를 확인하고 바로 관련 화면으로 이동할 수 있습니다.', place: 'left' },
-    { target: app('procedure', 'button'), title: '체크리스트와 계산 도구', body: '제출 전 체크리스트와 비용 계산기를 열어 마지막으로 빠진 내용을 점검하세요.', place: 'top' },
+    // 사건을 고르기 전에는 아래 두 칸이 아직 화면에 없다. 없으면 설명만 보여주므로
+    // 본문을 "고르면 …" 으로 적어 두 상태 모두에서 말이 되게 한다.
+    { target: guide('procedure-pick'), title: '먼저 볼 사건을 고르세요', body: '고른 사건 기준으로 절차를 보여드립니다. 이미 고르셨다면 제목 위의 「사건 다시 고르기」로 언제든 바꿀 수 있어요.', place: 'bottom' },
+    { target: guide('procedure-flow'), title: '전체 흐름과 현재 위치', body: '사건을 고르면 분쟁 발생부터 판결까지 흐름이 열리고, 지금 서 있는 단계가 강조됩니다.', place: 'right' },
+    { target: guide('procedure-side'), title: '기한·준비물과 도구', body: '현재 단계의 기한과 필요한 자료가 오른쪽에 함께 나옵니다. 체크리스트와 비용 계산기로 마지막 점검을 하세요.', place: 'left' },
   ],
   evidence: [
     { target: app('evidence', 'h1'), title: '사건별 증빙 자료', body: '계약서·사진·송금내역과 법원 제출 상태를 한곳에서 관리합니다.', place: 'bottom' },
-    { target: app('evidence', 'button:nth-of-type(1)'), title: '보기 방식을 선택하세요', body: '제출 상태를 훑을 때는 리스트, 파일을 정리할 때는 폴더형 보기가 편합니다.', place: 'bottom' },
-    { target: app('evidence', 'table, [role="table"], > div > div:nth-child(2)'), title: '자료와 제출 상태 확인', body: '사건과 서류 종류를 좁히고 각 자료의 이름·입증취지·제출 상태를 관리하세요.', place: 'top' },
-    { target: app('evidence', 'a[href="/app/documents"]'), title: '빠진 서류는 바로 작성', body: '증빙을 확인하다 필요한 문서가 생기면 문서 작성 화면으로 바로 이동할 수 있습니다.', place: 'left' },
+    { target: guide('evidence-view'), title: '보기 방식을 선택하세요', body: '제출 상태를 훑을 때는 리스트, 파일을 정리할 때는 폴더형 보기가 편합니다.', place: 'bottom' },
+    { target: guide('evidence-body'), title: '자료와 제출 상태 확인', body: '사건과 서류 종류를 좁히고 각 자료의 이름·입증취지·제출 상태를 관리하세요.', place: 'top' },
+    commonEnd,
   ],
   schedule: [
     { target: app('schedule', 'h1'), title: '기일과 제출 기한 관리', body: '사건의 준비사항에 적은 기한을 달력과 목록에서 함께 확인합니다.', place: 'bottom' },

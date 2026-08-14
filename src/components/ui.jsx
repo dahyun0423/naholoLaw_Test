@@ -15,6 +15,8 @@
 // 상태를 색으로 나눌 때도 세 계열 안에서 끝낸다.
 //   완료·확인 blue   ·   기다림·중립 grey   ·   주의·기한 지남 red
 
+import { useEffect, useId, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 
 export function cx(...c) {
@@ -287,6 +289,109 @@ export function Tip({ children, title = 'AI 팁' }) {
       <span className="font-semibold">💡 {title}</span>
       <div className="mt-1 text-red-500">{children}</div>
     </div>
+  )
+}
+
+/* ─────────────────────────── ⋯ 메뉴 ─────────────────────────── */
+
+/**
+ * 줄 끝의 ⋯ 하나로 수정·삭제를 연다.
+ *
+ * 메뉴 판은 body로 포털해서 띄운다. 표·카드의 overflow 안에 두면 메뉴가 잘리고,
+ * 열린 동안 스크롤이 그 상자에 갇힌다. 위치는 열 때와 스크롤·리사이즈마다 다시 잰다.
+ *
+ * items: { key, label, icon, onClick, to, tone: 'default'|'danger', divider }
+ */
+export function KebabMenu({ label, items, width = 176, className }) {
+  const [open, setOpen] = useState(false)
+  const [position, setPosition] = useState({ left: 8, top: 8 })
+  const triggerRef = useRef(null)
+  const menuRef = useRef(null)
+  const menuId = useId()
+  const visible = items.filter(Boolean)
+  const itemCls = 'flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] transition-colors focus:outline-none'
+
+  const updatePosition = () => {
+    const trigger = triggerRef.current
+    if (!trigger) return
+    const rect = trigger.getBoundingClientRect()
+    const height = menuRef.current?.offsetHeight || visible.length * 34 + 12
+    const left = Math.max(8, Math.min(window.innerWidth - width - 8, rect.right - width))
+    const top = rect.bottom + height + 8 <= window.innerHeight
+      ? rect.bottom + 4
+      : Math.max(8, rect.top - height - 4)
+    setPosition({ left, top })
+  }
+
+  const close = (restoreFocus = false) => {
+    setOpen(false)
+    if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus())
+  }
+
+  useEffect(() => {
+    if (!open) return undefined
+    updatePosition()
+    requestAnimationFrame(() => menuRef.current?.querySelector('[role="menuitem"]')?.focus())
+    const onKeyDown = (e) => { if (e.key === 'Escape') close(true) }
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [open])
+
+  return (
+    <span className={cx('inline-block', className)}>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        className="grid h-7 w-7 place-items-center rounded-md text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+      >
+        ⋯
+      </button>
+      {open && createPortal(
+        <>
+          <div className="fixed inset-0 z-40" aria-hidden="true" onMouseDown={() => close(true)} />
+          <div
+            ref={menuRef}
+            id={menuId}
+            role="menu"
+            aria-label={label}
+            className="fixed z-50 rounded-xl border border-ink-200 bg-white py-1.5 shadow-xl"
+            style={{ ...position, width }}
+          >
+            {visible.map((it) => {
+              const tone = it.tone === 'danger'
+                ? 'text-red-500 hover:bg-red-50 focus:bg-red-50'
+                : 'text-ink-700 hover:bg-ink-50 focus:bg-ink-50'
+              return (
+                <span key={it.key || it.label} className="block">
+                  {it.divider && <span className="my-1 block border-t border-ink-100" />}
+                  {it.to ? (
+                    <Link role="menuitem" to={it.to} className={cx(itemCls, tone)} onClick={() => close()}>
+                      {it.icon}{it.label}
+                    </Link>
+                  ) : (
+                    <button type="button" role="menuitem" className={cx(itemCls, tone)} onClick={() => { close(); it.onClick?.() }}>
+                      {it.icon}{it.label}
+                    </button>
+                  )}
+                </span>
+              )
+            })}
+          </div>
+        </>,
+        document.body,
+      )}
+    </span>
   )
 }
 

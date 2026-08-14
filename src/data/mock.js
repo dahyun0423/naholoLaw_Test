@@ -322,6 +322,9 @@ const DEMO_CASES = {
   lease: { caseKey: CASE_NO, caseTitle: '임대차 보증금 반환 청구', caseNo: CASE_NO, court: '서울중앙지방법원' },
   labor: { caseKey: '2024가단998877', caseTitle: '근로계약 위반 손해배상', caseNo: '2024가단998877', court: '서울남부지방법원' },
   loan: { caseKey: '2024가소445566', caseTitle: '대여금 반환 청구 (소액)', caseNo: '2024가소445566', court: '서울동부지방법원' },
+  crash: { caseKey: '2025가단334455', caseTitle: '교통사고 손해배상', caseNo: '2025가단334455', court: '서울북부지방법원' },
+  evict: { caseKey: '2025가단776655', caseTitle: '상가 건물명도 청구', caseNo: '2025가단776655', court: '수원지방법원' },
+  repair: { caseKey: '', caseTitle: '인테리어 하자 손해배상', caseNo: '', court: '인천지방법원' },
 }
 
 export const demoCaseList = Object.values(DEMO_CASES)
@@ -430,6 +433,36 @@ export const demoBoardRows = [
   demoDoc('lease', { key: 'd-p1', group: 'petition', kind: 'petition', docId: 'petition1', title: '기일변경신청서', progress: 100, status: '제출완료', submittedAt: dayOffset(-12) }),
   demoDoc('labor', { key: 'd-p2', group: 'petition', kind: 'answer', docId: 'answer1', title: '답변서 (피고 주장에 대한 답변)', progress: 20, status: '작성 중', due: dayOffset(15) }),
   demoDoc('loan', { key: 'd-p3', group: 'petition', kind: 'petition', docId: 'petition2', title: '보정명령 이행서', progress: 0, status: '보완필요', due: dayOffset(2) }),
+
+  /* ── 교통사고 손해배상 ── */
+  demoDoc('crash', {
+    key: 'd-c4', group: 'complaint', kind: 'complaint', docId: 'complaint', title: '교통사고 손해배상 소장', progress: 100, amount: '18,600,000', status: '제출완료', submittedAt: dayOffset(-54),
+    versions: [
+      { version: 1, createdAt: demoMoment(-63, '10:05'), note: '치료비·일실수입 초안' },
+      { version: 2, createdAt: demoMoment(-56, '17:40'), submittedAt: dayOffset(-54), note: '법원에 접수한 소장' },
+    ],
+  }),
+  demoDoc('crash', { key: 'd-e13', group: 'evidence', evNo: 1, code: '갑 제1호증', title: '교통사고사실확인원.pdf', purpose: '2025. 9. 12. 사고 발생 사실과 가해 차량을 특정', size: '0.6 MB', status: '제출완료', submittedAt: dayOffset(-54) }),
+  demoDoc('crash', { key: 'd-e14', group: 'evidence', evNo: 2, code: '갑 제2호증', title: '진단서_12주.pdf', purpose: '경추 염좌 등으로 12주 치료를 요한 사실 입증', size: '0.4 MB', status: '제출완료', submittedAt: dayOffset(-54) }),
+  demoDoc('crash', { key: 'd-e15', group: 'evidence', evNo: 3, code: '갑 제3호증', title: '치료비_영수증_모음.pdf', purpose: '실제 지출한 치료비 합계 4,120,000원 입증', size: '1.7 MB', status: '제출완료', submittedAt: dayOffset(-54) }),
+  demoDoc('crash', { key: 'd-e16', group: 'evidence', evNo: 4, code: '갑 제4호증', title: '블랙박스_캡처.jpg', purpose: '피고 차량이 중앙선을 침범한 사실 입증', size: '2.9 MB', status: '검토중', due: dayOffset(8) }),
+  demoDoc('crash', { key: 'd-e17', group: 'evidence', evNo: 5, code: '갑 제5호증', title: '휴업손해_급여명세서.pdf', purpose: '치료 기간 중 근로하지 못해 발생한 일실수입 입증', size: '0.5 MB', status: '보완필요', due: dayOffset(4), warn: '동료 직원의 급여액이 함께 보입니다. 본인 부분만 남기고 가려 주세요.' }),
+  demoDoc('crash', { key: 'd-b4', group: 'brief', kind: 'brief', docId: 'brief1', title: '준비서면(1) — 과실비율에 대한 반박', round: 1, progress: 55, status: '작성 중', due: dayOffset(11) }),
+  demoDoc('crash', { key: 'd-l3', group: 'evidencelist', kind: 'evidence', docId: 'evidence', title: '증거목록 (갑 제1~5호증)', count: 5, progress: 100, status: '제출완료', submittedAt: dayOffset(-54) }),
+
+  /* ── 상가 건물명도 ── */
+  demoDoc('evict', { key: 'd-c5', group: 'complaint', kind: 'complaint', docId: 'complaint', title: '상가 건물명도 소장', progress: 100, amount: '42,000,000', status: '제출완료', submittedAt: dayOffset(-19) }),
+  demoDoc('evict', { key: 'd-e18', group: 'evidence', evNo: 1, code: '갑 제1호증', title: '상가임대차계약서.pdf', purpose: '임대차 계약의 성립과 차임 약정 입증', size: '2.1 MB', status: '제출완료', submittedAt: dayOffset(-19) }),
+  demoDoc('evict', { key: 'd-e19', group: 'evidence', evNo: 2, code: '갑 제2호증', title: '차임_연체내역.pdf', purpose: '2025. 4.부터 7기분 차임이 연체된 사실 입증', size: '0.7 MB', status: '제출완료', submittedAt: dayOffset(-19) }),
+  demoDoc('evict', { key: 'd-e20', group: 'evidence', evNo: 3, code: '갑 제3호증', title: '계약해지_내용증명.pdf', purpose: '2025. 11. 3. 계약 해지를 통고하고 도달한 사실 입증', size: '0.9 MB', status: '제출완료', submittedAt: dayOffset(-19) }),
+  demoDoc('evict', { key: 'd-e21', group: 'evidence', evNo: 4, code: '갑 제4호증', title: '등기사항전부증명서.pdf', purpose: '원고가 목적물의 소유자인 사실 입증', size: '1.3 MB', status: '제출예정', due: dayOffset(7) }),
+  demoDoc('evict', { key: 'd-p4', group: 'petition', kind: 'petition', docId: 'petition1', title: '점유이전금지가처분 신청서', progress: 100, status: '제출완료', submittedAt: dayOffset(-24) }),
+
+  /* ── 인테리어 하자 (아직 접수 전) ── */
+  demoDoc('repair', { key: 'd-c6', group: 'complaint', kind: 'complaint', docId: 'complaint', title: '인테리어 하자 손해배상 소장', progress: 35, amount: '6,300,000', status: '작성 중', due: dayOffset(20) }),
+  demoDoc('repair', { key: 'd-e22', group: 'evidence', evNo: 1, code: '갑 제1호증', title: '인테리어_공사계약서.pdf', purpose: '공사 범위와 대금, 하자보수 책임을 정한 사실 입증', size: '1.5 MB', status: '미제출', due: dayOffset(20) }),
+  demoDoc('repair', { key: 'd-e23', group: 'evidence', evNo: 2, code: '갑 제2호증', title: '누수_하자사진.jpg', purpose: '준공 2개월 만에 천장 누수가 발생한 사실 입증', size: '3.4 MB', status: '미제출', due: dayOffset(20) }),
+  demoDoc('repair', { key: 'd-e24', group: 'evidence', evNo: 3, code: '갑 제3호증', title: '보수견적서.pdf', purpose: '하자 보수에 6,300,000원이 필요한 사실 입증', size: '0.6 MB', status: '미제출', due: dayOffset(20) }),
 ]
 
 const evidenceFileForCase = (item, index) => ({
@@ -444,6 +477,22 @@ const evidenceFileForCase = (item, index) => ({
   versions: item.versions,
   lastModified: new Date(item.createdAt).getTime() + index,
 })
+
+/** 사건 하나가 들고 있는 증거 파일 — 서류판(demoBoardRows)에 적힌 그대로 가져온다 */
+const evidenceFilesFor = (caseKey) => demoBoardRows
+  .filter((row) => row.caseKey === caseKey && row.group === 'evidence')
+  .map((row, index) => ({
+    name: row.title,
+    size: Math.round(parseFloat(row.size) * (/KB/i.test(row.size) ? 1024 : 1024 * 1024)),
+    purpose: row.purpose,
+    status: row.status,
+    due: row.due,
+    submittedAt: row.submittedAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    versions: row.versions,
+    lastModified: Date.now() - index,
+  }))
 
 /** Figma 캡처와 제품 데모에서 쓰는 완성형 사건. 실제 사용자의 저장값과는 섞지 않는다. */
 export const figmaWorkspaceCases = [
@@ -487,14 +536,66 @@ export const figmaWorkspaceCases = [
   },
   {
     id: 'demo-labor-case', kind: 'case', typeKey: 'wage', title: '근로계약 위반 손해배상', caseNo: '', filedAt: '', filedVia: '', status: '제출 준비',
-    form: { court: '서울남부지방법원', amount: '7400000', pName: '박서연', pRrn: '950811-2******', pAddr: '서울특별시 영등포구 선유로 82', pTel: '010-3951-4280', dName: '주식회사 한빛물류', dAddr: '서울특별시 구로구 디지털로 32길 30', hireDate: '2023-03-06', leaveDate: '2026-06-30', payKind: '월급', payAmount: '3100000', payDay: '매월 25일', workerCount: '5인 이상', unpaidItems: ['임금', '연장근로수당'], unpaidTotal: '7400000', calcWage: '6200000', calcOvertime: '1200000', calcBasis: '2026년 5월·6월 급여와 연장근로수당을 합산했습니다.', laborReport: '진정 접수함', reportNo: '2026-서울남부-01234', reportDoc: '발급 완료', evidenceFiles: demoBoardRows.filter((row) => row.caseKey === '2024가단998877' && row.group === 'evidence').map((row, index) => ({ name: row.title, size: Math.round(parseFloat(row.size) * 1024 * 1024), purpose: row.purpose, status: row.status, due: row.due, submittedAt: row.submittedAt, createdAt: row.createdAt, updatedAt: row.updatedAt, versions: row.versions, lastModified: Date.now() - index })) },
+    form: { court: '서울남부지방법원', amount: '7400000', pName: '박서연', pRrn: '950811-2******', pAddr: '서울특별시 영등포구 선유로 82', pTel: '010-3951-4280', dName: '주식회사 한빛물류', dAddr: '서울특별시 구로구 디지털로 32길 30', hireDate: '2023-03-06', leaveDate: '2026-06-30', payKind: '월급', payAmount: '3100000', payDay: '매월 25일', workerCount: '5인 이상', unpaidItems: ['임금', '연장근로수당'], unpaidTotal: '7400000', calcWage: '6200000', calcOvertime: '1200000', calcBasis: '2026년 5월·6월 급여와 연장근로수당을 합산했습니다.', laborReport: '진정 접수함', reportNo: '2026-서울남부-01234', reportDoc: '발급 완료', evidenceFiles: evidenceFilesFor('2024가단998877') },
     statusAt: { '작성 중': Date.now() - 86400000 * 28, '제출 준비': Date.now() - 86400000 * 3 },
     todos: [{ id: 'demo-labor-todo-1', text: '소장 최종 검토', due: dayOffset(12), done: false, createdAt: Date.now() - 86400000 * 3 }], events: [{ id: 'demo-labor-event-1', kind: 'doc', title: '소장 초안 생성', desc: '연장근로 내역 반영', at: Date.now() - 86400000, source: 'app' }], precedentNos: ['2023두54914'], docs: [], docMeta: {}, createdAt: Date.now() - 86400000 * 28, updatedAt: Date.now() - 86400000,
   },
   {
     id: 'demo-loan-case', kind: 'complaint', typeKey: 'loan', title: '대여금 반환 청구 (소액)', caseNo: '2024가소445566', filedAt: dayOffset(-31), filedVia: '전자소송', status: '접수함',
-    form: { court: '서울동부지방법원', amount: '5000000', pName: '최도윤', pRrn: '890201-1******', pAddr: '서울특별시 성동구 왕십리로 115', pTel: '010-7723-6015', dName: '정민수', dAddr: '서울특별시 광진구 아차산로 272', loanDate: '2023-08-10', loanAmount: '5000000', payDateSame: '계약한 날 바로', loanMethod: '계좌이체', interestSet: '약정 없음', evidenceFiles: demoBoardRows.filter((row) => row.caseKey === '2024가소445566' && row.group === 'evidence').map((row, index) => ({ name: row.title, size: Math.round(parseFloat(row.size) * 1024 * 1024), purpose: row.purpose, status: row.status, due: row.due, submittedAt: row.submittedAt, createdAt: row.createdAt, updatedAt: row.updatedAt, versions: row.versions, lastModified: Date.now() - index })) },
+    form: { court: '서울동부지방법원', amount: '5000000', pName: '최도윤', pRrn: '890201-1******', pAddr: '서울특별시 성동구 왕십리로 115', pTel: '010-7723-6015', dName: '정민수', dAddr: '서울특별시 광진구 아차산로 272', loanDate: '2023-08-10', loanAmount: '5000000', payDateSame: '계약한 날 바로', loanMethod: '계좌이체', interestSet: '약정 없음', evidenceFiles: evidenceFilesFor('2024가소445566') },
     statusAt: { '작성 중': Date.now() - 86400000 * 52, '제출 준비': Date.now() - 86400000 * 36, '접수함': Date.now() - 86400000 * 31 }, todos: [{ id: 'demo-loan-todo-1', text: '피고 주소 보정 여부 확인', due: dayOffset(9), done: false, createdAt: Date.now() - 86400000 * 2 }], events: [{ id: 'demo-loan-event-1', kind: 'status', title: `법원 접수 — 사건번호 2024가소445566`, desc: '전자소송', at: Date.now() - 86400000 * 31, source: 'user' }], precedentNos: ['2025다213495'], docs: [{ id: 'evidence', kind: 'evidence', title: '증거목록 (갑 제1~3호증)', progress: 100, createdAt: Date.now() - 86400000 * 34, updatedAt: Date.now() - 86400000 * 31 }], docMeta: { evidence: { status: '제출완료', due: dayOffset(-31), submittedAt: dayOffset(-31) } }, createdAt: Date.now() - 86400000 * 52, updatedAt: Date.now() - 86400000 * 2,
+  },
+  {
+    id: 'demo-crash-case', kind: 'complaint', typeKey: 'tort', title: '교통사고 손해배상', caseNo: '2025가단334455', filedAt: dayOffset(-54), filedVia: '전자소송', status: '진행 중',
+    form: { court: '서울북부지방법원', amount: '18600000', pName: '한지우', pRrn: '870624-1******', pAddr: '서울특별시 노원구 동일로 1414', pTel: '010-4408-2276', dName: '오세훈', dAddr: '서울특별시 도봉구 방학로 88', accidentDate: '2025-09-12', accidentPlace: '서울특별시 노원구 상계동 교차로', accidentHow: '피고 차량이 중앙선을 침범해 원고 차량 좌측면을 충격했습니다.', injury: '경추 염좌 등 12주 치료', treatCost: '4120000', lostIncome: '9480000', solatium: '5000000', insurerTalk: '보험사 제시액 720만원, 협의 결렬', evidenceFiles: evidenceFilesFor('2025가단334455') },
+    statusAt: { '작성 중': Date.now() - 86400000 * 70, '제출 준비': Date.now() - 86400000 * 58, '접수함': Date.now() - 86400000 * 54, '진행 중': Date.now() - 86400000 * 26 },
+    todos: [
+      { id: 'demo-crash-todo-1', text: '준비서면(1) — 과실비율 반박 제출', due: dayOffset(11), done: false, createdAt: Date.now() - 86400000 * 4 },
+      { id: 'demo-crash-todo-2', text: '신체감정 촉탁 신청 여부 결정', due: dayOffset(19), done: false, createdAt: Date.now() - 86400000 * 4 },
+      { id: 'demo-crash-todo-3', text: '급여명세서 동료 정보 가림 처리', due: dayOffset(4), done: false, createdAt: Date.now() - 86400000 },
+    ],
+    events: [
+      { id: 'demo-crash-event-1', kind: 'status', title: '법원 접수 — 사건번호 2025가단334455', desc: '전자소송', at: Date.now() - 86400000 * 54, source: 'user' },
+      { id: 'demo-crash-event-2', kind: 'user', title: '피고 답변서 수령', desc: '과실비율 30:70 주장', at: Date.now() - 86400000 * 21, source: 'user' },
+    ],
+    precedentNos: ['2024다268508'],
+    docs: [
+      { id: 'brief1', kind: 'brief', title: '준비서면(1) — 과실비율에 대한 반박', progress: 55, createdAt: Date.now() - 86400000 * 6, updatedAt: Date.now() - 86400000 },
+      { id: 'evidence', kind: 'evidence', title: '증거목록 (갑 제1~5호증)', progress: 100, createdAt: Date.now() - 86400000 * 57, updatedAt: Date.now() - 86400000 * 54 },
+    ],
+    docMeta: { brief1: { status: '작성 중', due: dayOffset(11), submittedAt: '' }, evidence: { status: '제출완료', due: dayOffset(-54), submittedAt: dayOffset(-54) } },
+    createdAt: Date.now() - 86400000 * 70, updatedAt: Date.now() - 3600000 * 20,
+  },
+  {
+    id: 'demo-evict-case', kind: 'complaint', typeKey: 'evict', title: '상가 건물명도 청구', caseNo: '2025가단776655', filedAt: dayOffset(-19), filedVia: '전자소송', status: '접수함',
+    form: { court: '수원지방법원', amount: '42000000', pName: '윤가은', pRrn: '780509-2******', pAddr: '경기도 수원시 팔달구 인계로 123', pTel: '010-6612-9034', dName: '주식회사 미담푸드', dAddr: '경기도 수원시 권선구 세화로 44', leaseKind: '상가', propertyDesc: '경기도 수원시 권선구 세화로 44\n철근콘크리트조 4층 근린생활시설 제1층 제102호 84.3㎡', monthlyRent: '2000000', unpaidMonths: '7', unpaidTotal: '14000000', terminationDate: '2025-11-03', terminationWay: '내용증명 우편', evidenceFiles: evidenceFilesFor('2025가단776655') },
+    statusAt: { '작성 중': Date.now() - 86400000 * 40, '제출 준비': Date.now() - 86400000 * 26, '접수함': Date.now() - 86400000 * 19 },
+    todos: [
+      { id: 'demo-evict-todo-1', text: '등기사항전부증명서 최신본 재발급', due: dayOffset(7), done: false, createdAt: Date.now() - 86400000 * 3 },
+      { id: 'demo-evict-todo-2', text: '제1회 변론기일 참석', due: dayOffset(14), time: '11:00', done: false, place: '수원지방법원 210호', source: 'court-notice', noticeName: '변론기일통지서', createdAt: Date.now() - 86400000 * 2 },
+    ],
+    events: [
+      { id: 'demo-evict-event-1', kind: 'user', title: '점유이전금지가처분 인용', desc: '집행 완료', at: Date.now() - 86400000 * 22, source: 'user' },
+      { id: 'demo-evict-event-2', kind: 'status', title: '법원 접수 — 사건번호 2025가단776655', desc: '전자소송', at: Date.now() - 86400000 * 19, source: 'user' },
+    ],
+    precedentNos: [],
+    docs: [{ id: 'petition1', kind: 'petition', title: '점유이전금지가처분 신청서', progress: 100, createdAt: Date.now() - 86400000 * 27, updatedAt: Date.now() - 86400000 * 24 }],
+    docMeta: { petition1: { status: '제출완료', due: dayOffset(-24), submittedAt: dayOffset(-24) } },
+    createdAt: Date.now() - 86400000 * 40, updatedAt: Date.now() - 86400000 * 2,
+  },
+  {
+    id: 'demo-repair-case', kind: 'case', typeKey: 'tort', title: '인테리어 하자 손해배상', caseNo: '', filedAt: '', filedVia: '', status: '작성 중',
+    form: { court: '인천지방법원', amount: '6300000', pName: '서준호', pRrn: '910118-1******', pAddr: '인천광역시 연수구 컨벤시아대로 165', pTel: '010-2277-5518', dName: '더한스페이스 인테리어', dAddr: '인천광역시 남동구 논현로 46', accidentDate: '2026-05-20', accidentHow: '준공 2개월 만에 천장 배관에서 누수가 발생해 마루와 벽지가 손상됐습니다.', repairCost: '6300000', demandMade: '전화·문자로만 요구했어요', evidenceFiles: evidenceFilesFor('') },
+    statusAt: { '작성 중': Date.now() - 86400000 * 9 },
+    todos: [
+      { id: 'demo-repair-todo-1', text: '하자 보수 견적서 한 곳 더 받기', due: dayOffset(5), done: false, createdAt: Date.now() - 86400000 * 2 },
+      { id: 'demo-repair-todo-2', text: '내용증명 발송', due: dayOffset(10), done: false, createdAt: Date.now() - 86400000 * 2 },
+      { id: 'demo-repair-todo-3', text: '누수 부위 사진 추가 촬영', due: dayOffset(-2), done: true, doneAt: Date.now() - 86400000 * 2, createdAt: Date.now() - 86400000 * 6 },
+    ],
+    events: [{ id: 'demo-repair-event-1', kind: 'doc', title: '소장 초안 생성', desc: '하자 내역과 보수 견적 반영', at: Date.now() - 86400000 * 3, source: 'app' }],
+    precedentNos: [],
+    docs: [], docMeta: {},
+    createdAt: Date.now() - 86400000 * 9, updatedAt: Date.now() - 86400000 * 2,
   },
 ]
 

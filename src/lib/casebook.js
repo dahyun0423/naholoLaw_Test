@@ -42,6 +42,18 @@ export function listCases() {
   return read().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
 }
 
+/**
+ * 데모 사건을 저장소에 한 번 심는다 (미리보기 전용).
+ *
+ * 데모 사건을 메모리 배열로만 들고 있으면, 일정 하나만 추가해도 저장소를 다시 읽어
+ * 화면을 맞추는 과정에서 데모가 통째로 사라진다. 심어 두면 그때부터는 보통 사건과
+ * 똑같이 고치고 지울 수 있다. 이미 저장된 것이 있으면 건드리지 않는다.
+ */
+export function seedCases(list, { force = false } = {}) {
+  if (!force && read().length) return false
+  return write(list)
+}
+
 export const getCase = (id) => read().find((c) => c.id === id) || null
 
 export function removeCase(id) {
@@ -60,7 +72,7 @@ const newId = () => `case_${Date.now().toString(36)}${Math.random().toString(36)
  *
  * 소장은 나중에 이 사건에 붙는 문서 하나일 뿐이다.
  */
-export function createCase({ title, typeKey = '', court = '', amount = '', pName = '', dName = '', caseNo = '' }) {
+export function createCase({ title, typeKey = '', court = '', amount = '', pName = '', dName = '', caseNo = '', entryPoint = 'dispute' }) {
   const name = String(title || '').trim()
   if (!name) return null
   const now = Date.now()
@@ -73,6 +85,9 @@ export function createCase({ title, typeKey = '', court = '', amount = '', pName
     caseNo: String(caseNo || '').trim(),
     filedAt: '',
     filedVia: '',
+    // 어디서부터 시작하는 사건인가 — 진행 표시의 출발점 (ENTRY_POINTS)
+    entryPoint,
+    flowDone: {},
     status: caseNo ? '접수함' : '작성 중',
     statusAt: {},
     todos: [], events: [], precedentNos: [], docs: [],
@@ -755,6 +770,35 @@ export function caseTasks(c) {
    진행 표시(사용자가 누르는 상태)와 달리, 이건 **사건 자체가 어디까지 왔나**다.
    값이 전부 우리가 아는 것에서만 나온다 — 법원을 조회하지 않는다. */
 
+/**
+ * 어디서부터 시작하는 사건인가.
+ *
+ * 모두가 분쟁이 막 생긴 시점에 우리를 찾지 않는다. 소장을 쓰려고 오는 사람도 있고,
+ * 이미 접수하고 기일을 기다리는 사람도 있다. 그런 사람에게 「분쟁 발생」이 안 끝난
+ * 칸으로 남아 있으면, 진행 표시가 실제보다 한참 뒤처져 보인다.
+ *
+ * `before`에 적힌 칸은 시작 지점보다 앞이라 지나간 것으로 본다.
+ */
+export const ENTRY_POINTS = [
+  { key: 'dispute', label: '분쟁이 막 생겼어요', desc: '아직 아무것도 보내지 않았습니다', before: [] },
+  { key: 'notified', label: '내용증명까지 보냈어요', desc: '상대방에게 요구했지만 해결되지 않았습니다', before: ['deal', 'notice'] },
+  { key: 'draft', label: '소장부터 준비하려고요', desc: '분쟁 경위는 정리됐고 소장을 쓸 차례입니다', before: ['deal', 'notice'] },
+  { key: 'filed', label: '이미 소장을 냈어요', desc: '법원에 접수했고 그 뒤를 관리합니다', before: ['deal', 'notice', 'draft', 'file'] },
+]
+
+export const entryPoint = (c) => ENTRY_POINTS.find((e) => e.key === c?.entryPoint) || ENTRY_POINTS[0]
+
+/**
+ * 가로 진행 스텝퍼의 칸들.
+ *
+ * 칸이 끝났는지는 세 가지가 정한다 — 셋 중 하나라도 맞으면 끝난 것으로 본다.
+ *   1. 우리가 아는 사실   (사건번호가 있으면 접수한 것이다)
+ *   2. 시작 지점보다 앞   (소장부터 시작한 사람에게 「분쟁 발생」은 이미 지난 일)
+ *   3. 사용자가 직접 표시 (법원에서 벌어지는 일은 우리가 알 수 없다)
+ *
+ * 3번이 필요한 이유는 분명하다. 변론이 끝났는지, 판결이 났는지는 법원 시스템에만 있고
+ * 우리는 조회할 수 없다. 사용자가 직접 눌러 옮기지 못하면 그 두 칸은 영원히 비어 있다.
+ */
 export function caseFlow(c) {
   const form = c?.form || {}
   const type = findType(c?.typeKey)
@@ -765,16 +809,60 @@ export function caseFlow(c) {
   // 계약일 키는 유형마다 다르다
   const dealt = ['loanDate', 'contractDate', 'hireDate', 'incidentDate'].some((k) => has(form, k))
 
+  const passed = new Set(entryPoint(c).before)
+  const marked = c?.flowDone || {}
+  /** 자동 판단 || 시작 지점 이전 || 사용자가 직접 표시 */
+  const settle = (key, auto) => marked[key] ?? (auto || passed.has(key))
+
   return [
-    { key: 'deal', label: '분쟁 발생', done: dealt, at: form.loanDate || form.contractDate || form.hireDate || form.incidentDate || '' },
-    { key: 'notice', label: '내용증명', done: said, optional: true },
-    { key: 'draft', label: '소장 작성', done: pct >= 100, pct },
-    { key: 'file', label: '법원 접수', done: filed, at: c?.filedAt || '' },
+    { key: 'deal', label: '분쟁 발생', done: settle('deal', dealt), at: form.loanDate || form.contractDate || form.hireDate || form.incidentDate || '' },
+    { key: 'notice', label: '내용증명', done: settle('notice', said), optional: true },
+    { key: 'draft', label: '소장 작성', done: settle('draft', pct >= 100), pct },
+    { key: 'file', label: '법원 접수', done: settle('file', filed), at: c?.filedAt || '' },
     // '진행 중'은 변론을 **하고 있는** 것이지 끝낸 게 아니다.
     // done으로 치면 현재 칸이 「판결」로 밀려 이미 끝난 사건처럼 보인다.
-    { key: 'trial', label: '변론', done: c?.status === '종결' },
-    { key: 'judge', label: '판결', done: c?.status === '종결' },
+    { key: 'trial', label: '변론', done: settle('trial', c?.status === '종결') },
+    { key: 'judge', label: '판결', done: settle('judge', c?.status === '종결') },
   ]
+}
+
+/**
+ * 사용자가 고른 칸을 '현재 단계'로 만든다.
+ *
+ * 진행 단계는 체크박스 묶음이 아니라 한 줄짜리 위치다. 중간 칸 하나만 끄면 뒤 칸은
+ * 완료인데 앞 칸은 미완료인 상태가 생기고, 화면의 파란 선도 뒤로 움직이지 않는다.
+ * 고른 칸 앞은 완료, 고른 칸부터 뒤는 미완료로 맞춰 항상 연속된 한 상태만 저장한다.
+ */
+export function setFlowStep(id, key) {
+  return patch(id, (c) => {
+    const keys = ['deal', 'notice', 'draft', 'file', 'trial', 'judge']
+    const picked = keys.indexOf(key)
+    if (picked < 0) return
+    c.flowDone = Object.fromEntries(keys.map((step, index) => [step, index < picked]))
+    const label = { deal: '분쟁 발생', notice: '내용증명', draft: '소장 작성', file: '법원 접수', trial: '변론', judge: '판결' }[key]
+    const nextStatus = {
+      deal: '작성 중', notice: '작성 중', draft: '작성 중',
+      file: '접수함', trial: '진행 중', judge: '진행 중',
+    }[key]
+    if (nextStatus && c.status !== nextStatus) {
+      c.status = nextStatus
+      c.statusAt = { ...(c.statusAt || {}), [nextStatus]: Date.now() }
+    }
+    logInto(c, { kind: 'status', title: `현재 진행 단계 — ${label}`, source: 'user' })
+  })
+}
+
+/** 자동 판단으로 되돌린다 */
+export function clearFlowStep(id, key) {
+  return patch(id, (c) => {
+    const next = { ...(c.flowDone || {}) }
+    delete next[key]
+    c.flowDone = next
+  })
+}
+
+export function setEntryPoint(id, key) {
+  return patch(id, (c) => { c.entryPoint = key })
 }
 
 /**

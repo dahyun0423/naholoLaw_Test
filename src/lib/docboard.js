@@ -69,6 +69,20 @@ export function versionInfo(row = {}) {
  * 내 사건들을 보드의 줄로 편다.
  * 줄은 모두 사건에 매여 있다 — 어느 사건 서류인지 모르면 아무 의미가 없다.
  */
+/**
+ * 아직 만들다 만 문서인가.
+ *
+ * 증빙자료는 **낼 수 있는 것**을 모아 두는 곳이다. 작성률이 100%도 아니고 생성된
+ * 파일도 없고 제출한 적도 없는 것은 아직 서류가 아니라 초안이라, 여기로 넘기면
+ * 목록만 늘고 무엇을 낼 수 있는지 흐려진다. 그런 문서는 문서 생성 화면에 남겨
+ * 이어서 쓰게 한다.
+ */
+export const isDraftDoc = (d, meta = {}) =>
+  (d.progress ?? 0) < 100 && !(d.versions?.length) && !meta.submittedAt
+
+/** 사건에서 아직 미완성인 문서만 */
+export const draftDocs = (c) => caseDocs(c).filter((d) => isDraftDoc(d, docMeta(c, d.id)))
+
 export function boardRows(rawCases = []) {
   const rows = []
   for (const c of rawCases) {
@@ -76,6 +90,7 @@ export function boardRows(rawCases = []) {
 
     for (const d of caseDocs(c)) {
       const meta = docMeta(c, d.id)
+      if (isDraftDoc(d, meta)) continue   // 초안은 증빙자료로 넘기지 않는다
       const row = {
         key: `${c.id}:${d.id}`,
         group: GROUP_OF_KIND[d.kind] || 'petition',

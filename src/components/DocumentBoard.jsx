@@ -9,13 +9,12 @@
 // 공통으로 갖는 것은 셋이다: 사건 · 제출 상태 · 기한(제출일). 소송에서 서류를 관리한다는 건
 // 결국 "무엇을, 어느 사건에, 언제까지 내는가"라서 그렇다.
 
-import { useState, useMemo, useEffect, useId, useRef } from 'react'
-import { createPortal } from 'react-dom'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { DOC_GROUPS, versionInfo } from '../lib/docboard.js'
 import { EVIDENCE_STATUS, DOC_STATUS } from '../lib/casebook.js'
 import { ddayOf } from '../data/mock.js'
-import { Card, Badge, Button, Field, Input, inputCls, cx } from './ui.jsx'
+import { Card, Badge, Button, Field, Input, KebabMenu, inputCls, cx } from './ui.jsx'
 import Modal from './Modal.jsx'
 import {
   FileText, Image, Folder, Scroll, Gavel, Search, ChevronDown,
@@ -58,7 +57,7 @@ const CaseChip = ({ row }) => {
       <span className="min-w-0 truncate">{row.caseTitle}</span>
     </>
   )
-  const cls = 'inline-flex max-w-full items-center gap-1.5 rounded-md bg-ink-50 px-2 py-1 text-[11.5px] font-medium text-ink-700 transition hover:bg-brand-50 hover:text-brand-600'
+  const cls = 'inline-flex max-w-full items-center gap-1 rounded bg-ink-50 px-2 py-0.5 text-[12px] font-medium leading-[1.6] text-ink-700 transition hover:bg-brand-50 hover:text-brand-600'
   return row.real
     ? <Link to={`/app/cases/${row.caseKey}`} className={cls} title={`${row.caseTitle} ${row.caseNo || ''}`}>{body}</Link>
     : <span className={cls} title={row.caseNo}>{body}</span>
@@ -80,7 +79,7 @@ function StatusCell({ row, onPick }) {
         value={row.status}
         onChange={(e) => onPick(e.target.value)}
         className={cx(
-          'h-7 max-w-full cursor-pointer appearance-none rounded-md border-0 py-1 pl-2 pr-6 text-[11.5px] font-semibold outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-1',
+          'h-7 max-w-full cursor-pointer appearance-none rounded py-0.5 pl-2 pr-6 text-[12px] font-semibold leading-[1.6] outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-1',
           STATUS_TONE[row.status] || STATUS_TONE['작성 중'],
         )}
       >
@@ -105,8 +104,8 @@ const DueCell = ({ row, onEdit }) => {
   const late = dday.startsWith('D+') || dday === 'D-day'
   return (
     <span className="flex items-center gap-1 whitespace-nowrap">
-      <span className={cx('rounded px-1.5 py-0.5 text-[11px] font-bold tabular-nums', late ? 'bg-red-50 text-red-500' : 'bg-ink-100 text-ink-600')}>{dday}</span>
-      <span className="text-[11.5px] tabular-nums text-ink-400">{row.due.slice(5)}</span>
+      <span className={cx('rounded px-1.5 py-0.5 text-[12px] font-bold tabular-nums', late ? 'bg-red-50 text-red-500' : 'bg-ink-100 text-ink-600')}>{dday}</span>
+      <span className="text-[12px] tabular-nums text-ink-400">{row.due.slice(5)}</span>
     </span>
   )
   })()
@@ -128,7 +127,7 @@ const Bar = ({ value }) => (
     <span className="h-1.5 w-10 overflow-hidden rounded-full bg-ink-100">
       <span className="block h-full rounded-full bg-brand-300" style={{ width: `${value}%` }} />
     </span>
-    <span className="text-[11px] tabular-nums text-ink-400">{value}%</span>
+    <span className="text-[12px] tabular-nums text-ink-400">{value}%</span>
   </span>
 )
 
@@ -140,106 +139,27 @@ const VersionCell = ({ row }) => {
       {files.length === 0 ? <span className="text-[12px] text-ink-300">생성 파일 없음</span> : files.map((item) => {
         const latest = item.id === info.latest?.id
         return (
-          <div key={item.id} className="flex min-w-0 items-center gap-1.5 text-[11px] tabular-nums">
+          <div key={item.id} className="flex min-w-0 items-center gap-1.5 text-[12px] tabular-nums">
             <span className={cx('min-w-0 truncate', latest ? 'font-semibold text-ink-700' : 'text-ink-500')}>{formatMoment(item.createdAt)}</span>
-            {item.submittedAt && <span className="shrink-0 rounded bg-brand-50 px-1 py-0.5 text-[10px] font-semibold text-brand-600">제출본</span>}
           </div>
         )
       })}
-      {info.hasUnsubmittedRevision && <span className="block truncate text-[10.5px] font-medium text-red-500">제출본 이후 새 파일</span>}
+      {info.hasUnsubmittedRevision && <span className="block truncate text-[12px] font-medium text-red-500">제출본 이후 새 파일</span>}
     </div>
   )
 }
 
-function RowMenu({ row, onEdit, onDelete, onSubmit }) {
-  const [open, setOpen] = useState(false)
-  const [position, setPosition] = useState({ left: 8, top: 8 })
-  const triggerRef = useRef(null)
-  const menuRef = useRef(null)
-  const menuId = useId()
-  const item = 'flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12.5px] transition-colors'
-
-  const updatePosition = () => {
-    const trigger = triggerRef.current
-    if (!trigger) return
-    const rect = trigger.getBoundingClientRect()
-    const width = 176
-    const height = menuRef.current?.offsetHeight || (row.real ? 196 : 158)
-    const left = Math.max(8, Math.min(window.innerWidth - width - 8, rect.right - width))
-    const top = rect.bottom + height + 8 <= window.innerHeight
-      ? rect.bottom + 4
-      : Math.max(8, rect.top - height - 4)
-    setPosition({ left, top })
-  }
-
-  const close = (restoreFocus = false) => {
-    setOpen(false)
-    if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus())
-  }
-
-  useEffect(() => {
-    if (!open) return undefined
-    updatePosition()
-    requestAnimationFrame(() => menuRef.current?.querySelector('[role="menuitem"]')?.focus())
-    const onKeyDown = (e) => { if (e.key === 'Escape') close(true) }
-    window.addEventListener('keydown', onKeyDown)
-    window.addEventListener('resize', updatePosition)
-    window.addEventListener('scroll', updatePosition, true)
-    return () => {
-      window.removeEventListener('keydown', onKeyDown)
-      window.removeEventListener('resize', updatePosition)
-      window.removeEventListener('scroll', updatePosition, true)
-    }
-  }, [open])
-
-  return (
-    <span className="inline-block">
-      <button
-        ref={triggerRef}
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-label={`${row.title} 관리`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        className="grid h-7 w-7 place-items-center rounded-md text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700">
-        ⋯
-      </button>
-      {open && createPortal(
-        <>
-          <div className="fixed inset-0 z-40" aria-hidden="true" onMouseDown={() => close(true)} />
-          <div
-            ref={menuRef}
-            id={menuId}
-            role="menu"
-            aria-label={`${row.title} 관리`}
-            className="fixed z-50 w-[176px] rounded-xl border border-ink-200 bg-white py-1.5 shadow-xl"
-            style={position}
-          >
-            <button type="button" role="menuitem" className={cx(item, 'text-ink-700 hover:bg-ink-50 focus:bg-ink-50 focus:outline-none')} onClick={() => { close(); onEdit() }}>
-              <FileText size={14} /> 수정
-            </button>
-            {row.status !== '제출완료' && (
-              <button type="button" role="menuitem" className={cx(item, 'text-ink-700 hover:bg-ink-50 focus:bg-ink-50 focus:outline-none')} onClick={() => { close(); onSubmit() }}>
-                <Upload size={14} /> 전자소송에서 제출
-              </button>
-            )}
-            {row.real && (
-              <Link role="menuitem" to={`/app/cases/${row.caseKey}`} className={cx(item, 'text-ink-700 hover:bg-ink-50 focus:bg-ink-50 focus:outline-none')} onClick={() => close()}>
-                <ArrowRight size={14} /> 사건 열기
-              </Link>
-            )}
-            <span className="my-1 block border-t border-ink-100" />
-            <button type="button" role="menuitem" className={cx(item, 'text-red-500 hover:bg-red-50 focus:bg-red-50 focus:outline-none')} onClick={() => { close(); onDelete() }}>
-              <Trash size={14} /> 삭제
-            </button>
-          </div>
-        </>,
-        document.body,
-      )}
-    </span>
-  )
-}
+const RowMenu = ({ row, onEdit, onDelete, onSubmit }) => (
+  <KebabMenu
+    label={`${row.title} 관리`}
+    items={[
+      { key: 'edit', label: '수정', icon: <FileText size={14} />, onClick: onEdit },
+      row.status !== '제출완료' && { key: 'submit', label: '전자소송에서 제출', icon: <Upload size={14} />, onClick: onSubmit },
+      row.real && { key: 'open', label: '사건 열기', icon: <ArrowRight size={14} />, to: `/app/cases/${row.caseKey}` },
+      { key: 'delete', label: '삭제', icon: <Trash size={14} />, tone: 'danger', divider: true, onClick: onDelete },
+    ]}
+  />
+)
 
 /* ────────── 종류별 열 ────────── */
 
@@ -249,9 +169,12 @@ const nameCell = (row, onPreview) => {
     <button type="button" onClick={() => onPreview?.(row)} className="flex w-full min-w-0 items-start gap-1.5 text-left">
       <Icon size={13} className="mt-0.5 shrink-0 text-ink-400" />
       <span className="min-w-0">
-        <span className="block truncate text-[12.5px] font-medium text-ink-800 hover:underline">{row.title}</span>
+        <span className="flex min-w-0 items-center gap-1.5">
+          {row.submittedAt && <span className="shrink-0 rounded bg-brand-50 px-1.5 py-0.5 text-[12px] font-semibold leading-[1.6] text-brand-600">제출본</span>}
+          <span className="min-w-0 truncate text-[13px] font-semibold leading-[1.6] text-ink-700 hover:underline">{row.title}</span>
+        </span>
         {row.warn && (
-          <span className="mt-0.5 flex items-start gap-1 text-[11px] leading-snug text-red-500">
+          <span className="mt-0.5 flex items-start gap-1 text-[12px] leading-snug text-red-500">
             <AlertTriangle size={11} className="mt-0.5 shrink-0" />{row.warn}
           </span>
         )}
@@ -276,7 +199,7 @@ const COLUMNS = {
   evidence: [
     { label: '호증', w: '96px', cell: (r) => (
       <span className="flex items-center gap-1.5">
-        <span className="grid h-5 w-5 shrink-0 place-items-center rounded bg-brand-50 text-[10px] font-bold text-brand-500">{r.evNo}</span>
+        <span className="grid h-5 w-5 shrink-0 place-items-center rounded bg-brand-50 text-[12px] font-bold text-brand-500">{r.evNo}</span>
         <span className="whitespace-nowrap text-[12px] font-bold text-ink-800">{r.code}</span>
       </span>
     ) },
@@ -284,8 +207,8 @@ const COLUMNS = {
     { label: '입증취지', w: 'minmax(158px,1.4fr)', cell: (r, h) => (
       <button type="button" onClick={() => h.onEdit(r)} className="w-full text-left">
         {r.purpose
-          ? <span className="line-clamp-2 text-[12.5px] leading-snug text-ink-700">{r.purpose}</span>
-          : <span className="text-[12.5px] text-red-500">비어 있음 — 채워야 증거목록에 들어가요</span>}
+          ? <span className="line-clamp-2 text-[13px] leading-snug text-ink-700">{r.purpose}</span>
+          : <span className="text-[13px] text-red-500">비어 있음 — 채워야 증거목록에 들어가요</span>}
       </button>
     ) },
     { label: '사건', w: 'minmax(118px,1fr)', cell: (r) => <CaseChip row={r} /> },
@@ -344,12 +267,12 @@ function Group({
       <div className="flex flex-wrap items-center gap-2 px-1 py-2">
         <div className="flex items-center gap-1.5 text-ink-400">
           <Icon size={15} />
-          <span className="text-[15px] font-bold text-ink-900">{group.label}</span>
-          <span className="rounded-full bg-ink-100 px-2 py-0.5 text-[11px] font-bold text-ink-500">{totalRows.length}</span>
+          <span className="text-[18px] font-bold leading-[1.6] text-ink-900">{group.label}</span>
+          <span className="grid h-[22px] min-w-[22px] place-items-center rounded-full bg-ink-100 px-1 text-[16px] font-semibold leading-none text-ink-400">{totalRows.length}</span>
         </div>
-        {undone > 0 && <span className="text-[11.5px] text-ink-400">최신본 미제출 {undone}</span>}
-        {late > 0 && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-500">기한 지남 {late}</span>}
-        <span className="hidden text-[11.5px] text-ink-400 sm:inline">{group.hint}</span>
+        {undone > 0 && <span className="text-[12px] font-semibold leading-[1.6] text-ink-400">최신본 미제출 {undone}</span>}
+        {late > 0 && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[12px] font-semibold text-red-500">기한 지남 {late}</span>}
+        <span className="hidden text-[12px] font-medium leading-[1.6] text-ink-400 sm:inline">{group.hint}</span>
         {addTo && (
           <Button as={Link} to={addTo.to} size="sm" variant="ghost" className="ml-auto text-[12px]">
             <Plus size={14} /> {addTo.label}
@@ -358,14 +281,14 @@ function Group({
       </div>
 
       <Card className="overflow-hidden p-0">
-        <div className="overflow-x-auto overscroll-contain">
+        <div className="overflow-x-auto overscroll-x-auto overscroll-y-auto touch-pan-x">
           <div className="min-w-[820px]">
-            <div className="sticky top-0 z-10 grid items-center gap-2.5 border-b border-ink-200 bg-ink-50 px-4 py-2.5 text-[11px] font-medium text-ink-500"
+            <div className="grid min-h-[43px] items-center gap-2.5 border-b border-ink-200 bg-ink-50 px-4 py-2.5 text-[12px] font-medium leading-[1.6] text-ink-500"
               style={{ gridTemplateColumns: template }}>
               {cols.map((c, i) => <span key={i} className={cx('truncate', c.right && 'text-right')}>{c.label}</span>)}
             </div>
             {rows.length === 0 ? (
-              <p className="px-4 py-8 text-center text-[12.5px] text-ink-400">아직 없습니다.</p>
+              <p className="px-4 py-8 text-center text-[13px] text-ink-400">아직 없습니다.</p>
             ) : rows.map((r) => {
               const trouble = !!r.warn || versionInfo(r).hasUnsubmittedRevision || (r.status !== '제출완료' && r.due && r.due < today)
               return (
@@ -554,8 +477,8 @@ export default function DocumentBoard({ rows, cases, real, focus, onStatus, onSa
 
   return (
     <div className="space-y-4">
-      {/* 문서 종류와 필터는 표를 스크롤해도 곧바로 바꿀 수 있게 함께 고정한다. */}
-      <div className="sticky top-[72px] z-20">
+      {/* 큰 필터 패널이 표를 덮지 않도록 문서 흐름 안에서 함께 스크롤한다. */}
+      <div>
         <div role="tablist" aria-label="증빙자료 종류" className="flex items-end overflow-x-auto px-1 pt-1">
           {groups.map((group, index) => {
             const selected = selectedGroup === group.key
@@ -577,7 +500,7 @@ export default function DocumentBoard({ rows, cases, real, focus, onStatus, onSa
                 )}
               >
                 {group.label}
-                <span className={cx('rounded-full px-2 py-0.5 text-[11px] font-bold', selected ? 'bg-brand-50 text-brand-600' : 'bg-white/70 text-ink-500')}>
+                <span className={cx('grid h-6 min-w-6 place-items-center rounded-full px-1 text-[18px] font-semibold leading-none', selected ? 'bg-brand-50 text-brand-600' : 'bg-white/70 text-ink-300')}>
                   {group.rows.length}
                 </span>
               </button>
@@ -602,13 +525,13 @@ export default function DocumentBoard({ rows, cases, real, focus, onStatus, onSa
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="서류나 사건 검색하기"
-                className="h-12 w-full rounded-xl border border-ink-200 bg-white pl-11 pr-10 text-[14px] text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-brand-300 focus:ring-4 focus:ring-brand-100"
+                className="h-[52px] w-full rounded-xl border border-ink-200 bg-white pl-11 pr-10 text-[16px] font-medium leading-[1.6] text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-brand-300 focus:ring-4 focus:ring-brand-100"
               />
               {q && <button type="button" aria-label="검색어 지우기" onClick={() => { setQ(''); searchRef.current?.focus() }} className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1 text-ink-400 hover:text-ink-700"><X size={14} /></button>}
             </label>
             <button
               type="submit"
-              className="h-12 shrink-0 rounded-lg bg-brand-300 px-5 text-[13px] font-semibold text-white transition hover:bg-brand-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2"
+              className="h-[46px] shrink-0 rounded-lg bg-brand-300 px-5 text-[14px] font-semibold leading-[1.6] text-white transition hover:bg-brand-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2"
             >
               검색
             </button>
@@ -725,7 +648,7 @@ export default function DocumentBoard({ rows, cases, real, focus, onStatus, onSa
           </>
         )}
       >
-        <p className="text-[13.5px] leading-relaxed text-ink-600">
+        <p className="text-[14px] leading-relaxed text-ink-600">
           {del?.group === 'evidence'
             ? '증거를 지우면 서류함에서도 사라지고, 뒤 호증 번호가 하나씩 당겨집니다.'
             : del?.kind === 'complaint'

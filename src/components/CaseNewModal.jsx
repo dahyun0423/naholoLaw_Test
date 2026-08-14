@@ -14,24 +14,39 @@ import { useToast } from '../context/ToastContext.jsx'
 import Modal from './Modal.jsx'
 import { Button, inputCls, cx } from './ui.jsx'
 import { complaintTypes, courts, won } from '../lib/complaint.js'
-import { looksLikeCaseNo } from '../lib/casebook.js'
+import { looksLikeCaseNo, ENTRY_POINTS } from '../lib/casebook.js'
 import { HelpCircle } from './icons.jsx'
 
 export default function CaseNewModal({ open, onClose, onCreated }) {
   const { addCase } = useWorkspace()
   const toast = useToast()
 
-  const [f, setF] = useState({ title: '', typeKey: '', dName: '', amount: '', court: '', caseNo: '' })
+  const [f, setF] = useState({ title: '', typeKey: '', dName: '', amount: '', court: '', caseNo: '', entryPoint: 'dispute' })
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }))
 
   const noWarn = f.caseNo.trim() && !looksLikeCaseNo(f.caseNo)
+
+  /**
+   * 사건번호를 적었다는 건 이미 접수했다는 뜻이다.
+   * 그런데 시작 지점이 「분쟁이 막 생겼어요」로 남아 있으면 진행 표시가 실제와 어긋난다.
+   * 사용자가 직접 고르기 전까지는 사건번호를 보고 맞춰 준다.
+   */
+  const [entryTouched, setEntryTouched] = useState(false)
+  const onCaseNo = (event) => {
+    const caseNo = event.target.value
+    setF((x) => ({
+      ...x,
+      caseNo,
+      ...(entryTouched ? {} : { entryPoint: caseNo.trim() ? 'filed' : 'dispute' }),
+    }))
+  }
 
   const submit = () => {
     if (!f.title.trim()) { toast('사건명을 입력해 주세요'); return }
     const c = addCase({ ...f, amount: f.amount.replace(/[^0-9]/g, '') })
     if (!c) { toast('사건을 만들지 못했습니다. 브라우저 저장공간을 확인해 주세요', 'error'); return }
     toast(`「${c.title}」 사건을 만들었어요`, 'success')
-    setF({ title: '', typeKey: '', dName: '', amount: '', court: '', caseNo: '' })
+    setF({ title: '', typeKey: '', dName: '', amount: '', court: '', caseNo: '', entryPoint: 'dispute' })
     onClose()
     onCreated?.(c)
   }
@@ -87,13 +102,43 @@ export default function CaseNewModal({ open, onClose, onCreated }) {
         </div>
 
         <Field label="사건번호" hint="사건번호는 법원에 소장을 접수하면 부여됩니다.">
-          <input className={inputCls} placeholder="접수 후 부여 — 신규 사건이면 비워두세요" value={f.caseNo} onChange={set('caseNo')} />
+          <input className={inputCls} placeholder="접수 후 부여 — 신규 사건이면 비워두세요" value={f.caseNo} onChange={onCaseNo} />
           {noWarn && (
             <p className="mt-1 text-[12px] text-red-500">
               「2026가단123456」처럼 연도 + 재판부호 + 번호 형태인지 확인해 주세요. 그대로 저장할 수도 있습니다.
             </p>
           )}
         </Field>
+
+        {/* 어디서부터 시작하는 사건인가 — 진행 표시의 출발점이 여기서 정해진다.
+            소장부터 온 사람에게 「분쟁 발생」이 빈 칸으로 남아 있으면 실제보다 뒤처져 보인다. */}
+        <fieldset>
+          <legend className="mb-1.5 block text-sm font-medium text-ink-700">어디까지 진행됐나요?</legend>
+          <div className="space-y-2">
+            {ENTRY_POINTS.map((item) => (
+              <label
+                key={item.key}
+                className={cx(
+                  'flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-colors',
+                  f.entryPoint === item.key ? 'border-brand-300 bg-brand-50' : 'border-ink-200 hover:bg-ink-50',
+                )}
+              >
+                <input
+                  type="radio"
+                  name="new-case-entry"
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-brand-300"
+                  checked={f.entryPoint === item.key}
+                  onChange={() => { setEntryTouched(true); setF((x) => ({ ...x, entryPoint: item.key })) }}
+                />
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-semibold text-ink-800">{item.label}</span>
+                  <span className="block text-xs leading-snug text-ink-500">{item.desc}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <span className="mt-1.5 block text-xs text-ink-400">고른 지점보다 앞 단계는 지나온 것으로 표시합니다. 나중에 사건 화면에서 바꿀 수 있어요.</span>
+        </fieldset>
 
         {/* 관할은 우리가 정해 줄 수 없다 — 틀리면 이송돼 몇 달이 밀린다 */}
         <p className="flex items-start gap-2 rounded-xl border border-brand-200 bg-brand-50 p-3.5 text-[12px] leading-relaxed text-brand-600">

@@ -5,7 +5,7 @@ import {
   addTodo, toggleTodo, updateTodo, removeTodo,
   addUserEvent, removeEvent, linkPrecedent, unlinkPrecedent, attachDoc, setFiling,
   setEvidenceStatus, updateEvidence, removeEvidence, setDocMeta, removeDoc,
-  createCase, casePrecedentNos,
+  createCase, casePrecedentNos, seedCases, setFlowStep, setEntryPoint,
 } from '../lib/casebook.js'
 
 const WorkspaceContext = createContext(null)
@@ -38,7 +38,14 @@ const readPrecedentItems = () => {
 export function WorkspaceProvider({ children }) {
   const figmaPreview = import.meta.env.DEV && new URLSearchParams(window.location.search).get('figma') === '1'
   // 내가 실제로 만든 사건 (소장 작성에서 생성) — 화면들이 공유하는 한 줄기
-  const [myCases, setMyCases] = useState(() => (figmaPreview ? figmaWorkspaceCases : listCases()))
+  //
+  // 미리보기에서는 데모 사건을 저장소에 심고 시작한다. 메모리 배열로만 들고 있으면
+  // 일정을 하나만 추가해도 저장소를 다시 읽는 순간 데모가 사라진다.
+  const [myCases, setMyCases] = useState(() => {
+    // 캡처용 주소는 이전 개발 세션의 저장값과 섞지 않고 항상 완성형 예시로 시작한다.
+    if (figmaPreview) seedCases(figmaWorkspaceCases, { force: true })
+    return listCases()
+  })
   const [activeCaseId, setActiveCaseId] = useState(null)
   // 담아둔 판례는 새로고침해도 남아야 한다.
   // 판례 검색에서 담고 → 문서 생성으로 넘어가는 흐름 자체가 페이지를 오가는 일이라,
@@ -104,6 +111,8 @@ export function WorkspaceProvider({ children }) {
     saveEvidenceStatus: mutate(setEvidenceStatus),
     saveEvidence: mutate(updateEvidence),
     dropEvidence: mutate(removeEvidence),
+    setFlowStep: mutate(setFlowStep),
+    setEntryPoint: mutate(setEntryPoint),
     saveDocMeta: mutate(setDocMeta),
     dropDoc: mutate(removeDoc),
   }), [mutate])

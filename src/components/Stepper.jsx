@@ -63,7 +63,7 @@ export default function Stepper({ steps, current, onPick, picked }) {
                 on ? 'text-brand-500' : s.done ? 'text-ink-700' : 'text-ink-400',
               )}>
                 {s.label}
-                {s.optional && <span className="ml-1 text-[10px] font-normal text-ink-400">선택</span>}
+                {s.optional && <span className="ml-1 text-[10px] font-medium text-ink-400">선택</span>}
               </span>
 
               {/* 날짜 칸은 비어도 자리를 지킨다 — 라벨 밑선이 칸마다 튀지 않게 */}

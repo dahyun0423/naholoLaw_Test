@@ -514,7 +514,7 @@ const EvidenceExplorer = forwardRef(function EvidenceExplorer({
             </select>
           </label>
           <label className="block space-y-1.5">
-            <span className="text-[12px] font-semibold text-ink-700">폴더 <span className="font-normal text-ink-400">(선택)</span></span>
+            <span className="text-[12px] font-semibold text-ink-700">폴더 <span className="font-medium text-ink-400">(선택)</span></span>
             <select
               value={uploadFolderKey}
               onChange={(event) => setUploadFolderKey(event.target.value)}

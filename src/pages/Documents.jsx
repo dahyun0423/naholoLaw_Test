@@ -21,10 +21,13 @@ import ComplaintWizard from '../components/ComplaintWizard.jsx'
 import BriefWizard from '../components/BriefWizard.jsx'
 import EvidenceListBuilder from '../components/EvidenceListBuilder.jsx'
 import PetitionWizard from '../components/PetitionWizard.jsx'
-import { recentDocs, writingTips } from '../data/mock.js'
-import { caseDocs, caseTitle } from '../lib/casebook.js'
+import CostCalculator from '../components/CostCalculator.jsx'
+import TemplateViewer from '../components/TemplateViewer.jsx'
+import { writingTips } from '../data/mock.js'
+import { caseTitle } from '../lib/casebook.js'
+import { draftDocs } from '../lib/docboard.js'
 import { checkDoc } from '../lib/docgate.js'
-import { stampFee, serviceFee, won, savedAgo, SERVICE_FEE_IS_ESTIMATE } from '../lib/complaint.js'
+import { savedAgo } from '../lib/complaint.js'
 import { ArrowRight, FileText, AlertTriangle, Check } from '../components/icons.jsx'
 
 import calcImg from '../assets/doc/calculator.png'
@@ -58,6 +61,7 @@ export default function Documents() {
   const [pickCase, setPickCase] = useState(false)
   const [calc, setCalc] = useState(false)
   const [amount, setAmount] = useState('')
+  const [template, setTemplate] = useState(false)
 
   /** 문서를 열기 전에 전제를 확인한다 — 안 맞으면 막지 않고 알린다 */
   const openDoc = (kind) => {
@@ -71,19 +75,13 @@ export default function Documents() {
     return <Wizard onExit={() => { setWizard(null); setSelected(null) }} />
   }
 
-  const fee = amount ? stampFee(Number(amount)) : 0
-  const postage = amount ? serviceFee(2) : 0
-
-  // 만들어 둔 문서가 있으면 그것을 보여주고, 없으면 예시로 화면을 채운다
-  const mine = activeRaw ? caseDocs(activeRaw) : []
-  const docs = mine.length
-    ? mine.map((d) => ({ name: d.title, type: d.label, date: savedAgo(d.updatedAt) }))
-    : recentDocs.map((d) => ({ ...d, sample: true }))
+  // 아직 쓰는 중인 문서 — 완성본은 증빙자료에서 본다
+  const drafts = rawCases.flatMap((c) => draftDocs(c).map((d) => ({ ...d, caseId: c.id, caseName: caseTitle(c) })))
 
   const TOOLS = [
     { key: 'calc', title: '소송 비용 계산기', desc: '청구 금액에 따른 인지대와 송달료를 자동으로 계산합니다.', img: calcImg, on: () => setCalc(true) },
     { key: 'guide', title: '소장 비용 가이드', desc: '소장 제출 전 필수 준비사항과 체크리스트를 확인하세요.', img: guideImg, to: '/app/procedure' },
-    { key: 'tpl', title: '템플릿 보기', desc: '각 문서 유형의 기본 템플릿을 미리 확인할 수 있습니다.', img: magnifierImg, on: () => toast('각 문서 유형의 기본 템플릿을 불러옵니다') },
+    { key: 'tpl', title: '템플릿 보기', desc: '실제 서식으로 만든 소장·준비서면·증거목록 예시를 읽어봅니다.', img: magnifierImg, on: () => setTemplate(true) },
     { key: 'ai', title: 'AI 맞춤 추천', desc: '현재 진행 중인 소송에 필요한 문서를 AI가 추천해드립니다.', img: laptopImg, on: () => { setSelected('brief'); openDoc('brief'); toast('지금 단계에서는 준비서면을 자주 작성합니다') } },
   ]
 
@@ -119,7 +117,7 @@ export default function Documents() {
       </div>
 
       {/* ── 1. 무엇을 만들 것인가 ── */}
-      <Card className="p-6">
+      <Card data-guide="doc-types" className="p-6">
         <h2 className="text-[17px] font-bold text-ink-900">작성할 문서 유형을 선택하세요</h2>
         <div className="mt-5 grid justify-items-center gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {DOC_TYPES.map((d) => (
@@ -139,40 +137,50 @@ export default function Documents() {
       </Card>
 
       {/* ── 2. 만들기 전에 볼 것 ── */}
-      <div className="grid justify-items-center gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div data-guide="doc-tools" className="grid justify-items-center gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {TOOLS.map((t) => <ToolCard key={t.key} t={t} />)}
       </div>
 
-      {/* ── 3. 지금까지 만든 것 ── */}
-      <div className="grid gap-5 lg:grid-cols-[1.2fr_1fr]">
+      {/* ── 3. 아직 쓰는 중인 것 ──
+          완성된 문서는 증빙자료에서 제출 상태와 함께 관리한다. 여기에는 이어서 써야 할
+          초안만 남긴다 — 두 곳에 같은 목록을 두면 어디가 최신인지 알 수 없다. */}
+      <div data-guide="doc-recent" className="grid gap-5 lg:grid-cols-[1.2fr_1fr]">
         <Card className="p-6">
-          <div className="flex items-center gap-2">
-            <h3 className="text-[15px] font-bold text-ink-900">최근 생성 문서</h3>
-            {docs[0]?.sample && <Badge tone="gray">예시</Badge>}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-[15px] font-bold text-ink-900">작성 중인 문서</h3>
+            <Button as={Link} to="/app/evidence" size="sm" variant="ghost">완성된 문서 보기 <ArrowRight size={14} /></Button>
           </div>
-          <table className="mt-4 w-full text-left">
-            <thead>
-              <tr className="border-b border-ink-200 text-[12px] text-ink-500">
-                <th className="pb-2.5 font-medium">문서명</th>
-                <th className="w-24 pb-2.5 font-medium">유형</th>
-                <th className="w-28 pb-2.5 font-medium">생성일</th>
-              </tr>
-            </thead>
-            <tbody>
-              {docs.map((d) => (
-                <tr key={d.name} className="border-b border-ink-100 last:border-0">
-                  <td className="py-3">
-                    <span className="flex items-center gap-2.5">
-                      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-300"><FileText size={14} /></span>
-                      <span className="min-w-0 truncate text-[13px] text-ink-800">{d.name}</span>
+          {drafts.length === 0 ? (
+            <div className="mt-4 grid place-items-center gap-2 rounded-xl bg-ink-50 py-10 text-center">
+              <FileText size={26} className="text-ink-300" />
+              <p className="text-[13px] font-medium text-ink-500">작성 중인 문서가 없습니다</p>
+              <p className="text-xs text-ink-400">위에서 문서 유형을 골라 시작하세요. 완성한 문서는 증빙자료로 넘어갑니다.</p>
+            </div>
+          ) : (
+            <ul className="mt-4 space-y-2">
+              {drafts.map((d) => (
+                <li key={`${d.caseId}-${d.id}`}>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveCaseId(d.caseId); openDoc(d.kind) }}
+                    className="flex w-full items-center gap-3 rounded-xl border border-ink-100 p-3 text-left transition-colors hover:bg-ink-50"
+                  >
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-400"><FileText size={15} /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-semibold text-ink-800">{d.title}</span>
+                      <span className="block truncate text-[12px] text-ink-400">{d.caseName} · {savedAgo(d.updatedAt)}</span>
                     </span>
-                  </td>
-                  <td className="py-3 text-[13px] text-ink-600">{d.type}</td>
-                  <td className="py-3 text-[13px] tabular-nums text-ink-500">{d.date}</td>
-                </tr>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <span className="h-1.5 w-16 overflow-hidden rounded-full bg-ink-100">
+                        <span className="block h-full rounded-full bg-brand-300" style={{ width: `${d.progress ?? 0}%` }} />
+                      </span>
+                      <span className="w-9 text-right text-[12px] font-semibold tabular-nums text-ink-500">{d.progress ?? 0}%</span>
+                    </span>
+                  </button>
+                </li>
               ))}
-            </tbody>
-          </table>
+            </ul>
+          )}
         </Card>
 
         <Card className="p-6">
@@ -292,46 +300,8 @@ export default function Documents() {
         )}
       </Modal>
 
-      {/* 소송 비용 계산기 */}
-      <Modal
-        open={calc} onClose={() => setCalc(false)}
-        title="소송 비용 계산기" sub="청구 금액을 입력하면 인지대와 송달료가 자동으로 계산됩니다."
-        footer={<Button onClick={() => setCalc(false)}>확인</Button>}
-      >
-        <label className="block">
-          <span className="mb-1.5 block text-sm font-medium text-ink-700">청구 금액</span>
-          <div className="relative">
-            <input className={cx(inputCls, 'pr-10')} inputMode="numeric" placeholder="10000000" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))} />
-            <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-sm text-ink-400">원</span>
-          </div>
-          <span className="mt-1 block text-xs text-ink-400">숫자만 입력하세요 (예: 1천만원 = 10000000)</span>
-        </label>
-        {amount && (
-          <div className="mt-4 space-y-2 rounded-xl bg-brand-50 p-4">
-            <div className="flex justify-between text-sm">
-              <span className="text-ink-600">예상 인지대 <span className="text-xs text-ink-400">민사소송등인지법 제2조</span></span>
-              <span className="font-bold text-ink-800">{won(fee)}원</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-ink-600">
-                예상 송달료 <span className="text-xs text-ink-400">당사자 2명</span>
-                {SERVICE_FEE_IS_ESTIMATE && <span className="ml-1 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-500">추정</span>}
-              </span>
-              <span className="font-bold text-ink-800">{won(postage)}원</span>
-            </div>
-            <div className="flex justify-between border-t border-brand-200 pt-2 text-sm">
-              <span className="font-semibold text-ink-700">합계</span>
-              <span className="font-bold text-brand-500">{won(fee + postage)}원</span>
-            </div>
-            {Number(amount) <= 30000000 && <p className="pt-1 text-xs text-brand-600">✓ 3천만원 이하 — 소액사건으로 간이 절차가 적용됩니다.</p>}
-            <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-ink-400">
-              <AlertTriangle size={12} className="mt-0.5 shrink-0" />
-              참고용 계산이며 나홀로법에에서 결제하지 않습니다. 실제 납부는 법원 또는 전자소송포털에서 하시고,
-              송달료는 사건 종류별 예납 회차·우편요금에 따라 달라지므로 접수 전에 확인하세요.
-            </p>
-          </div>
-        )}
-      </Modal>
+      <CostCalculator open={calc} onClose={() => setCalc(false)} initialAmount={amount} />
+      <TemplateViewer open={template} onClose={() => setTemplate(false)} />
     </div>
   )
 }

@@ -7,11 +7,12 @@
 // 어느 쪽이든 줄 하나하나는 사건에 매여 있다. 어느 사건 서류인지 모르면 아무 의미가 없다.
 
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useWorkspace } from '../context/WorkspaceContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useStorageSubscription } from '../hooks/useStorageSubscription.js'
 import { caseEvidence } from '../lib/casebook.js'
-import { boardRows, boardNotices } from '../lib/docboard.js'
+import { boardRows, boardNotices, versionInfo } from '../lib/docboard.js'
 import { evId } from '../lib/vault.js'
 import { downloadEvidenceFile } from '../lib/blobClient.js'
 import DocumentBoard from '../components/DocumentBoard.jsx'
@@ -27,6 +28,12 @@ import {
 import { Bell, Check } from '../components/icons.jsx'
 
 const DEMO_ROWS_KEY = 'naholo_evidence_demo_rows'
+
+const previewItem = (row) => ({
+  ...row,
+  previewTitle: row.code || row.caseTitle,
+  file: row.file || row.title,
+})
 
 const mergeFilledDemoRow = (seed, stored = {}) => {
   const merged = { ...seed, ...stored }
@@ -59,8 +66,11 @@ const readDemoRows = () => {
 }
 
 export default function Evidence() {
-  const previewParams = new URLSearchParams(window.location.search)
+  const navigate = useNavigate()
+  const [previewParams, setPreviewParams] = useSearchParams()
   const figmaPreview = import.meta.env.DEV && previewParams.get('figma') === '1'
+  const previewKey = previewParams.get('preview') || ''
+  const initialCaseKey = previewParams.get('case') || ''
   const { user } = useAuth()
   const {
     rawCases, hasMyCase, activeCaseId,
@@ -72,9 +82,10 @@ export default function Evidence() {
   const [preview, setPreview] = useState(null)
   const [noticeOpen, setNoticeOpen] = useState(false)
   const [storageOpen, setStorageOpen] = useState(false)
-  const [focus, setFocus] = useState(null)      // 알림에서 눌러 찾아간 줄
+  const [focus, setFocus] = useState(() => (initialCaseKey ? { caseKey: initialCaseKey } : null)) // 알림·URL에서 눌러 찾아간 줄
   const [pendingExplorerAction, setPendingExplorerAction] = useState(null)
   const explorerRef = useRef(null)
+  const previewPushed = useRef(false)
   const flash = (m) => { setToast(m); setTimeout(() => setToast(''), 1800) }
   const billing = useStorageSubscription()
 
@@ -104,6 +115,51 @@ export default function Evidence() {
     const examples = demoRows.map((row) => ({ ...row, caseTitle: `예시 · ${row.caseTitle}` }))
     return [...actual, ...examples]
   }, [rawCases, demoRows, figmaPreview])
+
+  // 미리보기는 주소의 한 상태로 둔다. 목록 → 미리보기 → 뒤로가기가 자연스럽게
+  // 이어지고, Figma 캡처에서도 같은 자료의 정확한 상태를 재현할 수 있다.
+  useEffect(() => {
+    if (!previewKey) {
+      setPreview(null)
+      return
+    }
+    const [rowKey, versionId = ''] = previewKey.split(':file:')
+    const row = rows.find((item) => item.key === rowKey)
+    if (!row) return
+    if (!versionId) {
+      setPreview(previewItem(row))
+      return
+    }
+    const file = versionInfo(row).versions.find((item) => item.id === versionId)
+    setPreview(previewItem(file ? {
+      ...row,
+      key: previewKey,
+      createdAt: file.createdAt || row.createdAt,
+      updatedAt: file.createdAt || row.updatedAt,
+      submittedAt: file.submittedAt || '',
+      status: file.submittedAt ? '제출완료' : row.status,
+      versions: [file],
+    } : row))
+  }, [previewKey, rows])
+
+  const openPreview = (row) => {
+    setPreview(previewItem(row))
+    const next = new URLSearchParams(previewParams)
+    next.set('preview', row.key)
+    previewPushed.current = true
+    setPreviewParams(next)
+  }
+
+  const closePreview = () => {
+    if (previewPushed.current) {
+      previewPushed.current = false
+      navigate(-1)
+      return
+    }
+    const next = new URLSearchParams(previewParams)
+    next.delete('preview')
+    setPreviewParams(next, { replace: true })
+  }
 
   useEffect(() => {
     try { localStorage.setItem(DEMO_ROWS_KEY, JSON.stringify(demoRows)) } catch { /* 저장소 접근 불가 시 기본값 유지 */ }
@@ -219,15 +275,15 @@ export default function Evidence() {
       {/* 헤더 */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-ink-900">증빙 자료</h1>
-          <p className="mt-1 text-sm text-ink-500">소송에 필요한 서류와 증거를 사건별로 관리하세요.</p>
+          <h1 className="text-[30px] font-bold leading-[1.6] text-ink-900">증빙 자료</h1>
+          <p className="mt-1 text-[18px] font-medium leading-[1.6] text-ink-700">소송에 필요한 서류와 증거를 사건별로 관리하세요.</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2.5">
-          <div className="flex rounded-xl border border-ink-200 bg-white p-1">
+          <div data-guide="evidence-view" className="flex rounded-xl border border-ink-200 bg-white p-1">
             <button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')}
-              className={cx('rounded-lg px-3.5 py-1.5 text-sm font-medium transition', view === 'list' ? 'bg-brand-300 text-white shadow-sm' : 'text-ink-500 hover:text-ink-700')}>리스트로 보기</button>
+              className={cx('rounded-lg px-3 py-1 text-[12px] font-semibold leading-[1.6] transition', view === 'list' ? 'bg-white text-ink-600 shadow-sm' : 'text-ink-600 hover:text-ink-700')}>리스트로 보기</button>
             <button type="button" aria-pressed={view === 'folder'} onClick={() => setView('folder')}
-              className={cx('rounded-lg px-3.5 py-1.5 text-sm font-medium transition', view === 'folder' ? 'bg-brand-300 text-white shadow-sm' : 'text-ink-500 hover:text-ink-700')}>폴더형으로 보기</button>
+              className={cx('rounded-lg px-3 py-1 text-[12px] font-medium leading-[1.6] transition', view === 'folder' ? 'bg-white text-ink-600 shadow-sm' : 'text-ink-600 hover:text-ink-700')}>폴더형으로 보기</button>
           </div>
           <Button
             size="sm"
@@ -238,11 +294,11 @@ export default function Evidence() {
           {notices.length > 0 && (
             <button
               onClick={() => setNoticeOpen(true)}
-              className="relative inline-flex h-9 items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 text-[12px] font-semibold text-red-500 transition hover:bg-red-100"
+              className="relative inline-flex h-9 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-5 text-[14px] font-semibold text-red-500 transition hover:bg-red-100"
               title="AI가 찾은 확인할 것"
             >
               <Bell size={15} /> 확인할 것
-              <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold text-white">{notices.length}</span>
+              <span className="grid h-4 min-w-4 place-items-center rounded-full bg-red-500 px-1 text-[12px] font-bold leading-none text-white">{notices.length}</span>
             </button>
           )}
         </div>
@@ -250,7 +306,7 @@ export default function Evidence() {
 
       {/* ─────────── 리스트로 보기 ─────────── */}
       {view === 'list' && (
-        <>
+        <div data-guide="evidence-body" className="space-y-5">
           <DocumentBoard
             focus={focus}
             rows={rows}
@@ -260,18 +316,19 @@ export default function Evidence() {
             onSave={onSave}
             onDelete={onDelete}
             onSubmit={onSubmit}
-            onPreview={(row) => setPreview({ ...row, previewTitle: row.code || row.caseTitle, file: row.file || row.title })}
+            onPreview={openPreview}
           />
 
-          <p className="px-1 text-[11.5px] leading-relaxed text-ink-400">
+          <p className="px-1 text-[12px] font-medium leading-[1.6] text-ink-400">
             서증명은 <b className="font-semibold text-ink-600">청구원인에 적은 이름과 똑같이</b> 맞춰야 재판부가 대조할 수 있어요.
             제출 상태는 법원 시스템에만 있어 저희가 조회할 수 없으니 직접 표시해 주세요.
           </p>
-        </>
+        </div>
       )}
 
       {/* ─────────── 폴더형으로 보기 ─────────── */}
       {view === 'folder' && (
+        <div data-guide="evidence-body">
           <EvidenceExplorer
             ref={explorerRef}
           defs={defs}
@@ -287,7 +344,8 @@ export default function Evidence() {
           onPreview={setPreview}
           onRenameCaseFile={(caseKey, file, name) => saveEvidence(caseKey, file.no, { name })}
           onDeleteCaseFile={(caseKey, file) => dropEvidence(caseKey, file.no)}
-        />
+          />
+        </div>
       )}
 
       <StoragePlanModal
@@ -313,13 +371,13 @@ export default function Evidence() {
         {notices.length === 0 ? (
           <div className="rounded-xl bg-ink-50 px-4 py-5 text-center">
             <p className="text-[14px] font-semibold text-ink-800">지금은 확인할 것이 없어요.</p>
-            <p className="mt-1 text-[12.5px] text-ink-500">새로운 제출 기한이나 파일 변경이 생기면 알려드릴게요.</p>
+            <p className="mt-1 text-[13px] text-ink-500">새로운 제출 기한이나 파일 변경이 생기면 알려드릴게요.</p>
           </div>
         ) : (
           <div className="space-y-3">
             <div className="rounded-xl bg-ink-50 px-4 py-3">
               <p className="text-[14px] font-semibold text-ink-900">먼저 확인할 일이 {notices.length}건 있어요.</p>
-              <p className="mt-1 text-[12.5px] leading-relaxed text-ink-500">필요한 항목을 누르면 해당 사건의 서류로 바로 이동합니다.</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-ink-500">필요한 항목을 누르면 해당 사건의 서류로 바로 이동합니다.</p>
             </div>
             <ul className="divide-y divide-ink-100 rounded-xl border border-ink-200 bg-white">
             {notices.map((n) => {
@@ -340,7 +398,7 @@ export default function Evidence() {
                       <span className="block text-[13px] font-semibold text-ink-900">{n.title}</span>
                       <span className="mt-1 block text-[12px] leading-relaxed text-ink-500">{n.desc}</span>
                     </span>
-                    <span className={cx('shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold text-ink-400 transition-colors group-hover:bg-white group-hover:text-brand-600', tone)}>열기</span>
+                    <span className={cx('shrink-0 rounded-md px-2 py-1 text-[12px] font-semibold text-ink-400 transition-colors group-hover:bg-white group-hover:text-brand-600', tone)}>열기</span>
                   </button>
                 </li>
               )
@@ -353,11 +411,11 @@ export default function Evidence() {
       {/* 미리보기 — 두 화면이 함께 쓴다 */}
       <Modal
         open={!!preview}
-        onClose={() => setPreview(null)}
+        onClose={closePreview}
         title={preview?.file || '파일 미리보기'}
         sub={preview ? [preview.previewTitle || preview.folderName || preview.caseTitle, preview.caseNo].filter(Boolean).join(' · ') : ''}
         maxW="max-w-6xl"
-        footer={<Button variant="neutral" size="sm" onClick={() => setPreview(null)}>닫기</Button>}
+        footer={<Button variant="neutral" size="sm" onClick={closePreview}>닫기</Button>}
       >
         {preview && <EvidencePreview item={preview} onDownload={async () => {
           const downloaded = await downloadEvidenceFile(preview)

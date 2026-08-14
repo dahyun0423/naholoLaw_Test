@@ -9,6 +9,7 @@ import { caseDocs, caseEvidence, caseTitle, caseUpcoming } from '../lib/casebook
 import { formatBytes } from '../lib/storagePlans.js'
 import { Card, Badge, Button, inputCls } from '../components/ui.jsx'
 import Modal from '../components/Modal.jsx'
+import LegalDocModal from '../components/LegalDocModal.jsx'
 import StoragePlanModal from '../components/StoragePlanModal.jsx'
 import PrecedentPlanModal from '../components/PrecedentPlanModal.jsx'
 import { FileText, Folder, Calendar, LogOut, ChevronRight, Shield } from '../components/icons.jsx'
@@ -17,16 +18,19 @@ const fieldLabel = 'mb-1.5 block text-sm font-medium text-ink-700'
 const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2'
 
 export default function MyPage() {
-  const { user, logout, setProfile } = useAuth()
+  const { user, logout, setProfile, changePassword } = useAuth()
   const { rawCases } = useWorkspace()
   const navigate = useNavigate()
   const toast = useToast()
   const billing = useStorageSubscription()
   const precedentBilling = usePrecedentSubscription()
   const [edit, setEdit] = useState(false)
-  const [form, setForm] = useState({ name: user?.name || '', email: user?.email || '' })
+  const [form, setForm] = useState({ name: user?.name || '', email: user?.email || '', username: user?.username || '' })
   const [profileError, setProfileError] = useState('')
   const [securityOpen, setSecurityOpen] = useState(false)
+  const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' })
+  const [passwordError, setPasswordError] = useState('')
+  const [passwordBusy, setPasswordBusy] = useState(false)
   const [storageOpen, setStorageOpen] = useState(false)
   const [precedentOpen, setPrecedentOpen] = useState(false)
   const [doc, setDoc] = useState(null)
@@ -56,7 +60,7 @@ export default function MyPage() {
   ]
 
   const startEdit = () => {
-    setForm({ name: user?.name || '', email: user?.email || '' })
+    setForm({ name: user?.name || '', email: user?.email || '', username: user?.username || '' })
     setProfileError('')
     setEdit(true)
   }
@@ -65,6 +69,7 @@ export default function MyPage() {
     event.preventDefault()
     const name = form.name.trim()
     const email = form.email.trim()
+    const username = form.username.trim()
     if (!name) {
       setProfileError('이름을 입력해주세요.')
       return
@@ -73,15 +78,56 @@ export default function MyPage() {
       setProfileError('올바른 이메일 주소를 입력해주세요.')
       return
     }
-    setProfile?.({ name, email })
+    if (username.length < 4 || !/^[A-Za-z0-9_]+$/.test(username)) {
+      setProfileError('아이디는 영문·숫자·밑줄을 사용해 4자 이상 입력해주세요.')
+      return
+    }
+    setProfile?.({ name, email, username })
     setEdit(false)
     setProfileError('')
     toast('프로필을 저장했습니다', 'success')
   }
 
+  const openSecurity = () => {
+    setPasswordForm({ current: '', next: '', confirm: '' })
+    setPasswordError('')
+    setSecurityOpen(true)
+  }
+
+  const savePassword = async (event) => {
+    event.preventDefault()
+    if (!passwordForm.current) {
+      setPasswordError('현재 비밀번호를 입력해주세요.')
+      return
+    }
+    if (passwordForm.next.length < 6) {
+      setPasswordError('새 비밀번호는 6자 이상이어야 합니다.')
+      return
+    }
+    if (passwordForm.current === passwordForm.next) {
+      setPasswordError('현재 비밀번호와 다른 비밀번호를 입력해주세요.')
+      return
+    }
+    if (passwordForm.next !== passwordForm.confirm) {
+      setPasswordError('새 비밀번호가 서로 일치하지 않습니다.')
+      return
+    }
+
+    setPasswordBusy(true)
+    const result = await changePassword({ currentPassword: passwordForm.current, newPassword: passwordForm.next })
+    setPasswordBusy(false)
+    if (!result.ok) {
+      setPasswordError(result.error)
+      return
+    }
+    setSecurityOpen(false)
+    setPasswordForm({ current: '', next: '', confirm: '' })
+    toast('비밀번호를 변경했습니다', 'success')
+  }
+
   const settings = [
     { t: '알림 확인 및 설정', desc: '기일·제출 기한 알림을 관리해요', to: '/app/notifications' },
-    { t: '비밀번호 및 보안', desc: '현재 데모 환경의 보안 지원 범위를 확인해요', onClick: () => setSecurityOpen(true) },
+    { t: '비밀번호 및 보안', desc: '비밀번호를 변경하고 계정을 보호해요', onClick: openSecurity },
     { t: '서비스 이용약관', desc: '서비스 이용 조건을 확인해요', onClick: () => setDoc('terms') },
     { t: '개인정보처리방침', desc: '수집·보관되는 정보를 확인해요', onClick: () => setDoc('privacy') },
   ]
@@ -99,9 +145,11 @@ export default function MyPage() {
             <span className="grid h-20 w-20 place-items-center rounded-full bg-brand-100 text-2xl font-bold text-brand-500" aria-hidden="true">
               {user?.name?.[0] || '나'}
             </span>
-            <h2 className="mt-4 text-lg font-bold text-ink-900">{user?.name || '사용자'}</h2>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+              <h2 className="text-lg font-bold text-ink-900">{user?.name || '사용자'}</h2>
+              {user?.username && <Badge tone="blue">@{user.username}</Badge>}
+            </div>
             <p className="text-sm text-ink-500">{user?.email}</p>
-            {user?.username && <Badge tone="blue" className="mt-2">@{user.username}</Badge>}
           </div>
 
           {!edit ? (
@@ -125,6 +173,15 @@ export default function MyPage() {
                   value={form.email}
                   onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                   autoComplete="email"
+                />
+              </label>
+              <label>
+                <span className={fieldLabel}>아이디</span>
+                <input
+                  className={inputCls}
+                  value={form.username}
+                  onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
+                  autoComplete="username"
                 />
               </label>
               {profileError && <p role="alert" className="text-xs font-medium text-red-500">{profileError}</p>}
@@ -272,19 +329,52 @@ export default function MyPage() {
 
       <Modal
         open={securityOpen}
-        onClose={() => setSecurityOpen(false)}
+        onClose={() => { if (!passwordBusy) setSecurityOpen(false) }}
         title="비밀번호 및 보안"
-        footer={<Button onClick={() => setSecurityOpen(false)}>확인</Button>}
+        footer={(
+          <>
+            <Button type="button" variant="neutral" disabled={passwordBusy} onClick={() => setSecurityOpen(false)}>취소</Button>
+            <Button type="submit" form="password-change-form" disabled={passwordBusy}>
+              {passwordBusy ? '변경 중…' : '비밀번호 변경'}
+            </Button>
+          </>
+        )}
       >
-        <div className="flex items-start gap-3 rounded-xl border border-ink-200 bg-ink-50 p-4">
-          <Shield size={20} className="mt-0.5 shrink-0 text-brand-400" />
-          <div>
-            <p className="text-sm font-semibold text-ink-800">현재 데모 환경에서는 비밀번호를 변경할 수 없어요.</p>
-            <p className="mt-1 text-[13px] leading-relaxed text-ink-500">
-              로그인은 데모 계정으로 동작하며 비밀번호 서버가 연결되어 있지 않습니다. 실제 계정 보안 기능이 연결되기 전에는 변경 완료로 처리하지 않습니다.
-            </p>
-          </div>
-        </div>
+        <form id="password-change-form" className="space-y-4" onSubmit={savePassword}>
+          <p className="text-[13px] leading-relaxed text-ink-500">현재 비밀번호를 확인한 뒤 새 비밀번호로 변경합니다.</p>
+          <label>
+            <span className={fieldLabel}>현재 비밀번호</span>
+            <input
+              type="password"
+              className={inputCls}
+              value={passwordForm.current}
+              onChange={(e) => setPasswordForm((formValue) => ({ ...formValue, current: e.target.value }))}
+              autoComplete="current-password"
+            />
+          </label>
+          <label>
+            <span className={fieldLabel}>새 비밀번호</span>
+            <input
+              type="password"
+              className={inputCls}
+              value={passwordForm.next}
+              onChange={(e) => setPasswordForm((formValue) => ({ ...formValue, next: e.target.value }))}
+              autoComplete="new-password"
+              placeholder="6자 이상 입력"
+            />
+          </label>
+          <label>
+            <span className={fieldLabel}>새 비밀번호 확인</span>
+            <input
+              type="password"
+              className={inputCls}
+              value={passwordForm.confirm}
+              onChange={(e) => setPasswordForm((formValue) => ({ ...formValue, confirm: e.target.value }))}
+              autoComplete="new-password"
+            />
+          </label>
+          {passwordError && <p role="alert" className="text-xs font-medium text-red-500">{passwordError}</p>}
+        </form>
       </Modal>
 
       <StoragePlanModal
@@ -309,30 +399,7 @@ export default function MyPage() {
         onManage={precedentBilling.openPortal}
       />
 
-      <Modal
-        open={!!doc}
-        onClose={() => setDoc(null)}
-        maxW="max-w-2xl"
-        title={doc === 'terms' ? '서비스 이용약관' : '개인정보처리방침'}
-        footer={<Button onClick={() => setDoc(null)}>확인</Button>}
-      >
-        <div className="max-h-[50vh] space-y-3 overflow-y-auto text-[13px] leading-relaxed text-ink-600">
-          {doc === 'terms' ? (
-            <>
-              <p><b className="text-ink-800">제1조 (목적)</b> 본 약관은 나홀로법에(이하 “서비스”)가 제공하는 AI 기반 나홀로 소송 지원 서비스의 이용 조건 및 절차를 규정함을 목적으로 합니다.</p>
-              <p><b className="text-ink-800">제2조 (서비스의 성격)</b> 본 서비스가 제공하는 모든 정보와 생성 문서는 법률 자문이 아니며, 사용자의 문서 작성을 보조하는 도구로서 기능합니다. 최종적인 법적 판단과 책임은 이용자 본인에게 있습니다.</p>
-              <p><b className="text-ink-800">제3조 (면책)</b> 서비스는 AI 특성상 일부 부정확한 내용이 포함될 수 있으며, 이에 따른 결과에 대해 책임지지 않습니다. 복잡한 사안은 법률 전문가와 상담하시기 바랍니다.</p>
-            </>
-          ) : (
-            <>
-              <p><b className="text-ink-800">1. 수집 항목</b> 이름, 이메일, 아이디, 사용자가 업로드한 소송 관련 문서 및 증거 자료.</p>
-              <p><b className="text-ink-800">2. 이용 목적</b> 소송 준비 지원(문서 생성, 판례 분석, 일정 관리) 제공 목적에 한해 사용합니다.</p>
-              <p><b className="text-ink-800">3. 보관 및 보호</b> 업로드된 자료는 암호화되어 보관되며, 증거에 포함된 제3자 개인정보는 자동 탐지하여 마스킹을 안내합니다.</p>
-              <p><b className="text-ink-800">4. 파기</b> 회원 탈퇴 또는 보관 목적 달성 시 지체 없이 파기합니다.</p>
-            </>
-          )}
-        </div>
-      </Modal>
+      <LegalDocModal docKey={doc} onClose={() => setDoc(null)} />
     </div>
   )
 }

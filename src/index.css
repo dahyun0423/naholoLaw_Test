@@ -72,6 +72,7 @@ html {
 body {
   margin: 0;
   font-family: var(--font-sans);
+  font-weight: 500;
   color: var(--color-ink-900);
   -webkit-font-smoothing: antialiased;
   background: #fff;

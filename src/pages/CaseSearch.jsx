@@ -231,7 +231,7 @@ export default function CaseSearch() {
       </div>
 
       {/* ── 탭 ── */}
-      <div className="mt-6 flex items-end">
+      <div data-guide="search-tabs" className="mt-6 flex items-end">
         {TABS.map((t) => (
           <button
             key={t}
@@ -250,7 +250,7 @@ export default function CaseSearch() {
       </div>
 
       {/* ── 본문 판 ── */}
-      <div className={cx('rounded-2xl bg-white p-6', tab === TABS[0] && 'rounded-tl-none')}>
+      <div data-guide="search-body" className={cx('rounded-2xl bg-white p-6', tab === TABS[0] && 'rounded-tl-none')}>
         {/* 키워드 탭 — 검색바 */}
         {tab === TABS[1] && (
           <div className="mb-6 rounded-2xl border border-ink-200 p-5">
@@ -385,7 +385,7 @@ export default function CaseSearch() {
           </div>
 
           {/* ═══ 오른쪽 ═══ */}
-          <div className="space-y-5">
+          <div data-guide="search-side" className="space-y-5">
             {tab === TABS[0] && (phase === 'done' ? <SearchSummary meta={searchMeta} count={similar.length} /> : <StatsPlaceholder />)}
             <LawsCard laws={searchMeta?.relatedLaws || []} show={(tab === TABS[0] && phase === 'done') || (tab === TABS[1] && !!sent)} />
             {tab === TABS[1] && <SearchNotice />}

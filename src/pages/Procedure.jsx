@@ -64,7 +64,7 @@ function CasePick({ c, sum, onPick }) {
       </span>
 
       {/* 마지막 업데이트 — 포켓 안 @30,225 */}
-      <span className="absolute bottom-[6%] left-[9.4%] text-[18px] font-normal text-ink-400">
+      <span className="absolute bottom-[6%] left-[9.4%] text-[18px] font-medium text-ink-400">
         마지막 업데이트: {savedAgo(c.updatedAt)}
       </span>
     </button>
@@ -183,7 +183,7 @@ export default function Procedure() {
           <h1 className="text-2xl font-bold text-ink-900">소송 절차 안내</h1>
           <p className="mt-1 text-sm text-ink-500">소송 진행 단계를 한눈에 확인하고 다음 단계를 준비하세요</p>
         </div>
-        <Card className="p-6">
+        <Card data-guide="procedure-pick" className="p-6">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-[17px] font-bold text-ink-900">현재 진행 중인 소송을 선택해주세요.</h2>
             {/* 사건을 고르지 않고도 절차 자체는 읽을 수 있어야 한다 */}
@@ -255,7 +255,7 @@ export default function Procedure() {
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         {/* ── 주인공: 세로 진행 단계 — 전 단계를 한 번에 본다 ── */}
-        <Card className="p-6">
+        <Card data-guide="procedure-flow" className="p-6">
           <div className="flex flex-wrap items-baseline gap-2">
             <h2 className="text-[17px] font-bold text-ink-900">소송 진행 단계</h2>
             <span className="text-xs text-ink-400">지금 어디인지와 각 단계에서 할 일을 함께 봅니다</span>
@@ -335,11 +335,11 @@ export default function Procedure() {
         </Card>
 
         {/* ── 곁정보 ── */}
-        <div className="space-y-5">
+        <div data-guide="procedure-side" className="space-y-5">
           <DeadlineCard step={steps[cur]} caseId={general ? null : activeRaw?.id} />
           <MaterialCard step={steps[cur]} />
 
-          <Card className="p-5">
+          <Card data-guide="procedure-tools" className="p-5">
             <div className="flex items-center gap-2">
               <StepNum n={3} />
               <h3 className="text-[15px] font-bold text-ink-900">도구</h3>

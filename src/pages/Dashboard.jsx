@@ -355,10 +355,10 @@ function FirstRun({ name, dateStr, timeStr, onNew }) {
       <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-5">
         <div>
           <h1 className="text-[30px] font-semibold leading-tight text-ink-900">안녕하세요, {name}님</h1>
-          <p className="mt-1.5 text-[18px] font-normal text-ink-700">첫 사건을 등록하고 소송 준비를 시작해보세요.</p>
+          <p className="mt-1.5 text-[18px] font-medium text-ink-700">첫 사건을 등록하고 소송 준비를 시작해보세요.</p>
         </div>
         <div className="text-right">
-          <p className="text-[14px] font-normal text-ink-700">{dateStr}</p>
+          <p className="text-[14px] font-medium text-ink-700">{dateStr}</p>
           <p className="mt-0.5 text-[14px] font-semibold text-ink-800">{timeStr}</p>
         </div>
       </div>

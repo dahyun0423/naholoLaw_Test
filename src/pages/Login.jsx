@@ -17,13 +17,17 @@ export default function Login() {
 
   const onChange = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault()
     if (!form.username || !form.password) {
       setError('아이디와 비밀번호를 모두 입력해주세요.')
       return
     }
-    login({ username: form.username })
+    const result = await login(form)
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
     navigate(redirectTo, { replace: true })
   }
 
@@ -79,7 +83,7 @@ export default function Login() {
           </p>
         </form>
 
-        <p className="mt-5 text-center text-xs text-ink-400">데모 환경입니다. 아무 아이디·비밀번호로 로그인할 수 있어요.</p>
+        <p className="mt-5 text-center text-xs text-ink-400">데모 계정 정보는 현재 기기에만 저장됩니다.</p>
       </div>
     </div>
   )

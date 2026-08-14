@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Button, Field, inputCls, cx } from '../components/ui.jsx'
 import { Logo, Eye, EyeOff, Check } from '../components/icons.jsx'
+import LegalDocModal from '../components/LegalDocModal.jsx'
 
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -13,6 +14,7 @@ export default function Signup() {
   const [show, setShow] = useState({ pw: false, confirm: false })
   const [agree, setAgree] = useState(false)
   const [touched, setTouched] = useState(false)
+  const [doc, setDoc] = useState(null)   // 'terms' | 'privacy'
 
   const onChange = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
@@ -26,11 +28,11 @@ export default function Signup() {
   const matchOk = form.confirm && form.password === form.confirm
   const valid = !Object.values(errs).some(Boolean) && agree
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault()
     setTouched(true)
     if (!valid) return
-    signup(form)
+    await signup(form)
     navigate('/app/dashboard', { replace: true })
   }
 
@@ -92,10 +94,16 @@ export default function Signup() {
             </Field>
           </div>
 
-          <label className="mt-5 flex items-start gap-2 text-sm text-ink-600">
-            <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5 h-4 w-4 rounded border-ink-300 accent-brand-300" />
-            <span>서비스 이용약관 및 개인정보처리방침에 동의합니다. <span className="text-brand-400">(필수)</span></span>
-          </label>
+          {/* 동의를 받으려면 그 자리에서 읽을 수 있어야 한다 — 체크박스 밖의 버튼으로 뺀다. */}
+          <div className="mt-5 flex items-start gap-2 text-sm text-ink-600">
+            <input id="signup-agree" type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5 h-4 w-4 rounded border-ink-300 accent-brand-300" />
+            <label htmlFor="signup-agree" className="cursor-pointer">
+              <button type="button" onClick={() => setDoc('terms')} className="font-medium text-brand-400 underline underline-offset-2">서비스 이용약관</button>
+              {' 및 '}
+              <button type="button" onClick={() => setDoc('privacy')} className="font-medium text-brand-400 underline underline-offset-2">개인정보처리방침</button>
+              에 동의합니다. <span className="text-brand-400">(필수)</span>
+            </label>
+          </div>
           {touched && !agree && <p className="mt-1 text-xs text-red-500">약관에 동의해주세요.</p>}
 
           <Button type="submit" className="mt-6 w-full" disabled={touched && !valid}>회원가입</Button>
@@ -105,6 +113,7 @@ export default function Signup() {
           </p>
         </form>
       </div>
+      <LegalDocModal docKey={doc} onClose={() => setDoc(null)} />
     </div>
   )
 }
