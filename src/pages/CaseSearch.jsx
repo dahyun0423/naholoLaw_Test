@@ -303,7 +303,7 @@ export default function CaseSearch() {
                   free={free}
                   onFree={setFree}
                   onFreeAnalyze={() => { setPicked('free'); analyze() }}
-                  onCreate={() => navigate('/app/documents')}
+                  onCreate={() => navigate('/app/cases', { state: { openNewCase: true, from: 'precedent-search' } })}
                   confirmed={phase === 'confirm'}
                 />
 
@@ -468,7 +468,7 @@ function SelectCaseCard({ cases, picked, onPick, onDone, free, onFree, onFreeAna
               <p className="mt-0.5 text-[12px] text-ink-400">판례를 분석하려면 먼저 내 사건을 등록해야 해요.</p>
             </div>
             <button onClick={onCreate} className="shrink-0 rounded-lg bg-brand-300 px-5 py-3 text-[14px] font-semibold text-ink-50 transition-colors hover:bg-brand-400">
-              사건 만들기
+              사건 등록하기
             </button>
           </div>
 

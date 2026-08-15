@@ -5,7 +5,7 @@
 // 어느 메뉴에서 사건을 고르든 같은 방식으로 제목·사건번호·현재 상태를 읽게 한다.
 
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useWorkspace } from '../context/WorkspaceContext.jsx'
 import { caseTitle, caseTodoList, overdueTodos, caseFlow, flowIndex, caseEvidence, caseDocs } from '../lib/casebook.js'
 import { savedAgo } from '../lib/complaint.js'
@@ -35,6 +35,7 @@ function casesForPage(items, page) {
 export default function Cases() {
   const { rawCases, myCases, hasMyCase } = useWorkspace()
   const navigate = useNavigate()
+  const location = useLocation()
   const [sort, setSort] = useState('recent')
   const [newCase, setNewCase] = useState(false)
   const [page, setPage] = useState(0)
@@ -71,6 +72,13 @@ export default function Cases() {
   const visibleCases = casesForPage(sorted, safePage)
 
   useEffect(() => { setPage((current) => Math.min(current, pageCount - 1)) }, [pageCount])
+
+  useEffect(() => {
+    if (!location.state?.openNewCase) return
+    setNewCase(true)
+    // 새로고침이나 뒤로가기로 등록창이 반복해서 열리지 않도록 일회성 이동 상태를 지운다.
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+  }, [location.pathname, location.search, location.state, navigate])
 
   return (
     <div className="mx-auto max-w-[1091px]">

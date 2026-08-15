@@ -39,11 +39,13 @@ export function WorkspaceProvider({ children }) {
   const previewParams = new URLSearchParams(window.location.search)
   const figmaPreview = import.meta.env.DEV && previewParams.get('figma') === '1'
   const resetFigmaPreview = figmaPreview && previewParams.get('figmaReset') === '1'
-  const keepDemoData = import.meta.env.DEV && previewParams.get('empty') !== '1'
+  // 배포된 데모에서도 사건관리·절차안내가 빈 화면으로 시작하지 않도록 예시 사건을 유지한다.
+  // 이미 저장된 사건이 있으면 seedCases가 건드리지 않으며, 빈 상태 QA는 ?empty=1로 우회한다.
+  const keepDemoData = previewParams.get('empty') !== '1'
   // 내가 실제로 만든 사건 (소장 작성에서 생성) — 화면들이 공유하는 한 줄기
   //
-  // 개발 중에는 데모 사건을 저장소에 한 번 심어 둔다. 일반 주소로 새로 열어도 사건관리·
-  // 절차안내 캐러셀을 바로 테스트할 수 있고, 이미 수정한 데모/사용자 사건은 덮어쓰지 않는다.
+  // 데모 사건을 저장소에 한 번 심어 둔다. 배포 주소로 새로 열어도 사건관리·절차안내
+  // 캐러셀을 바로 확인할 수 있고, 이미 수정한 데모/사용자 사건은 덮어쓰지 않는다.
   // 빈 상태 화면이 필요할 때만 ?empty=1을 사용한다.
   const [myCases, setMyCases] = useState(() => {
     // 미리보기 데이터도 사용자가 바꾼 상태를 유지한다. 매 새로고침마다 강제로 다시
