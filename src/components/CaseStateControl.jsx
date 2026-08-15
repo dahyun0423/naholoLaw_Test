@@ -51,7 +51,7 @@ export default function CaseStateControl({ c }) {
   const startNext = () => {
     if (c.status === '작성 중' && complaintProgress < 100) {
       toast(`소장 필수 항목을 먼저 마무리해 주세요. 현재 ${complaintProgress}%예요`)
-      navigate('/app/documents')
+      navigate('/app/documents', { state: { openDoc: 'complaint', caseId: c.id, from: 'case-status' } })
       return
     }
     if (c.status === '제출 준비' && !c.caseNo) {

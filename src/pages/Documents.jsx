@@ -11,8 +11,8 @@
 //   증거목록 — 새 입력 없음          → 이미 모은 증거를 갑호증 표로 재구성
 //   신청서   — 절차적 목적           → 유형별 입력
 
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useToast } from '../context/ToastContext.jsx'
 import { useWorkspace } from '../context/WorkspaceContext.jsx'
 import { Card, Button, Badge, inputCls, cx } from '../components/ui.jsx'
@@ -54,9 +54,11 @@ const DOC_TYPES = [
 export default function Documents() {
   const toast = useToast()
   const navigate = useNavigate()
+  const location = useLocation()
   const { activeRaw, rawCases, setActiveCaseId } = useWorkspace()
   const [selected, setSelected] = useState(null)
   const [wizard, setWizard] = useState(null)
+  const [wizardCaseId, setWizardCaseId] = useState(null)
   const [gate, setGate] = useState(null)      // 전제가 안 맞을 때 띄우는 안내
   const [pickCase, setPickCase] = useState(false)
   const [calc, setCalc] = useState(false)
@@ -64,15 +66,30 @@ export default function Documents() {
   const [template, setTemplate] = useState(false)
 
   /** 문서를 열기 전에 전제를 확인한다 — 안 맞으면 막지 않고 알린다 */
-  const openDoc = (kind) => {
+  const openDoc = (kind, caseId = null) => {
     const g = checkDoc(kind, rawCases)
     if (g) { setGate({ ...g, kind }); return }
+    setWizardCaseId(caseId || (kind === 'complaint' ? activeRaw?.id || null : null))
     setWizard(kind)
   }
 
+  useEffect(() => {
+    const kind = location.state?.openDoc
+    const caseId = location.state?.caseId
+    if (kind !== 'complaint' || !caseId) return
+    if (rawCases.some((c) => c.id === caseId)) {
+      setActiveCaseId(caseId)
+      setSelected(kind)
+      setWizardCaseId(caseId)
+      setWizard(kind)
+    }
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+  }, [location.pathname, location.search, location.state, navigate, rawCases, setActiveCaseId])
+
   if (wizard) {
     const Wizard = wizards[wizard]
-    return <Wizard onExit={() => { setWizard(null); setSelected(null) }} />
+    const linkedCase = wizardCaseId ? rawCases.find((c) => c.id === wizardCaseId) || null : null
+    return <Wizard initialCase={linkedCase} onExit={() => { setWizard(null); setWizardCaseId(null); setSelected(null) }} />
   }
 
   // 아직 쓰는 중인 문서 — 완성본은 증빙자료에서 본다
@@ -111,7 +128,13 @@ export default function Documents() {
           <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-brand-200 bg-brand-50 px-4 py-2.5">
             <AlertTriangle size={15} className="shrink-0 text-brand-300" />
             <span className="text-[12.5px] text-brand-600">아직 사건이 없어요 — 문서를 만들면 새 사건이 함께 생깁니다</span>
-            <Link to="/app/cases" className="text-[12px] font-semibold text-brand-600 hover:underline">사건 먼저 만들기</Link>
+            <Link
+              to="/app/cases"
+              state={{ openNewCase: true, from: 'documents-empty' }}
+              className="text-[12px] font-semibold text-brand-600 hover:underline"
+            >
+              사건 먼저 만들기
+            </Link>
           </div>
         )}
       </div>
@@ -162,7 +185,7 @@ export default function Documents() {
                 <li key={`${d.caseId}-${d.id}`}>
                   <button
                     type="button"
-                    onClick={() => { setActiveCaseId(d.caseId); openDoc(d.kind) }}
+                    onClick={() => { setActiveCaseId(d.caseId); openDoc(d.kind, d.caseId) }}
                     className="flex w-full items-center gap-3 rounded-xl border border-ink-100 p-3 text-left transition-colors hover:bg-ink-50"
                   >
                     <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-400"><FileText size={15} /></span>

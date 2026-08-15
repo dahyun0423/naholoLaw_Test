@@ -374,7 +374,7 @@ function makeComplaintExtras(type) {
 
 /* ══════════════════════ 작성 화면 ══════════════════════ */
 
-function Writer({ typeKey, form, setForm, onBack, onDone }) {
+function Writer({ typeKey, form, setForm, caseId, onBack, onDone }) {
   const toast = useToast()
   const type = findType(typeKey)
   const steps = allSteps(type)
@@ -387,7 +387,7 @@ function Writer({ typeKey, form, setForm, onBack, onDone }) {
   const { saveCase, activeCaseId } = useWorkspace()
   // 사건이 이미 있으면 그 사건의 소장이다. null로 두면 새 사건이 또 하나 생겨
   // 같은 분쟁이 둘로 쪼개진다.
-  const caseIdRef = useRef(activeCaseId)
+  const caseIdRef = useRef(caseId || activeCaseId)
 
   const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }))
   const extras = useMemo(() => makeComplaintExtras(type), [type])
@@ -462,17 +462,18 @@ function Writer({ typeKey, form, setForm, onBack, onDone }) {
 
 /* ══════════════════════ 컨테이너 ══════════════════════ */
 
-export default function ComplaintWizard({ onExit }) {
+export default function ComplaintWizard({ onExit, initialCase = null }) {
   const toast = useToast()
-  const [phase, setPhase] = useState('type')
-  const [typeKey, setTypeKey] = useState(null)
+  const initialTypeKey = initialCase?.typeKey && findType(initialCase.typeKey) ? initialCase.typeKey : null
+  const [phase, setPhase] = useState(initialTypeKey ? 'write' : 'type')
+  const [typeKey, setTypeKey] = useState(initialTypeKey)
   const [diagFor, setDiagFor] = useState(null)
-  const [form, setForm] = useState(emptyComplaint)
+  const [form, setForm] = useState(() => initialTypeKey ? { ...emptyComplaint, ...(initialCase.form || {}) } : emptyComplaint)
   const [draft, setDraft] = useState(() => loadDraft())
 
   const start = (situation) => {
     setTypeKey(diagFor)
-    setForm({ ...emptyComplaint, situation })
+    setForm({ ...emptyComplaint, ...(initialCase?.form || {}), situation })
     setDiagFor(null)
     setPhase('write')
   }
@@ -496,6 +497,7 @@ export default function ComplaintWizard({ onExit }) {
         typeKey={typeKey}
         form={form}
         setForm={setForm}
+        caseId={initialCase?.id}
         onBack={() => { setDraft(loadDraft()); setPhase('type'); setTypeKey(null) }}
         onDone={() => { setPhase('submit'); toast('소장 초안이 완성되었습니다. 제출 방법을 안내해 드릴게요', 'success') }}
       />
@@ -511,7 +513,7 @@ export default function ComplaintWizard({ onExit }) {
         onPick={setDiagFor}
         onBack={onExit}
         footNote={'현재 지원하는 소장 유형은 계속 확대되고 있습니다.\n필요한 소장 유형을 순차적으로 추가해 나갈 예정입니다.'}
-        banner={draft && (
+        banner={!initialCase && draft && (
           <Card className="mb-5 flex flex-wrap items-center gap-3 border-brand-200 bg-brand-50/50 p-4">
             <FileText size={18} className="text-brand-400" />
             <div className="min-w-0 flex-1">

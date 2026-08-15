@@ -94,19 +94,20 @@ export default function CaseSearch() {
         key: 'basic', label: '사건 기본 정보',
         on: !!(form.pName || form.dName || form.amount || form.court),
         onDesc: '유형·청구금액·상대방 자동 반영',
-        to: '/app/cases',
+        to: c ? `/app/cases/${c.id}` : '/app/cases',
       },
       {
         key: 'complaint', label: '소장',
         on: pct > 0,
         onDesc: c ? `${caseTitle(c)}_소장 내용 자동 반영` : '',
         to: '/app/documents',
+        state: c ? { openDoc: 'complaint', caseId: c.id, from: 'precedent-source' } : undefined,
       },
       {
         key: 'evidence', label: '증거·준비서면',
         on: ev.length > 0 || briefs > 0,
         onDesc: `증거 ${ev.length}건${briefs ? `·준비서면 ${briefs}차` : ''} 자동 반영됨`,
-        to: '/app/evidence',
+        to: c ? `/app/evidence?case=${c.id}` : '/app/evidence',
       },
     ]
   }, [pickedCase])
@@ -313,7 +314,7 @@ export default function CaseSearch() {
                     accuracy={accuracy}
                     context={context}
                     onContext={setContext}
-                    onGo={(to) => navigate(to)}
+                    onGo={(to, state) => navigate(to, { state })}
                     onAnalyze={analyze}
                   />
                 )}
@@ -592,7 +593,7 @@ function InfoCard({ sources, accuracy, context, onContext, onGo, onAnalyze }) {
             </div>
             {!s.on && (
               <button
-                onClick={() => onGo(s.to)}
+                onClick={() => onGo(s.to, s.state)}
                 className="shrink-0 rounded-lg bg-brand-50 px-3 py-2 text-[14px] font-semibold text-brand-300 transition-colors hover:bg-brand-100"
               >
                 등록하기

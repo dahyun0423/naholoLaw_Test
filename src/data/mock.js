@@ -63,7 +63,7 @@ export const aiSuggestion = {
 export const upcoming = [
   { date: HEARING, dday: ddayOf(HEARING), title: '제1회 변론기일', case: '임대차 보증금 반환 청구', tone: 'red' },
   { date: BRIEF_DUE, dday: ddayOf(BRIEF_DUE), title: '준비서면 제출 기한', case: '임대차 보증금 반환 청구', tone: 'amber' },
-  { date: EVID_DUE, dday: ddayOf(EVID_DUE), title: '증거목록 제출 기한', case: '근로계약 위반 손해배상', tone: 'blue' },
+  { date: EVID_DUE, dday: ddayOf(EVID_DUE), title: '증거목록 제출 기한', case: '임금체불 청구', tone: 'blue' },
 ]
 
 export const dashboardSchedule = [
@@ -127,7 +127,7 @@ export const notifications = [
 // 선택 가능한 진행 사건 목록 (판례 검색 기준 사건)
 export const cases = [
   { id: CASE_NO, title: '임대차 보증금 반환 청구', court: '서울중앙지방법원', type: '민사', badge: '진행 중' },
-  { id: '2024가단998877', title: '근로계약 위반 손해배상', court: '서울남부지방법원', type: '민사', badge: '준비 중' },
+  { id: '2024가단998877', title: '임금체불 청구', court: '서울남부지방법원', type: '민사', badge: '준비 중' },
   { id: '2024가소445566', title: '대여금 반환 청구 (소액)', court: '서울동부지방법원', type: '민사', badge: '진행 중' },
 ]
 
@@ -323,7 +323,7 @@ export const evidenceAi = [
    종류(소장·증거자료·준비서면·증거목록·신청서)마다 줄이 있고, 줄마다 사건이 달려 있다. */
 
 /**
- * 데모 사건 아홉 건 — 소송의 **모든 단계를 하나씩** 맡는다.
+ * 데모 사건 여덟 건 — 소송의 **모든 단계를 하나씩** 맡는다.
  *
  * 한 단계에 여러 건이 몰리면 그 단계의 화면만 반복해서 보게 되고, 비어 있는 단계는
  * 만들어 보기 전까지 확인할 수 없다. 그래서 분쟁 발생부터 종결까지 아홉 자리를
@@ -333,10 +333,9 @@ export const evidenceAi = [
  * 빈 문자열이 겹치므로 내부 id를 그대로 쓴다.
  */
 const DEMO_CASES = {
-  gym: { caseKey: 'demo-gym-case', caseTitle: '헬스장 이용료 환불 거부', caseNo: '', court: '' },
   repair: { caseKey: 'demo-repair-case', caseTitle: '인테리어 하자 손해배상', caseNo: '', court: '인천지방법원' },
   car: { caseKey: 'demo-car-case', caseTitle: '중고차 허위광고 손해배상', caseNo: '', court: '대전지방법원' },
-  labor: { caseKey: '2024가단998877', caseTitle: '근로계약 위반 손해배상', caseNo: '2024가단998877', court: '서울남부지방법원' },
+  labor: { caseKey: '2024가단998877', caseTitle: '임금체불 청구', caseNo: '2024가단998877', court: '서울남부지방법원' },
   wedding: { caseKey: 'demo-wedding-case', caseTitle: '웨딩업체 계약해지 위약금', caseNo: '', court: '서울서부지방법원' },
   evict: { caseKey: '2025가단776655', caseTitle: '상가 건물명도 청구', caseNo: '2025가단776655', court: '수원지방법원' },
   lease: { caseKey: CASE_NO, caseTitle: '임대차 보증금 반환 청구', caseNo: CASE_NO, court: '서울중앙지방법원' },
@@ -409,7 +408,7 @@ export const demoBoardRows = [
     ],
   }),
   demoDoc('labor', {
-    key: 'd-c2', group: 'complaint', kind: 'complaint', docId: 'complaint', title: '근로계약 위반 손해배상 소장', progress: 65, amount: '7,400,000', status: '작성 중', due: dayOffset(12),
+    key: 'd-c2', group: 'complaint', kind: 'complaint', docId: 'complaint', title: '임금체불 청구 소장', progress: 65, amount: '7,400,000', status: '작성 중', due: dayOffset(12),
     versions: [
       { version: 1, createdAt: demoMoment(-7, '09:30'), note: '기본 정보로 만든 초안' },
       { version: 2, createdAt: demoMoment(-1, '18:05'), note: '연장근로 내역을 추가한 최신본' },
@@ -474,10 +473,6 @@ export const demoBoardRows = [
   demoDoc('evict', { key: 'd-e20', group: 'evidence', evNo: 3, code: '갑 제3호증', title: '계약해지_내용증명.pdf', purpose: '2025. 11. 3. 계약 해지를 통고하고 도달한 사실 입증', size: '0.9 MB', status: '제출완료', submittedAt: dayOffset(-19) }),
   demoDoc('evict', { key: 'd-e21', group: 'evidence', evNo: 4, code: '갑 제4호증', title: '등기사항전부증명서.pdf', purpose: '원고가 목적물의 소유자인 사실 입증', size: '1.3 MB', status: '제출예정', due: dayOffset(7) }),
   demoDoc('evict', { key: 'd-p4', group: 'petition', kind: 'petition', docId: 'petition1', title: '점유이전금지가처분 신청서', progress: 100, status: '제출완료', submittedAt: dayOffset(-24) }),
-
-  /* ── 헬스장 환불 (분쟁 발생 — 아직 자료만 모으는 중) ── */
-  demoDoc('gym', { key: 'd-e25', group: 'evidence', evNo: 1, code: '갑 제1호증', title: '헬스장_회원계약서.jpg', purpose: '12개월 이용계약을 체결한 사실 입증', size: '1.2 MB', status: '미제출', due: dayOffset(30) }),
-  demoDoc('gym', { key: 'd-e26', group: 'evidence', evNo: 2, code: '갑 제2호증', title: '카드결제_내역.png', purpose: '이용료 480,000원을 지급한 사실 입증', size: '0.6 MB', status: '미제출', due: dayOffset(30) }),
 
   /* ── 중고차 허위광고 (내용증명까지 보내고 소장은 아직) ── */
   demoDoc('car', { key: 'd-e27', group: 'evidence', evNo: 1, code: '갑 제1호증', title: '중고차_매매계약서.pdf', purpose: '무사고 차량으로 표시하고 매매한 사실 입증', size: '1.6 MB', status: '미제출', due: dayOffset(25) }),
@@ -666,7 +661,7 @@ const stageCase = (typeKey, stageKey) => {
  */
 const MISSING_STAGES = {
   deposit: ['deal', 'notice', 'draft', 'file', 'judge'],   // 변론은 「임대차 보증금 반환 청구」가 맡는다
-  wage: ['deal', 'notice', 'file', 'trial', 'judge'],       // 소장 작성은 「근로계약 위반 손해배상」
+  wage: ['deal', 'notice', 'file', 'trial', 'judge'],       // 소장 작성은 「임금체불 청구」
   tort: ['deal', 'trial'],                                   // 나머지는 인테리어·중고차·웨딩·교통사고가 맡는다
   evict: ['deal', 'notice', 'draft', 'trial', 'judge'],      // 법원 접수는 「상가 건물명도 청구」
 }
@@ -805,25 +800,6 @@ export const figmaWorkspaceCases = [
     createdAt: Date.now() - 86400000 * 55, updatedAt: Date.now() - 86400000 * 3,
   },
   {
-    // ① 분쟁 발생 — 이제 막 틀어졌고, 아직 사실관계도 다 못 적었다
-    id: 'demo-gym-case', kind: 'case', typeKey: '', title: '헬스장 이용료 환불 거부', caseNo: '', filedAt: '', filedVia: '', status: '작성 중',
-    entryPoint: 'dispute', flowDone: {},
-    form: {
-      court: '', amount: '480000',
-      pName: '문서아', pTel: '010-3312-8874', pAddr: '서울특별시 마포구 월드컵북로 120',
-      dName: '피트니스온 합정점',
-      evidenceFiles: evidenceFilesFor('demo-gym-case'),
-    },
-    statusAt: { '작성 중': Date.now() - 86400000 * 4 },
-    todos: [
-      { id: 'demo-gym-todo-1', text: '계약일·결제일 확인해서 적어두기', due: dayOffset(3), done: false, typeKey: 'prepare', remind: 1, createdAt: Date.now() - 86400000 * 4 },
-      { id: 'demo-gym-todo-2', text: '환불 거부 문자 캡처 모으기', due: dayOffset(5), done: false, typeKey: 'prepare', remind: 1, createdAt: Date.now() - 86400000 * 4 },
-    ],
-    events: [{ id: 'demo-gym-event-1', kind: 'status', title: '사건 등록', desc: '480,000원', at: Date.now() - 86400000 * 4, source: 'app' }],
-    precedentNos: [], docs: [], docMeta: {},
-    createdAt: Date.now() - 86400000 * 4, updatedAt: Date.now() - 3600000 * 5,
-  },
-  {
     // ③ 소장 작성 시작 전 — 내용증명까지 보냈고 답이 없어 소를 준비하려는 참
     id: 'demo-car-case', kind: 'case', typeKey: 'tort', title: '중고차 허위광고 손해배상', caseNo: '', filedAt: '', filedVia: '', status: '작성 중',
     entryPoint: 'notified', flowDone: {},
@@ -925,7 +901,7 @@ export const figmaWorkspaceCases = [
   },
   {
     // ④ 소장 작성 중 — 내용증명·진정까지 마치고 소장을 쓰는 중 (80%)
-    id: 'demo-labor-case', kind: 'case', typeKey: 'wage', title: '근로계약 위반 손해배상', caseNo: '', filedAt: '', filedVia: '', status: '작성 중',
+    id: 'demo-labor-case', kind: 'case', typeKey: 'wage', title: '임금체불 청구', caseNo: '', filedAt: '', filedVia: '', status: '작성 중',
     entryPoint: 'notified', flowDone: {},
     form: { court: '서울남부지방법원', amount: '7400000', pName: '박서연', pRrn: '950811-2******', pAddr: '서울특별시 영등포구 선유로 82', pTel: '010-3951-4280', dName: '주식회사 한빛물류', dAddr: '서울특별시 구로구 디지털로 32길 30', hireDate: '2023-03-06', leaveDate: '2026-06-30', payKind: '월급', payAmount: '3100000', payDay: '매월 25일', workerCount: '5인 이상', unpaidItems: ['임금', '연장근로수당'], unpaidTotal: '7400000', calcWage: '6200000', calcOvertime: '1200000', calcBasis: '2026년 5월·6월 급여와 연장근로수당을 합산했습니다.', laborReport: '진정 접수함', reportNo: '2026-서울남부-01234', reportDoc: '발급 완료', evidenceFiles: evidenceFilesFor('2024가단998877') },
     statusAt: { '작성 중': Date.now() - 86400000 * 28, '제출 준비': Date.now() - 86400000 * 3 },
@@ -1070,7 +1046,7 @@ const evidenceCaseFolderSeed = [
     ],
   },
   {
-    key: '2024가단998877', caseNo: '2024가단998877', title: '근로계약 위반 손해배상',
+    key: '2024가단998877', caseNo: '2024가단998877', title: '임금체불 청구',
     court: '서울남부지방법원', status: '준비 중', tone: 'slate',
     folders: [
       {

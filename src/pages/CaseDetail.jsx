@@ -343,7 +343,7 @@ function Flow({ c }) {
       return
     }
     if (step.key === 'draft') {
-      navigate('/app/documents')
+      navigate('/app/documents', { state: { openDoc: 'complaint', caseId: c.id, from: 'case-flow' } })
       return
     }
     if (step.key === 'file') {
@@ -370,6 +370,7 @@ function Flow({ c }) {
     })
     toast(skipped ? '내용증명을 건너뛰고 소장 작성으로 이동했어요' : '내용증명 발송을 기록했어요', 'success')
     setNoticeOpen(false)
+    navigate('/app/documents', { state: { openDoc: 'complaint', caseId: c.id, from: 'case-flow' } })
   }
 
   return (
@@ -467,8 +468,8 @@ function Tile({ icon: Icon, title, right, children, foot }) {
 
 const Count = ({ children }) => <span className="text-[12px] font-bold tabular-nums text-ink-600">{children}</span>
 
-const Go = ({ to, children }) => (
-  <Link to={to} className="inline-flex items-center gap-1 text-[12px] font-semibold text-brand-500 hover:underline">
+const Go = ({ to, state, children }) => (
+  <Link to={to} state={state} className="inline-flex items-center gap-1 text-[12px] font-semibold text-brand-500 hover:underline">
     {children} <ArrowRight size={12} />
   </Link>
 )
@@ -481,12 +482,18 @@ function TasksCard({ c }) {
   const done = tasks.filter((t) => t.done).length
 
   return (
-    <Tile icon={CheckCircle} title="소장에 필요한 것" right={<Count>{done}/{tasks.length}</Count>} foot={<Go to="/app/documents">소장 이어서 쓰기</Go>}>
+    <Tile
+      icon={CheckCircle}
+      title="소장에 필요한 것"
+      right={<Count>{done}/{tasks.length}</Count>}
+      foot={<Go to="/app/documents" state={{ openDoc: 'complaint', caseId: c.id, from: 'case-tasks' }}>소장 이어서 쓰기</Go>}
+    >
       <div className="grid grid-cols-2 gap-2">
         {tasks.map((t) => (
           <Link
             key={t.key}
-            to={t.to}
+            to={t.to === '/app/evidence' ? `/app/evidence?case=${c.id}` : t.to}
+            state={t.to === '/app/documents' ? { openDoc: 'complaint', caseId: c.id, from: 'case-task' } : undefined}
             className={cx(
               'flex items-center gap-2 rounded-xl border px-3 py-2.5 transition-colors',
               t.done ? 'border-ink-200 bg-ink-50' : 'border-ink-200 bg-white hover:border-brand-300 hover:bg-brand-50',
@@ -512,7 +519,11 @@ function InsightCard({ c }) {
         <ul className="space-y-0.5">
           {list.map((x, i) => (
             <li key={i}>
-              <Link to={x.to || '#'} className="flex items-center gap-2 rounded-lg px-2 py-2 text-[12.5px] transition-colors hover:bg-ink-50">
+              <Link
+                to={x.to === '/app/evidence' ? `/app/evidence?case=${c.id}` : x.to || '#'}
+                state={x.to === '/app/documents' ? { openDoc: 'complaint', caseId: c.id, from: 'case-insight' } : undefined}
+                className="flex items-center gap-2 rounded-lg px-2 py-2 text-[12.5px] transition-colors hover:bg-ink-50"
+              >
                 <span className={cx('h-1.5 w-1.5 shrink-0 rounded-full', x.urgent ? 'bg-red-300' : 'bg-brand-300')} />
                 <span className="min-w-0 flex-1 text-ink-700">{x.text}</span>
                 <ChevronRight size={13} className="shrink-0 text-ink-300" />
@@ -757,7 +768,11 @@ function InsightList({ c }) {
     <ul className="space-y-0.5">
       {list.map((x, i) => (
         <li key={i}>
-          <Link to={x.to || '#'} className="flex items-center gap-2 rounded-lg px-2 py-2.5 text-[13px] hover:bg-ink-50">
+          <Link
+            to={x.to === '/app/evidence' ? `/app/evidence?case=${c.id}` : x.to || '#'}
+            state={x.to === '/app/documents' ? { openDoc: 'complaint', caseId: c.id, from: 'case-insight-sheet' } : undefined}
+            className="flex items-center gap-2 rounded-lg px-2 py-2.5 text-[13px] hover:bg-ink-50"
+          >
             <span className={cx('h-1.5 w-1.5 shrink-0 rounded-full', x.urgent ? 'bg-red-300' : 'bg-brand-300')} />
             <span className="min-w-0 flex-1 text-ink-700">{x.text}</span>
             <ChevronRight size={14} className="shrink-0 text-ink-300" />

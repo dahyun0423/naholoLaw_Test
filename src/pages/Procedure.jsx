@@ -263,7 +263,9 @@ export default function Procedure() {
                         <span className="text-[11px] text-ink-500">아직 안 채운 것</span>
                         {tasks.map((t) => (
                           <Link
-                            key={t.key} to={t.to}
+                            key={t.key}
+                            to={t.to === '/app/evidence' ? `/app/evidence?case=${activeRaw?.id}` : t.to}
+                            state={t.to === '/app/documents' ? { openDoc: 'complaint', caseId: activeRaw?.id, from: 'procedure-task' } : undefined}
                             className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 py-1 text-[12px] text-ink-700 transition-colors hover:border-brand-300 hover:bg-brand-50"
                           >
                             <span className="grid h-4 w-4 place-items-center rounded-full bg-ink-100 text-[10px] font-bold tabular-nums text-ink-600">{t.missing}</span>

@@ -63,6 +63,24 @@ export function seedCases(list, { force = false } = {}) {
   return write([...stored, ...missing])
 }
 
+/** 배포 브라우저에 남은 오래된 데모만 정리한다. 사용자가 만든 사건은 건드리지 않는다. */
+export function migrateLegacyDemoCases() {
+  const current = read()
+  let changed = false
+  const next = current
+    .filter((c) => {
+      if (c.id !== 'demo-gym-case') return true
+      changed = true
+      return false
+    })
+    .map((c) => {
+      if (c.id !== 'demo-labor-case' || c.title !== '근로계약 위반 손해배상') return c
+      changed = true
+      return { ...c, title: '임금체불 청구' }
+    })
+  return changed ? write(next) : false
+}
+
 export const getCase = (id) => read().find((c) => c.id === id) || null
 
 export function removeCase(id) {

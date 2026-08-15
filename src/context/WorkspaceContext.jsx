@@ -5,7 +5,7 @@ import {
   addTodo, toggleTodo, updateTodo, removeTodo,
   addUserEvent, removeEvent, linkPrecedent, unlinkPrecedent, attachDoc, setFiling,
   setEvidenceStatus, updateEvidence, removeEvidence, setDocMeta, removeDoc,
-  createCase, casePrecedentNos, seedCases, setFlowStep, setEntryPoint,
+  createCase, casePrecedentNos, seedCases, migrateLegacyDemoCases, setFlowStep, setEntryPoint,
 } from '../lib/casebook.js'
 
 const WorkspaceContext = createContext(null)
@@ -48,6 +48,8 @@ export function WorkspaceProvider({ children }) {
   // 캐러셀을 바로 확인할 수 있고, 이미 수정한 데모/사용자 사건은 덮어쓰지 않는다.
   // 빈 상태 화면이 필요할 때만 ?empty=1을 사용한다.
   const [myCases, setMyCases] = useState(() => {
+    // 과거 배포본에 저장된 미지원·오표기 데모도 현재 지원 유형에 맞게 정리한다.
+    migrateLegacyDemoCases()
     // 미리보기 데이터도 사용자가 바꾼 상태를 유지한다. 매 새로고침마다 강제로 다시
     // 심으면 사건 상태·할 일·일정 변경이 모두 원래 더미값으로 되돌아간다.
     // 완성형 캡처 데이터를 처음부터 다시 만들 때만 ?figma=1&figmaReset=1을 쓴다.
