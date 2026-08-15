@@ -22,25 +22,15 @@ import { useToast } from '../context/ToastContext.jsx'
 import { looksLikeCaseNo } from '../lib/casebook.js'
 import { fmtDate } from '../lib/complaint.js'
 import { Button, Opt, cx } from './ui.jsx'
-import Stepper from './Stepper.jsx'
 import { AlertTriangle } from './icons.jsx'
 
 export const CASE_FLOW = ['작성 중', '제출 준비', '접수함', '진행 중', '종결']
-
-/** 단계마다 한 줄 설명 — 눌렀을 때 "이게 무슨 뜻이지"를 없앤다 */
-const STEP_DESC = {
-  '작성 중': '소장을 쓰고 있어요',
-  '제출 준비': '다 쓰고 접수를 앞두고 있어요',
-  '접수함': '법원에 내고 사건번호를 받았어요',
-  '진행 중': '변론이 오가는 중이에요',
-  '종결': '판결·조정으로 끝났어요',
-}
 
 const inputSm =
   'h-10 rounded-lg border border-ink-200 bg-white px-3 text-sm text-ink-700 outline-none transition placeholder:text-ink-300 focus:border-brand-300 focus:ring-4 focus:ring-brand-100'
 
 export default function CaseStatus({ c }) {
-  const { updateStatus, saveFiling } = useWorkspace()
+  const { saveFiling } = useWorkspace()
   const toast = useToast()
   const idx = Math.max(0, CASE_FLOW.indexOf(c.status))
   // 사건번호가 있으면 이미 접수한 것이다. 상태를 앞 단계로 되돌려 놓았더라도
@@ -57,12 +47,6 @@ export default function CaseStatus({ c }) {
     setNo(c.caseNo || ''); setAt(c.filedAt || ''); setVia(c.filedVia || '전자소송'); setEdit(false)
   }, [c.id, c.caseNo, c.filedAt, c.filedVia])
 
-  const move = (next) => {
-    // 「접수함」부터는 사건번호가 있어야 이후 화면이 의미를 갖는다
-    if (CASE_FLOW.indexOf(next) >= 2 && !c.caseNo) { setEdit(true); updateStatus(c.id, next); return }
-    updateStatus(c.id, next)
-  }
-
   const save = () => {
     saveFiling(c.id, { caseNo: no, filedAt: at, filedVia: via })
     setEdit(false)
@@ -72,32 +56,14 @@ export default function CaseStatus({ c }) {
   const warn = no.trim() && !looksLikeCaseNo(no)
 
   return (
-    <div className="space-y-4">
-      {/* 진행 표시 — 배달 추적처럼. 지나온 단계는 채우고, 지금 단계에 점을 세운다.
-          각 단계가 그대로 버튼이라 누르면 그 단계로 옮겨진다. */}
-      <div>
-        <div className="flex flex-wrap items-baseline gap-2">
-          <h3 className="text-sm font-bold text-ink-900">진행 표시</h3>
-          <span className="text-xs text-ink-400">단계를 눌러 직접 바꿔 주세요 — 저희가 법원을 조회할 수는 없어요</span>
+    <div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h4 className="text-[13px] font-bold text-ink-900">법원 접수 정보</h4>
+          <p className="mt-0.5 text-[11px] font-medium text-ink-500">상태 변경이 아니라 법원에서 확인한 정보만 기록합니다.</p>
         </div>
-
-        <div className="mt-4">
-          <Stepper
-            steps={CASE_FLOW.map((label, i) => ({
-              key: label,
-              label,
-              done: i < idx,
-              note: c.statusAt?.[label] && i <= idx ? fmtDate(new Date(c.statusAt[label]).toISOString().slice(0, 10)) : '',
-            }))}
-            current={idx}
-            onPick={(i) => move(CASE_FLOW[i])}
-          />
-        </div>
-
-        <p className="mt-1 text-center text-[12px] text-ink-500">{STEP_DESC[c.status]}</p>
+        <span className="rounded-full bg-ink-100 px-2.5 py-1 text-[11px] font-bold text-ink-600">현재 {c.status}</span>
       </div>
-
-      {/* 접수 정보 */}
       <div className="rounded-xl border border-ink-200 bg-ink-50 p-4">
         {!filed && !edit ? (
           <p className="text-[13px] leading-relaxed text-ink-600">

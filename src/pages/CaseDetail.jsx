@@ -24,6 +24,7 @@ import { findType, fmtDate, savedAgo, completeness } from '../lib/complaint.js'
 import { precedents } from '../data/mock.js'
 import { Card, Button, Badge, Progress, cx } from '../components/ui.jsx'
 import CaseStatus, { CASE_FLOW, LawyerNote } from '../components/CaseStatus.jsx'
+import CaseStateControl from '../components/CaseStateControl.jsx'
 import Modal from '../components/Modal.jsx'
 import Stepper from '../components/Stepper.jsx'
 import {
@@ -129,64 +130,11 @@ function Hero({ c, onDrop }) {
         <Stat label="현재 단계" value={stage?.label || '—'} />
         <Stat label="소장 작성" value={`${pct}%`} bar={pct} />
         <Stat label="접수까지 남은 작업" value={left} unit="건" alert={left > 0} />
-        <StatusControl c={c} />
+        <CaseStateControl c={c} />
 
         <Button size="sm" variant="ghost" className="text-ink-400" onClick={onDrop} aria-label="사건 지우기"><Trash size={15} /></Button>
       </div>
     </div>
-  )
-}
-
-function StatusControl({ c }) {
-  const { updateStatus } = useWorkspace()
-  const toast = useToast()
-  const [pending, setPending] = useState('')
-  const nextIndex = CASE_FLOW.indexOf(pending)
-  const needsFiling = nextIndex >= CASE_FLOW.indexOf('접수함') && !c.caseNo
-
-  const confirm = () => {
-    if (!pending) return
-    updateStatus(c.id, pending)
-    toast(`사건 상태를 「${pending}」으로 바꿨어요`)
-    setPending('')
-  }
-
-  return (
-    <>
-      <label className="min-w-[136px]">
-        <span className="block text-[11px] text-ink-500">사건 상태 직접 관리</span>
-        <select
-          value={c.status}
-          onChange={(e) => { if (e.target.value !== c.status) setPending(e.target.value) }}
-          className="mt-1 h-9 w-full rounded-lg border border-ink-200 bg-white px-2.5 text-[13px] font-semibold text-ink-800 outline-none transition focus:border-brand-300 focus:ring-4 focus:ring-brand-100"
-          aria-label="사건 상태 변경"
-        >
-          {CASE_FLOW.map((status) => <option key={status} value={status}>{status}</option>)}
-        </select>
-      </label>
-
-      <Modal
-        open={!!pending}
-        onClose={() => setPending('')}
-        title={`사건 상태를 「${pending}」으로 바꿀까요?`}
-        sub="변경 내용은 최근 변화와 사건 타임라인에 바로 기록됩니다."
-        footer={
-          <>
-            <Button variant="neutral" onClick={() => setPending('')}>취소</Button>
-            <Button onClick={confirm}>상태 변경</Button>
-          </>
-        }
-      >
-        <div className="rounded-xl border border-ink-200 bg-ink-50 p-4 text-[13px] leading-relaxed text-ink-600">
-          <p><b className="text-ink-800">현재 상태</b> {c.status} → <b className="text-ink-800">변경 후</b> {pending}</p>
-          {needsFiling && (
-            <p className="mt-2 text-red-500">
-              접수 이후 상태에는 법원이 부여한 사건번호가 필요합니다. 상태를 바꾸면 아래의 접수 정보 입력란이 열립니다.
-            </p>
-          )}
-        </div>
-      </Modal>
-    </>
   )
 }
 
@@ -377,19 +325,62 @@ const deadlineLabel = (item) => item.dday < 0 ? `D+${-item.dday}` : item.dday ==
  */
 function Flow({ c }) {
   const { setFlowStep, setEntryPoint } = useWorkspace()
+  const navigate = useNavigate()
+  const toast = useToast()
   const [open, setOpen] = useState(false)
+  const [noticeOpen, setNoticeOpen] = useState(false)
+  const [noticeDate, setNoticeDate] = useState(TODAY())
   const steps = caseFlow(c)
   const entry = entryPoint(c)
+  const current = flowIndex(c)
+
+  const pickStep = (index) => {
+    const step = steps[index]
+    if (!step) return
+    if (step.key === 'notice' && index <= current + 1) {
+      setNoticeDate(TODAY())
+      setNoticeOpen(true)
+      return
+    }
+    if (step.key === 'draft') {
+      navigate('/app/documents')
+      return
+    }
+    if (step.key === 'file') {
+      window.dispatchEvent(new CustomEvent('naholo:open-filing'))
+      requestAnimationFrame(() => document.getElementById('filing')?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+      return
+    }
+    if (step.key === 'trial') {
+      navigate('/app/schedule')
+      return
+    }
+    if (index > current) {
+      toast('앞 단계를 확인해야 다음 단계로 넘어갈 수 있어요')
+      return
+    }
+    toast('지난 단계는 상단의 「상태 정정」에서 사유를 남기고 변경해 주세요')
+  }
+
+  const finishNotice = (skipped) => {
+    setFlowStep(c.id, 'draft', {
+      note: skipped ? '내용증명은 선택 단계로 건너뜀' : `${noticeDate} 내용증명 발송 확인`,
+      skipped: skipped ? 'notice' : '',
+      clearSkipped: skipped ? '' : 'notice',
+    })
+    toast(skipped ? '내용증명을 건너뛰고 소장 작성으로 이동했어요' : '내용증명 발송을 기록했어요', 'success')
+    setNoticeOpen(false)
+  }
 
   return (
     <Card className="px-6 pb-6 pt-7">
       <Stepper
         steps={steps.map((s) => ({
           ...s,
-          note: s.at ? fmtDate(s.at) : s.pct !== undefined && !s.done ? `${s.pct}%` : '',
+          note: c.flowSkipped?.[s.key] ? '건너뜀' : s.at ? fmtDate(s.at) : s.pct !== undefined && !s.done ? `${s.pct}%` : '',
         }))}
-        current={flowIndex(c)}
-        onPick={(i) => setFlowStep(c.id, steps[i].key)}
+        current={current}
+        onPick={pickStep}
       />
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-ink-100 pt-3">
         <p className="text-[12px] text-ink-400">현재 단계를 누르면 그 앞은 완료, 뒤는 예정으로 정리됩니다. 법원 진행은 직접 옮겨 주세요.</p>
@@ -427,6 +418,32 @@ function Flow({ c }) {
             </label>
           ))}
         </div>
+      </Modal>
+
+      <Modal
+        open={noticeOpen}
+        onClose={() => setNoticeOpen(false)}
+        dismissible={false}
+        title="내용증명을 보냈나요?"
+        sub="필수 절차는 아니지만 발송 여부를 남겨 두면 사건 흐름을 확인하기 쉬워요."
+        footer={(
+          <>
+            <Button variant="neutral" onClick={() => setNoticeOpen(false)}>아직 결정하지 않았어요</Button>
+            <Button variant="outline" onClick={() => finishNotice(true)}>이 단계 건너뛰기</Button>
+            <Button onClick={() => finishNotice(false)} disabled={!noticeDate}>발송 기록하기</Button>
+          </>
+        )}
+      >
+        <label className="block rounded-xl border border-ink-200 bg-ink-50 p-4">
+          <span className="text-[12px] font-semibold text-ink-700">발송일</span>
+          <input
+            type="date"
+            value={noticeDate}
+            onChange={(e) => setNoticeDate(e.target.value)}
+            className="mt-2 min-h-11 w-full rounded-lg border border-ink-200 bg-white px-3 text-[13px] font-semibold text-ink-700 outline-none focus:border-brand-300 focus:ring-4 focus:ring-brand-100"
+          />
+          <span className="mt-2 block text-[11px] font-medium leading-relaxed text-ink-500">발송하지 않았다면 건너뛰어도 소장 작성은 계속할 수 있어요.</span>
+        </label>
       </Modal>
     </Card>
   )
@@ -634,6 +651,11 @@ function FilingCard({ c }) {
   useEffect(() => {
     if (!c.caseNo && CASE_FLOW.indexOf(c.status) >= CASE_FLOW.indexOf('접수함')) setOpen(true)
   }, [c.caseNo, c.status])
+  useEffect(() => {
+    const openPanel = () => setOpen(true)
+    window.addEventListener('naholo:open-filing', openPanel)
+    return () => window.removeEventListener('naholo:open-filing', openPanel)
+  }, [])
   return (
     <Card id="filing" className="p-5">
       <button

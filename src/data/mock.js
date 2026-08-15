@@ -1,7 +1,11 @@
 // 데모용 mock 데이터 (실서비스라면 API 응답으로 대체)
 //
+// 단계별 확인용 사건은 절차 안내와 같은 표(procedureGuide)를 보고 만든다.
+//
 // 날짜는 고정값이 아니라 "오늘 기준 상대일"로 만든다.
 // 고정해 두면 시연할 때마다 D-day가 어긋나고, 지난 날짜에 "D-3"이 붙는 꼴이 난다.
+
+import { stageGuide } from '../lib/procedureGuide.js'
 
 /** 오늘로부터 n일 뒤의 날짜 (YYYY-MM-DD) */
 export function dayOffset(n) {
@@ -337,7 +341,7 @@ const DEMO_CASES = {
   evict: { caseKey: '2025가단776655', caseTitle: '상가 건물명도 청구', caseNo: '2025가단776655', court: '수원지방법원' },
   lease: { caseKey: CASE_NO, caseTitle: '임대차 보증금 반환 청구', caseNo: CASE_NO, court: '서울중앙지방법원' },
   crash: { caseKey: '2025가단334455', caseTitle: '교통사고 손해배상', caseNo: '2025가단334455', court: '서울북부지방법원' },
-  loan: { caseKey: '2024가소445566', caseTitle: '대여금 반환 청구 (소액)', caseNo: '2024가소445566', court: '서울동부지방법원' },
+  loan: { caseKey: '2024가소445566', caseTitle: '대여금 반환 청구 (6) 판결·종결', caseNo: '2024가소445566', court: '서울동부지방법원' },
 }
 
 export const demoCaseList = Object.values(DEMO_CASES)
@@ -531,7 +535,275 @@ const evidenceFilesFor = (caseKey) => demoBoardRows
   }))
 
 /** Figma 캡처와 제품 데모에서 쓰는 완성형 사건. 실제 사용자의 저장값과는 섞지 않는다. */
+
+/* ─────────────────── 단계별 확인용 사건 찍어내기 ───────────────────
+
+   절차 안내가 단계마다 무엇을 다르게 보여주는지 보려면, 유형마다 여섯 칸이 모두
+   채워져 있어야 한다. 손으로 서른 건을 적으면 읽지도 고치지도 못하는 데이터가 되므로
+   단계의 모양(STAGE_SHAPE)과 유형의 씨앗(STAGE_SEED)을 곱해 찍어낸다.
+
+   할 일은 절차 안내와 같은 표(procedureGuide)에서 가져온다 — 화면이 "이 단계에서
+   할 일"이라고 알려 준 것이 사건의 준비사항으로도 그대로 들어가야 앞뒤가 맞는다. */
+
+const STAGE_SHAPE = {
+  deal: { n: 1, label: '분쟁 발생', status: '작성 중', entryPoint: 'dispute', flowDone: {} },
+  notice: { n: 2, label: '내용증명', status: '작성 중', entryPoint: 'dispute', flowDone: {}, dated: true },
+  draft: { n: 3, label: '소장 작성', status: '작성 중', entryPoint: 'notified', flowDone: {}, dated: true, noticed: true, docPct: 55 },
+  file: { n: 4, label: '법원 접수', status: '제출 준비', entryPoint: 'notified', flowDone: { draft: true }, dated: true, noticed: true, docPct: 100 },
+  trial: { n: 5, label: '변론', status: '진행 중', entryPoint: 'filed', flowDone: {}, dated: true, noticed: true, docPct: 100, filed: true },
+  judge: { n: 6, label: '판결', status: '진행 중', entryPoint: 'filed', flowDone: { trial: true }, dated: true, noticed: true, docPct: 100, filed: true },
+}
+
+/** 유형마다 다른 것 — 이름·법원·금액·사실관계의 뼈대 */
+const STAGE_SEED = {
+  deposit: {
+    caseNoBase: 331000,
+    title: '임대차보증금', court: '서울중앙지방법원', amount: '12000000', docTitle: '임대차보증금 반환 소장',
+    dateKey: 'contractDate', dateValue: '2024-03-01',
+    parties: ['백지호', '오세영', '문가람', '전유진', '남건우', '허수아'],
+    form: { leaseKind: '주택', propertyAddr: '서울특별시 동작구 상도로 88', depositAmount: '12000000', leaseEnd: '2026-03-01', endWay: '기간 만료', handover: '비워줬어요' },
+  },
+  wage: {
+    caseNoBase: 342000,
+    title: '임금체불', court: '서울남부지방법원', amount: '6800000', docTitle: '임금 청구 소장',
+    dateKey: 'hireDate', dateValue: '2023-09-04',
+    parties: ['주식회사 세움테크', '늘품물산', '주식회사 하람에프앤비', '가온기술', '주식회사 담아유통', '해솔산업'],
+    form: { leaveDate: '2026-05-31', payKind: '월급', payAmount: '2900000', payDay: '매월 10일', workerCount: '5인 이상', unpaidTotal: '6800000' },
+  },
+  tort: {
+    caseNoBase: 353000,
+    title: '손해배상', court: '서울북부지방법원', amount: '9200000', docTitle: '손해배상 소장',
+    dateKey: 'incidentDate', dateValue: '2026-01-19',
+    parties: ['도경한', '유리안', '천보름', '설민호', '강예찬', '진하율'],
+    form: { tortKind: '일반 (기)', hasContract: '없음 (사고·불법행위)', ownFault: '없음' },
+  },
+  evict: {
+    caseNoBase: 364000,
+    title: '건물명도', court: '수원지방법원', amount: '38000000', docTitle: '건물명도 소장',
+    dateKey: 'contractDate', dateValue: '2023-07-15',
+    parties: ['우진상회', '주식회사 미소식품', '한결카페', '주식회사 온다마트', '별빛세탁', '주식회사 다솜케어'],
+    form: { leaseKind: '상가', propertyDesc: '경기도 수원시 팔달구 인계로 77\n철근콘크리트조 3층 근린생활시설 제1층 제101호 62.4㎡', monthlyRent: '1800000', unpaidMonths: '4' },
+  },
+}
+
+const stageCase = (typeKey, stageKey) => {
+  const shape = STAGE_SHAPE[stageKey]
+  const seed = STAGE_SEED[typeKey]
+  const guide = stageGuide(typeKey, stageKey)
+  const id = `demo-${typeKey}${shape.n}-case`
+  const born = Date.now() - 86400000 * (60 - shape.n * 6)
+
+  // 이 단계에서 할 일 — 절차 안내가 알려 주는 것을 그대로 준비사항으로 둔다
+  const todos = guide.items.slice(0, 3).map((text, i) => ({
+    id: `${id}-todo-${i + 1}`,
+    text,
+    due: dayOffset(shape.n + i * 3),
+    done: false,
+    typeKey: i === 0 && (stageKey === 'file' || stageKey === 'trial') ? 'filing' : 'prepare',
+    remind: i === 0 ? 3 : 1,
+    createdAt: born,
+  }))
+  if (shape.filed) {
+    todos.unshift({
+      id: `${id}-todo-0`,
+      text: stageKey === 'judge' ? '판결 선고기일 확인' : '제1회 변론기일 참석',
+      due: dayOffset(shape.n + 2),
+      time: '14:00',
+      place: `${seed.court} 제${300 + shape.n}호 법정`,
+      done: false,
+      typeKey: 'hearing',
+      remind: 3,
+      source: 'court-notice',
+      noticeName: stageKey === 'judge' ? '판결선고기일통지서' : '변론기일통지서',
+      createdAt: born,
+    })
+  }
+
+  const docs = shape.docPct
+    ? [{ id: 'complaint', kind: 'complaint', title: seed.docTitle, progress: shape.docPct, createdAt: born, updatedAt: Date.now() - 86400000 * 2, ...(shape.docPct === 100 ? { versions: [{ version: 1, createdAt: demoMoment(-(12 - shape.n)), ...(shape.filed ? { submittedAt: dayOffset(-(20 - shape.n)) } : {}), note: shape.filed ? '법원 접수본' : '최종본' }] } : {}) }]
+    : []
+
+  return {
+    id,
+    kind: shape.docPct ? 'complaint' : 'case',
+    typeKey,
+    title: `${seed.title} (${shape.n}) ${shape.label}`,
+    caseNo: shape.filed ? `2026가단${seed.caseNoBase + shape.n}` : '',
+    filedAt: shape.filed ? dayOffset(-(20 - shape.n)) : '',
+    filedVia: shape.filed ? '전자소송' : '',
+    status: shape.status,
+    entryPoint: shape.entryPoint,
+    flowDone: shape.flowDone,
+    form: {
+      court: stageKey === 'deal' ? '' : seed.court,
+      amount: seed.amount,
+      pName: '김지민', pRrn: '920315-2******', pAddr: '서울특별시 관악구 남부순환로 1820', pTel: '010-2841-7306',
+      dName: seed.parties[shape.n - 1],
+      ...(shape.dated ? { [seed.dateKey]: seed.dateValue, ...seed.form } : {}),
+      ...(shape.noticed ? { demandMade: '내용증명을 보냈어요', demandDate: dayOffset(-(40 - shape.n)), demandMethod: '내용증명 우편', demandResult: '수령했으나 답변 없음' } : {}),
+      evidenceFiles: [],
+    },
+    statusAt: { [shape.status]: born },
+    todos,
+    events: [
+      { id: `${id}-ev-1`, kind: 'status', title: '사건 등록', desc: `${Number(seed.amount).toLocaleString('ko-KR')}원`, at: born, source: 'app' },
+      ...(shape.noticed ? [{ id: `${id}-ev-2`, kind: 'user', title: '내용증명 발송', desc: '배달증명 수령', at: Date.now() - 86400000 * (40 - shape.n), source: 'user' }] : []),
+      ...(shape.filed ? [{ id: `${id}-ev-3`, kind: 'status', title: '법원 접수', desc: '전자소송', at: Date.now() - 86400000 * (20 - shape.n), source: 'user' }] : []),
+    ],
+    precedentNos: [],
+    docs,
+    docMeta: shape.docPct === 100
+      ? { complaint: shape.filed ? { status: '제출완료', due: dayOffset(-(20 - shape.n)), submittedAt: dayOffset(-(20 - shape.n)) } : { status: '제출예정', due: dayOffset(shape.n + 3), submittedAt: '' } }
+      : shape.docPct ? { complaint: { status: '작성 중', due: dayOffset(shape.n + 8), submittedAt: '' } } : {},
+    createdAt: born,
+    updatedAt: Date.now() - 86400000 * shape.n,
+  }
+}
+
+/**
+ * 이미 손으로 적어 둔 상세 사건이 맡고 있는 칸은 비워 둔다 — 같은 자리에 두 건이
+ * 있으면 목록만 길어진다. 아래 표는 "그 유형에서 아직 비어 있는 칸"이다.
+ */
+const MISSING_STAGES = {
+  deposit: ['deal', 'notice', 'draft', 'file', 'judge'],   // 변론은 「임대차 보증금 반환 청구」가 맡는다
+  wage: ['deal', 'notice', 'file', 'trial', 'judge'],       // 소장 작성은 「근로계약 위반 손해배상」
+  tort: ['deal', 'trial'],                                   // 나머지는 인테리어·중고차·웨딩·교통사고가 맡는다
+  evict: ['deal', 'notice', 'draft', 'trial', 'judge'],      // 법원 접수는 「상가 건물명도 청구」
+}
+
+const stageCases = Object.entries(MISSING_STAGES)
+  .flatMap(([typeKey, stages]) => stages.map((stageKey) => stageCase(typeKey, stageKey)))
+
 export const figmaWorkspaceCases = [
+  ...stageCases,
+  // ── 대여금 반환 청구 (1)~(5) ────────────────────────────────
+  // 같은 유형인데 서 있는 칸만 다르다. 절차 안내가 단계마다 무엇을 다르게 보여주는지
+  // 사건을 새로 만들지 않고도 확인할 수 있게, 한 유형으로 다섯 칸을 채워 둔다.
+  {
+    // (1) 분쟁 발생 — 빌려준 사실은 있는데 아직 정리를 안 했다
+    id: 'demo-loan1-case', kind: 'case', typeKey: 'loan', title: '대여금 반환 청구 (1) 분쟁 발생', caseNo: '', filedAt: '', filedVia: '', status: '작성 중',
+    entryPoint: 'dispute', flowDone: {},
+    form: {
+      court: '', amount: '3000000',
+      pName: '김지민', pTel: '010-2841-7306', pAddr: '서울특별시 관악구 남부순환로 1820',
+      dName: '한도현',
+      evidenceFiles: [],
+    },
+    statusAt: { '작성 중': Date.now() - 86400000 * 2 },
+    todos: [
+      { id: 'demo-loan1-todo-1', text: '빌려준 날짜와 금액 정리하기', due: dayOffset(2), done: false, typeKey: 'prepare', remind: 1, createdAt: Date.now() - 86400000 * 2 },
+      { id: 'demo-loan1-todo-2', text: '계좌이체 내역 내려받기', due: dayOffset(4), done: false, typeKey: 'prepare', remind: 1, createdAt: Date.now() - 86400000 * 2 },
+    ],
+    events: [{ id: 'demo-loan1-ev-1', kind: 'status', title: '사건 등록', desc: '3,000,000원', at: Date.now() - 86400000 * 2, source: 'app' }],
+    precedentNos: [], docs: [], docMeta: {},
+    createdAt: Date.now() - 86400000 * 2, updatedAt: Date.now() - 3600000 * 3,
+  },
+  {
+    // (2) 내용증명 — 변제기가 지났고 이제 최고서를 보낼 차례
+    id: 'demo-loan2-case', kind: 'case', typeKey: 'loan', title: '대여금 반환 청구 (2) 내용증명', caseNo: '', filedAt: '', filedVia: '', status: '작성 중',
+    entryPoint: 'dispute', flowDone: {},
+    form: {
+      court: '', amount: '7000000',
+      pName: '김지민', pTel: '010-2841-7306', pAddr: '서울특별시 관악구 남부순환로 1820',
+      dName: '배수민', dAddr: '서울특별시 중랑구 봉화산로 45',
+      loanDate: '2024-11-05', loanAmount: '7000000', loanMethod: '계좌이체', interestSet: '약정 없음',
+      evidenceFiles: [],
+    },
+    statusAt: { '작성 중': Date.now() - 86400000 * 9 },
+    todos: [
+      { id: 'demo-loan2-todo-1', text: '내용증명 발송', due: dayOffset(3), done: false, typeKey: 'prepare', remind: 1, createdAt: Date.now() - 86400000 * 9 },
+      { id: 'demo-loan2-todo-2', text: '배달증명 받으면 도달일 적어두기', due: dayOffset(10), done: false, typeKey: 'prepare', remind: 1, createdAt: Date.now() - 86400000 * 9 },
+    ],
+    events: [{ id: 'demo-loan2-ev-1', kind: 'user', title: '변제기 도과', desc: '2025. 11. 5. 변제기', at: Date.now() - 86400000 * 9, source: 'user' }],
+    precedentNos: [], docs: [], docMeta: {},
+    createdAt: Date.now() - 86400000 * 9, updatedAt: Date.now() - 86400000,
+  },
+  {
+    // (3) 소장 작성 — 내용증명에 답이 없어 소장을 쓰는 중
+    id: 'demo-loan3-case', kind: 'complaint', typeKey: 'loan', title: '대여금 반환 청구 (3) 소장 작성', caseNo: '', filedAt: '', filedVia: '', status: '작성 중',
+    entryPoint: 'notified', flowDone: {},
+    form: {
+      court: '서울중앙지방법원', amount: '12000000',
+      pName: '김지민', pRrn: '920315-2******', pAddr: '서울특별시 관악구 남부순환로 1820', pTel: '010-2841-7306',
+      dName: '류하람', dAddr: '서울특별시 성북구 화랑로 210',
+      loanDate: '2024-05-20', loanAmount: '12000000', payDateSame: '따로 정했어요', loanMethod: '계좌이체', interestSet: '연 5%',
+      demandMade: '내용증명을 보냈어요', demandDate: dayOffset(-26), demandMethod: '내용증명 우편', demandResult: '수령했으나 답변 없음',
+      evidenceFiles: [],
+    },
+    statusAt: { '작성 중': Date.now() - 86400000 * 31 },
+    todos: [
+      { id: 'demo-loan3-todo-1', text: '청구원인 사실관계 마저 쓰기', due: dayOffset(2), done: false, typeKey: 'prepare', remind: 1, createdAt: Date.now() - 86400000 * 5 },
+      { id: 'demo-loan3-todo-2', text: '이자 계산 내역 확인', due: dayOffset(4), done: false, typeKey: 'prepare', remind: 1, createdAt: Date.now() - 86400000 * 5 },
+      { id: 'demo-loan3-todo-3', text: '내용증명 발송', due: dayOffset(-26), done: true, doneAt: Date.now() - 86400000 * 26, createdAt: Date.now() - 86400000 * 31 },
+    ],
+    events: [
+      { id: 'demo-loan3-ev-1', kind: 'user', title: '내용증명 발송', desc: '변제 최고 · 배달증명 수령', at: Date.now() - 86400000 * 26, source: 'user' },
+      { id: 'demo-loan3-ev-2', kind: 'doc', title: '소장 초안 생성', at: Date.now() - 86400000 * 5, source: 'app' },
+    ],
+    precedentNos: [],
+    docs: [{ id: 'complaint', kind: 'complaint', title: '대여금 반환 소장', progress: 62, createdAt: Date.now() - 86400000 * 5, updatedAt: Date.now() - 86400000 }],
+    docMeta: { complaint: { status: '작성 중', due: dayOffset(9), submittedAt: '' } },
+    createdAt: Date.now() - 86400000 * 31, updatedAt: Date.now() - 86400000,
+  },
+  {
+    // (5) 변론 — 접수 후 기일이 잡혀 서면이 오가는 중
+    id: 'demo-loan5-case', kind: 'complaint', typeKey: 'loan', title: '대여금 반환 청구 (5) 변론', caseNo: '2026가단220110', filedAt: dayOffset(-62), filedVia: '전자소송', status: '진행 중',
+    entryPoint: 'filed', flowDone: {},
+    form: {
+      court: '서울서부지방법원', amount: '15000000',
+      pName: '김지민', pRrn: '920315-2******', pAddr: '서울특별시 관악구 남부순환로 1820', pTel: '010-2841-7306',
+      dName: '신태오', dAddr: '서울특별시 은평구 진관2로 60',
+      loanDate: '2023-12-01', loanAmount: '15000000', payDateSame: '따로 정했어요', loanMethod: '계좌이체', interestSet: '연 6%',
+      demandMade: '내용증명을 보냈어요', demandDate: dayOffset(-96), demandMethod: '내용증명 우편', demandResult: '수령했으나 답변 없음',
+      evidenceFiles: [],
+    },
+    statusAt: { '작성 중': Date.now() - 86400000 * 110, '제출 준비': Date.now() - 86400000 * 70, '접수함': Date.now() - 86400000 * 62, '진행 중': Date.now() - 86400000 * 30 },
+    todos: [
+      { id: 'demo-loan5-todo-1', text: '제2회 변론기일 참석', due: dayOffset(8), time: '15:00', done: false, place: '서울서부지방법원 제205호 법정', typeKey: 'hearing', remind: 3, source: 'court-notice', noticeName: '변론기일통지서', createdAt: Date.now() - 86400000 * 5 },
+      { id: 'demo-loan5-todo-2', text: '준비서면(2) — 변제 항변 반박 제출', due: dayOffset(5), done: false, typeKey: 'filing', remind: 3, createdAt: Date.now() - 86400000 * 5 },
+      { id: 'demo-loan5-todo-3', text: '제1회 변론기일 참석', due: dayOffset(-24), done: true, doneAt: Date.now() - 86400000 * 24, createdAt: Date.now() - 86400000 * 40 },
+    ],
+    events: [
+      { id: 'demo-loan5-ev-1', kind: 'status', title: '법원 접수 — 사건번호 2026가단220110', desc: '전자소송', at: Date.now() - 86400000 * 62, source: 'user' },
+      { id: 'demo-loan5-ev-2', kind: 'user', title: '피고 답변서 수령', desc: '일부 변제했다고 주장', at: Date.now() - 86400000 * 33, source: 'user' },
+      { id: 'demo-loan5-ev-3', kind: 'user', title: '제1회 변론기일 진행', desc: '쟁점 정리 · 다음 기일 지정', at: Date.now() - 86400000 * 24, source: 'user' },
+    ],
+    precedentNos: ['2025다213495'],
+    docs: [
+      { id: 'complaint', kind: 'complaint', title: '대여금 반환 소장', progress: 100, createdAt: Date.now() - 86400000 * 75, updatedAt: Date.now() - 86400000 * 62, versions: [{ version: 1, createdAt: demoMoment(-75, '10:20'), submittedAt: dayOffset(-62), note: '법원 접수본' }] },
+      { id: 'brief1', kind: 'brief', title: '준비서면(1) — 변제 항변에 대한 반박', progress: 100, createdAt: Date.now() - 86400000 * 30, updatedAt: Date.now() - 86400000 * 26, versions: [{ version: 1, createdAt: demoMoment(-30, '14:10'), submittedAt: dayOffset(-26), note: '법원 제출본' }] },
+      { id: 'brief2', kind: 'brief', title: '준비서면(2) — 일부 변제금 충당', progress: 45, createdAt: Date.now() - 86400000 * 5, updatedAt: Date.now() - 86400000 },
+    ],
+    docMeta: {
+      complaint: { status: '제출완료', due: dayOffset(-62), submittedAt: dayOffset(-62) },
+      brief1: { status: '제출완료', due: dayOffset(-26), submittedAt: dayOffset(-26) },
+      brief2: { status: '작성 중', due: dayOffset(5), submittedAt: '' },
+    },
+    createdAt: Date.now() - 86400000 * 110, updatedAt: Date.now() - 86400000,
+  },
+  {
+    // (4) 법원 접수 — 소장은 다 됐고 인지대만 내면 된다
+    id: 'demo-loan4-case', kind: 'complaint', typeKey: 'loan', title: '대여금 반환 청구 (4) 법원 접수', caseNo: '', filedAt: '', filedVia: '', status: '제출 준비',
+    entryPoint: 'notified', flowDone: { draft: true },
+    form: {
+      court: '서울남부지방법원', amount: '8500000',
+      pName: '김지민', pRrn: '920315-2******', pAddr: '서울특별시 관악구 남부순환로 1820', pTel: '010-2841-7306',
+      dName: '고은채', dAddr: '서울특별시 양천구 목동동로 233',
+      loanDate: '2024-02-14', loanAmount: '8500000', payDateSame: '따로 정했어요', loanMethod: '현금', interestSet: '약정 없음',
+      demandMade: '내용증명을 보냈어요', demandDate: dayOffset(-48), demandMethod: '내용증명 우편', demandResult: '반환 거부 회신',
+      evidenceFiles: [],
+    },
+    statusAt: { '작성 중': Date.now() - 86400000 * 55, '제출 준비': Date.now() - 86400000 * 3 },
+    todos: [
+      { id: 'demo-loan4-todo-1', text: '인지대·송달료 납부', due: dayOffset(2), done: false, typeKey: 'prepare', remind: 1, createdAt: Date.now() - 86400000 * 3 },
+      { id: 'demo-loan4-todo-2', text: '전자소송으로 소장 접수', due: dayOffset(4), done: false, typeKey: 'filing', remind: 3, createdAt: Date.now() - 86400000 * 3 },
+    ],
+    events: [{ id: 'demo-loan4-ev-1', kind: 'doc', title: '소장 작성 완료', at: Date.now() - 86400000 * 3, source: 'app' }],
+    precedentNos: [],
+    docs: [{ id: 'complaint', kind: 'complaint', title: '대여금 반환 소장', progress: 100, createdAt: Date.now() - 86400000 * 12, updatedAt: Date.now() - 86400000 * 3, versions: [{ version: 1, createdAt: demoMoment(-12, '11:05'), note: '최초 생성본' }, { version: 2, createdAt: demoMoment(-3, '16:30'), note: '이자 계산 반영 최종본' }] }],
+    docMeta: { complaint: { status: '제출예정', due: dayOffset(4), submittedAt: '' } },
+    createdAt: Date.now() - 86400000 * 55, updatedAt: Date.now() - 86400000 * 3,
+  },
   {
     // ① 분쟁 발생 — 이제 막 틀어졌고, 아직 사실관계도 다 못 적었다
     id: 'demo-gym-case', kind: 'case', typeKey: '', title: '헬스장 이용료 환불 거부', caseNo: '', filedAt: '', filedVia: '', status: '작성 중',
@@ -661,7 +933,7 @@ export const figmaWorkspaceCases = [
   },
   {
     // ⑨ 종결 — 선고 후 항소기간이 지나 확정됐다
-    id: 'demo-loan-case', kind: 'complaint', typeKey: 'loan', title: '대여금 반환 청구 (소액)', caseNo: '2024가소445566', filedAt: dayOffset(-31), filedVia: '전자소송', status: '종결',
+    id: 'demo-loan-case', kind: 'complaint', typeKey: 'loan', title: '대여금 반환 청구 (6) 판결·종결', caseNo: '2024가소445566', filedAt: dayOffset(-31), filedVia: '전자소송', status: '종결',
     entryPoint: 'filed', flowDone: {},
     form: { court: '서울동부지방법원', amount: '5000000', pName: '최도윤', pRrn: '890201-1******', pAddr: '서울특별시 성동구 왕십리로 115', pTel: '010-7723-6015', dName: '정민수', dAddr: '서울특별시 광진구 아차산로 272', loanDate: '2023-08-10', loanAmount: '5000000', payDateSame: '계약한 날 바로', loanMethod: '계좌이체', interestSet: '약정 없음', evidenceFiles: evidenceFilesFor('2024가소445566') },
     statusAt: { '작성 중': Date.now() - 86400000 * 52, '제출 준비': Date.now() - 86400000 * 36, '접수함': Date.now() - 86400000 * 31, '진행 중': Date.now() - 86400000 * 24, '종결': Date.now() - 86400000 * 3 },

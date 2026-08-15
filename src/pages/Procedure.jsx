@@ -12,15 +12,16 @@
 // 단계 정의는 사건관리와 같은 caseFlow를 쓴다. 한 앱에서 진행 단계가 두 종류면
 // "내가 어디 있는 거지"를 두 번 묻게 된다.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Card, Badge, Button, inputCls, cx } from '../components/ui.jsx'
 import Modal from '../components/Modal.jsx'
 import { useWorkspace } from '../context/WorkspaceContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
 import { caseFlow, flowIndex, caseTasks, caseTitle } from '../lib/casebook.js'
+import { stageGuide, deadlineSpan } from '../lib/procedureGuide.js'
 import { stampFee, serviceFee, won, fmtDate, findType, completeness, savedAgo, SERVICE_FEE_IS_ESTIMATE } from '../lib/complaint.js'
-import { Check, FileText, AlertTriangle, ArrowRight, ArrowLeft } from '../components/icons.jsx'
+import { Check, FileText, AlertTriangle, ArrowRight, ArrowLeft, ChevronRight } from '../components/icons.jsx'
 
 /**
  * 사건 고르기 카드 — Figma 문서 유형 카드와 같은 컴포넌트를 쓴다.
@@ -32,29 +33,15 @@ function CasePick({ c, sum, onPick }) {
     <button
       type="button"
       onClick={onPick}
-      className="group relative aspect-[320/284] w-full max-w-[320px] self-start overflow-hidden rounded-[20px] border border-ink-200 bg-ink-100 text-left transition-colors hover:border-brand-200"
+      className="group relative h-[284px] w-full max-w-[320px] self-start overflow-hidden rounded-[20px] border border-ink-200 bg-surface-sub text-left transition-colors hover:border-brand-200 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
     >
-      {/* 뒷장 — Rectangle 150 (164×194 @100,110) */}
+      <img src="/figma/procedure/case-folder.svg" alt="" aria-hidden="true" className="pointer-events-none absolute left-[26px] top-[79px] h-[229px] w-[259px] max-w-none" />
       <span
         aria-hidden
-        className="absolute rounded-[14px] bg-[#c0cad7]"
-        style={{ left: '31.25%', top: '38.73%', width: '51.25%', height: '68.31%' }}
-      />
-      {/* 앞장 — Rectangle 149 (164×194 @58,112) + drop-shadow 21.7 / 10% */}
-      <span
-        aria-hidden
-        className="absolute rounded-[14px] bg-white shadow-[0_0_22px_rgba(0,0,0,0.1)]"
-        style={{ left: '18.13%', top: '39.44%', width: '51.25%', height: '68.31%' }}
-      />
-      {/* 포켓 — 320×90 @0,194 · #f2f4f6 68% + 유리 블러 19.5 */}
-      <span
-        aria-hidden
-        className="absolute inset-x-0 bottom-0 backdrop-blur-[19px]"
-        style={{ height: '31.69%', background: 'rgba(242,244,246,0.68)' }}
+        className="absolute inset-x-0 bottom-0 h-[105px] bg-[rgba(242,244,246,0.68)] backdrop-blur-[19px] transition-colors group-hover:bg-[rgba(198,225,255,0.34)]"
       />
 
-      {/* 제목·부제 — @25,14 */}
-      <span className="absolute left-[7.8%] right-[7.8%] top-[4.9%]">
+      <span className="absolute left-5 right-5 top-5">
         <span className="block truncate text-[24px] font-semibold leading-snug text-ink-700 transition-colors group-hover:text-brand-400">
           {caseTitle(c)}
         </span>
@@ -63,8 +50,7 @@ function CasePick({ c, sum, onPick }) {
         </span>
       </span>
 
-      {/* 마지막 업데이트 — 포켓 안 @30,225 */}
-      <span className="absolute bottom-[6%] left-[9.4%] text-[18px] font-medium text-ink-400">
+      <span className="absolute bottom-[24px] left-[30px] text-[18px] font-medium leading-[1.6] tracking-[-0.36px] text-ink-400 transition-colors group-hover:text-brand-300">
         마지막 업데이트: {savedAgo(c.updatedAt)}
       </span>
     </button>
@@ -78,114 +64,6 @@ const StepNum = ({ n }) => (
   </span>
 )
 
-/**
- * 단계마다 걸리는 **법정 기한**.
- *
- * 우리는 법원 시스템을 조회할 수 없어서 송달일·기일을 알 수 없다. 대신
- * "무엇을 기준으로 며칠인지"를 알려 주고, 사용자가 기준일을 넣으면 계산해 준다.
- * 날짜를 아는 척하는 것보다 세는 법을 알려 주는 편이 정직하고 실제로 쓸모 있다.
- */
-const DEADLINES = {
-  file: [
-    { key: 'fix', label: '보정명령 이행', base: '보정명령을 받은 날', days: 7, law: '법원이 정한 기간', who: '원고',
-      note: '기간은 명령서에 적힌 것을 따르세요. 넘기면 소장이 각하될 수 있어요.' },
-  ],
-  trial: [
-    { key: 'answer', label: '답변서 제출', base: '소장 부본을 송달받은 날', days: 30, law: '민사소송법 제256조 제1항', who: '피고',
-      note: '피고가 30일 안에 답변서를 내지 않으면 변론 없이 판결이 날 수 있어요.' },
-    { key: 'brief', label: '준비서면 제출', base: '변론기일', days: -7, law: '민사소송규칙 제69조의4', who: '양쪽',
-      note: '상대방이 준비할 시간을 두고 미리 냅니다.' },
-  ],
-  judge: [
-    { key: 'appeal', label: '항소', base: '판결서를 송달받은 날', days: 14, law: '민사소송법 제396조', who: '진 쪽',
-      note: '2주가 지나면 판결이 확정돼 더는 다툴 수 없어요.' },
-  ],
-}
-
-/**
- * 단계마다 실제로 손에 들고 있어야 하는 것.
- *
- * 사건 유형이 다르면 준비물도 다르다. 대여금 사건에 「임대차계약서」를 챙기라고 하면
- * 안내가 아니라 잡음이다. 그래서 절차 공통으로 필요한 것(BASE)에 유형별로 다른 것을
- * 덮어쓴다. 유형을 모르는 사건은 BASE만 본다.
- *
- * 접수·변론·판결처럼 **절차 자체가 정하는 준비물**은 유형과 무관해서 BASE에만 둔다.
- * 분쟁 발생·내용증명·소장 작성은 무엇을 다투느냐에 따라 갈리므로 유형별로 적는다.
- */
-const BASE_MATERIALS = {
-  deal: ['계약서 등 권리의 근거가 되는 원본', '돈이 오간 내역 (이체·영수증)', '문자·카톡 대화 기록'],
-  notice: ['내용증명 3부 (상대방·우체국·본인)', '배달증명 영수증'],
-  draft: ['당사자 인적사항 (주소·주민등록번호)', '갑호증으로 낼 자료', '인지대·송달료'],
-  file: ['소장 정본 1부 + 부본 (피고 수만큼)', '증거 사본 (피고 수 + 1부)', '인지·송달료 납부 영수증'],
-  trial: ['상대방 답변서·준비서면', '반박할 증거', '준비서면 (상대방 수 + 1부)'],
-  judge: ['판결정본', '송달증명원·확정증명원', '(강제집행 시) 집행문'],
-}
-
-const MATERIALS_BY_TYPE = {
-  deposit: {
-    deal: ['임대차계약서 원본', '보증금 입금증·이체내역', '목적물 인도 당시 사진', '전입세대확인서·확정일자'],
-    notice: ['내용증명 3부 (임대인·우체국·본인)', '배달증명 영수증', '임차권등기명령 신청 검토'],
-    draft: ['당사자 인적사항', '임대차계약서·입금증·인도 사진 (갑호증)', '공제 주장에 대한 반박 자료', '인지대·송달료'],
-  },
-  loan: {
-    deal: ['차용증·금전소비대차계약서', '대여금 계좌이체 확인증', '변제 독촉 문자·카톡', '일부 변제가 있었다면 그 입금내역'],
-    notice: ['내용증명 3부 (채무자·우체국·본인)', '배달증명 영수증', '소액이면 지급명령(독촉)도 함께 검토'],
-    draft: ['당사자 인적사항', '차용증·이체확인증 (갑호증)', '변제기·이자 약정 정리', '인지대·송달료'],
-  },
-  wage: {
-    deal: ['근로계약서', '급여명세서·급여 이체내역', '근태기록·출퇴근 기록', '사내 메신저 등 업무 지시 내역'],
-    notice: ['고용노동부 진정 접수증·처리결과', '체불금품 확인원', '내용증명 3부 + 배달증명'],
-    draft: ['당사자 인적사항 (법인이면 법인등기부)', '근로계약서·급여내역 (갑호증)', '미지급 항목별 계산 내역', '인지대·송달료'],
-  },
-  tort: {
-    deal: ['사고사실확인원·사고 경위서', '진단서·치료비 영수증', '사진·블랙박스 영상', '휴업손해 입증자료 (급여명세서 등)'],
-    notice: ['보험사 제시액과 산정 근거', '합의 시도 기록', '내용증명 3부 + 배달증명'],
-    draft: ['당사자 인적사항', '진단서·영수증·사고자료 (갑호증)', '적극손해·일실수입·위자료 계산 내역', '인지대·송달료'],
-  },
-  evict: {
-    deal: ['임대차계약서', '차임 연체 내역', '등기사항전부증명서 (소유 확인)', '해지 통고 내용증명·배달증명'],
-    notice: ['계약 해지 통고 내용증명 3부', '배달증명 영수증', '점유이전금지가처분 신청 검토'],
-    draft: ['부동산의 표시 (등기부 기재대로)', '계약서·연체내역·해지통고 (갑호증)', '소가 산정 근거 (목적물 가액)', '인지대·송달료'],
-  },
-}
-
-const materialsFor = (typeKey, stepKey) =>
-  MATERIALS_BY_TYPE[typeKey]?.[stepKey] || BASE_MATERIALS[stepKey] || []
-
-/**
- * 단계마다 "무엇을 하는 때인가"와 "그때 할 일".
- * 사건 데이터에서 나오지 않는 절차 지식이라 여기 둔다.
- */
-const GUIDE = {
-  deal: {
-    desc: '다툼이 생긴 시점이에요. 소송보다 먼저 자료를 모아 둡니다.',
-    items: ['계약서·차용증·이체내역 모으기', '사실관계를 시간순으로 적어 두기'],
-  },
-  notice: {
-    desc: '소송 전에 상대방에게 이행을 요구하는 단계예요. 꼭 거쳐야 하는 건 아닙니다.',
-    items: ['내용증명 작성·발송', '배달증명 보관 (도달일이 지연손해금 기산점이 돼요)'],
-  },
-  draft: {
-    desc: '청구취지·청구원인·증거를 갖춘 소장을 만드는 단계예요.',
-    items: ['당사자·관할·청구금액 입력', '사실관계를 요건사실 순서로 정리', '갑호증 번호 매기고 입증취지 적기'],
-    to: '/app/documents',
-  },
-  file: {
-    desc: '관할 법원에 소장을 내고 사건번호를 받는 단계예요.',
-    items: ['인지대·송달료 납부', '전자소송 입력 또는 종이 제출', '접수 후 사건번호를 사건관리에 적어 두기'],
-    to: '/app/cases',
-  },
-  trial: {
-    desc: '답변서와 준비서면이 오가는 단계예요.',
-    items: ['상대방 답변서 검토', '준비서면으로 반박', '부족한 증거 보강'],
-    to: '/app/documents',
-  },
-  judge: {
-    desc: '선고를 받고, 확정되면 집행으로 이어집니다.',
-    items: ['판결문 수령', '항소 여부 판단 — 송달 다음 날부터 2주', '확정 후 강제집행 신청'],
-  },
-}
-
 export default function Procedure() {
   const { activeCase, activeRaw, rawCases, myCases, setActiveCaseId } = useWorkspace()
   // Figma 「소송절차안내」 시작 화면 — 사건이 있으면 어느 사건의 절차인지부터 고른다.
@@ -194,6 +72,10 @@ export default function Procedure() {
   // 일반 민사 소송 절차를 그대로 보여준다. 절차를 알아야 사건을 만들 마음이 든다.
   //   pick : 사건 고르기   ·   case : 고른 사건의 절차   ·   general : 사건 없는 기본 절차
   const [mode, setMode] = useState(() => (rawCases.length === 0 ? 'general' : 'pick'))
+  const [pickPage, setPickPage] = useState(0)
+  const pickPageCount = Math.max(1, Math.ceil(rawCases.length / 6))
+  const safePickPage = Math.min(pickPage, pickPageCount - 1)
+  const visiblePickCases = rawCases.slice(safePickPage * 6, safePickPage * 6 + 6)
   const general = mode === 'general'
   const mine = !general && !!activeRaw
 
@@ -214,38 +96,67 @@ export default function Procedure() {
   const fee = amount ? stampFee(Number(amount)) : 0
   const postage = amount ? serviceFee(2) : 0
 
+  useEffect(() => {
+    setPickPage((page) => Math.min(page, pickPageCount - 1))
+  }, [pickPageCount])
+
 
 
   if (mode === 'pick') {
     return (
-      <div className="space-y-6">
+      <div className="mx-auto max-w-[1091px] space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-ink-900">소송 절차 안내</h1>
-          <p className="mt-1 text-sm text-ink-500">소송 진행 단계를 한눈에 확인하고 다음 단계를 준비하세요</p>
+          <h1 className="text-[30px] font-bold leading-[1.6] text-ink-900">소송 절차 안내</h1>
+          <p className="text-[18px] font-medium leading-[1.4] tracking-[-0.36px] text-ink-700">소송 진행 단계를 한눈에 확인하고 다음 단계를 준비하세요</p>
         </div>
-        <Card data-guide="procedure-pick" className="p-6">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-[17px] font-bold text-ink-900">현재 진행 중인 소송을 선택해주세요.</h2>
-            {/* 사건을 고르지 않고도 절차 자체는 읽을 수 있어야 한다 */}
+        <div data-guide="procedure-pick" className="rounded-[14px] bg-white py-6">
+          <h2 className="px-6 text-[24px] font-bold leading-8 text-ink-900">현재 진행 중인 소송을 선택해주세요.</h2>
+
+          <div
+            role="region"
+            aria-roledescription="캐러셀"
+            aria-label="절차를 확인할 사건"
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowLeft') setPickPage((page) => Math.max(0, page - 1))
+              if (event.key === 'ArrowRight') setPickPage((page) => Math.min(pickPageCount - 1, page + 1))
+            }}
+            className="mt-6 flex items-center gap-5"
+          >
             <button
               type="button"
-              onClick={() => setMode('general')}
-              className="text-[13px] font-semibold text-brand-500 hover:underline"
+              onClick={() => setPickPage((page) => Math.max(0, page - 1))}
+              disabled={safePickPage === 0}
+              aria-label="이전 사건 목록"
+              className="grid h-11 w-6 shrink-0 place-items-center text-ink-300 transition-colors hover:text-brand-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              사건 없이 기본 절차만 보기
+              <ChevronRight size={24} className="rotate-180" />
+            </button>
+
+            <ul aria-label={`${safePickPage + 1}페이지 사건 목록`} className="grid min-w-0 flex-1 gap-x-5 gap-y-6 sm:grid-cols-2 xl:grid-cols-3">
+              {visiblePickCases.map((c) => (
+                <li key={c.id} className="w-full max-w-[320px]">
+                  <CasePick
+                    c={c}
+                    sum={myCases.find((m) => m.id === c.id)}
+                    onPick={() => { setActiveCaseId(c.id); setMode('case') }}
+                  />
+                </li>
+              ))}
+            </ul>
+
+            <button
+              type="button"
+              onClick={() => setPickPage((page) => Math.min(pickPageCount - 1, page + 1))}
+              disabled={safePickPage >= pickPageCount - 1}
+              aria-label="다음 사건 목록"
+              className="grid h-11 w-6 shrink-0 place-items-center text-ink-300 transition-colors hover:text-brand-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronRight size={24} />
             </button>
           </div>
-          <div className="mt-5 grid justify-items-center gap-5 sm:grid-cols-2 xl:grid-cols-3">
-            {rawCases.map((c) => (
-              <CasePick
-                key={c.id}
-                c={c}
-                sum={myCases.find((m) => m.id === c.id)}
-                onPick={() => { setActiveCaseId(c.id); setMode('case') }}
-              />
-            ))}
-          </div>
-        </Card>
+
+          <p className="sr-only" aria-live="polite">전체 {pickPageCount}페이지 중 {safePickPage + 1}페이지</p>
+        </div>
       </div>
     )
   }
@@ -304,7 +215,7 @@ export default function Procedure() {
           <ol className="mt-5">
             {steps.map((s, i) => {
               const now = i === cur
-              const g = GUIDE[s.key] || { desc: '', items: [] }
+              const g = stageGuide(mine ? activeRaw?.typeKey : '', s.key)
               const last = i === steps.length - 1
               return (
                 <li key={s.key} className="relative flex gap-4 pb-7 last:pb-0">
@@ -376,18 +287,21 @@ export default function Procedure() {
 
         {/* ── 곁정보 ── */}
         <div data-guide="procedure-side" className="space-y-5">
-          <DeadlineCard step={steps[cur]} caseId={general ? null : activeRaw?.id} />
+          <DeadlineCard step={steps[cur]} caseId={general ? null : activeRaw?.id} typeKey={mine ? activeRaw?.typeKey : ''} />
           <MaterialCard step={steps[cur]} typeKey={mine ? activeRaw?.typeKey : ''} />
 
+          {/* 도구도 단계마다 다르다 — 분쟁이 막 생긴 사람에게 인지대 계산기는 아직 이르다 */}
           <Card data-guide="procedure-tools" className="p-5">
             <div className="flex items-center gap-2">
               <StepNum n={3} />
               <h3 className="text-[15px] font-bold text-ink-900">도구</h3>
             </div>
             <div className="mt-3 space-y-2">
-              <Button size="sm" variant="neutral" className="w-full" onClick={() => setChecklist(true)}>소장 제출 전 체크리스트</Button>
-              <Button size="sm" variant="neutral" className="w-full" onClick={() => setCalc(true)}>소송 비용 계산기</Button>
-              <Button as={Link} to="/app/evidence" size="sm" variant="ghost" className="w-full">증빙자료 올리러 가기 <ArrowRight size={14} /></Button>
+              {stageGuide(mine ? activeRaw?.typeKey : '', steps[cur]?.key).tools.map((tool) => (
+                tool.to
+                  ? <Button key={tool.key} as={Link} to={tool.to} size="sm" variant="ghost" className="w-full">{tool.label} <ArrowRight size={14} /></Button>
+                  : <Button key={tool.key} size="sm" variant="neutral" className="w-full" onClick={() => (tool.key === 'checklist' ? setChecklist(true) : setCalc(true))}>{tool.label}</Button>
+              ))}
             </div>
           </Card>
         </div>
@@ -465,20 +379,60 @@ export default function Procedure() {
    전자소송포털과 연결되어 있지 않아 송달일·기일을 알 수 없다.
    그래서 날짜를 보여주는 대신 **세는 법**을 알려 주고, 기준일을 넣으면 계산한다. */
 
-function DeadlineCard({ step, caseId }) {
-  const { addTodo } = useWorkspace()
+/** 날짜로 셀 수 있는 기한인가 — 「2기 연체」처럼 조건으로 정해지는 것은 못 센다 */
+const countableDeadline = (d) => Number(d.years) > 0 || Number(d.weeks) > 0 || Number(d.days) !== 0
+
+/** 기준일 + 기간 → 만료일과 D-day. 셀 수 없으면 null. */
+function dueFrom(d, from) {
+  if (!from || !countableDeadline(d)) return null
+  const t = new Date(`${from}T12:00:00`)
+  if (d.years) t.setFullYear(t.getFullYear() + d.years)
+  else t.setDate(t.getDate() + (d.weeks ? d.weeks * 7 : d.days))
+  const iso = t.toISOString().slice(0, 10)
+  const today = new Date().toISOString().slice(0, 10)
+  const dday = Math.round((new Date(`${iso}T12:00:00`) - new Date(`${today}T12:00:00`)) / 86400000)
+  return { iso, dday }
+}
+
+/**
+ * 이 단계에서 챙길 기한.
+ *
+ * 기준일을 넣으면 그 자리에서 계산하고 **일정 관리에도 바로 넣는다.** 계산만 해 주고
+ * 옮겨 적게 하면 그 사이에 잊는다 — 기한을 알려주는 화면이 기한을 놓치게 만드는 셈이다.
+ * 되돌리고 싶으면 일정 관리에서 지우면 된다.
+ */
+function DeadlineCard({ step, caseId, typeKey }) {
+  const { addTodo, removeTodo } = useWorkspace()
   const toast = useToast()
   const [base, setBase] = useState({})
-  const items = DEADLINES[step?.key] || []
+  const [added, setAdded] = useState({})   // { [기한 key]: 만들어 둔 todo id }
+  const items = stageGuide(typeKey, step?.key).deadlines
 
-  const dueOf = (d) => {
-    const from = base[d.key]
-    if (!from) return null
-    const t = new Date(from)
-    t.setDate(t.getDate() + d.days)
-    const iso = t.toISOString().slice(0, 10)
-    const dday = Math.round((t - new Date(new Date().toISOString().slice(0, 10))) / 86400000)
-    return { iso, dday }
+  const countable = countableDeadline
+  const dueOf = (d) => dueFrom(d, base[d.key])
+
+
+  /** 기준일을 고르면 계산하고, 그 결과를 사건 일정에 넣는다 */
+  const onPickDate = (d, value) => {
+    setBase((b) => ({ ...b, [d.key]: value }))
+    if (!caseId) return
+
+    // 같은 기한을 다시 고르면 앞서 넣은 것을 지우고 새로 넣는다 — 날짜만 바꿨는데
+    // 일정이 두 줄로 남으면 어느 쪽이 맞는지 알 수 없다.
+    if (added[d.key]) removeTodo(caseId, added[d.key])
+    if (!value) { setAdded((a) => ({ ...a, [d.key]: null })); toast('일정에서 뺐어요'); return }
+
+    const due = dueFrom(d, value)
+    if (!due) return
+    const saved = addTodo(caseId, d.label, due.iso, {
+      typeKey: d.who === '원고' || d.who === '양쪽' ? 'filing' : 'prepare',
+      remind: 3,
+      source: 'procedure',
+      basis: d.law,
+    })
+    const todo = saved?.todos?.[saved.todos.length - 1]
+    setAdded((a) => ({ ...a, [d.key]: todo?.id || null }))
+    toast(`「${d.label}」을 ${fmtDate(due.iso)} 일정으로 등록했어요`, 'success')
   }
 
   return (
@@ -503,17 +457,17 @@ function DeadlineCard({ step, caseId }) {
                   <span className="rounded bg-ink-100 px-1.5 py-0.5 text-[10px] font-semibold text-ink-600">{d.who}</span>
                 </div>
                 <p className="mt-1 text-[12px] text-ink-600">
-                  {d.base}부터 <b className="font-bold text-brand-500">{Math.abs(d.days)}일 {d.days < 0 ? '전' : ''}</b>
+                  {d.base}부터 <b className="font-bold text-brand-500">{deadlineSpan(d)}</b>
                 </p>
                 <p className="mt-0.5 text-[11px] text-ink-400">{d.law}</p>
                 {d.note && <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-500">{d.note}</p>}
 
-                <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                <div className={cx('mt-2.5 flex-wrap items-center gap-2', countable(d) ? 'flex' : 'hidden')}>
                   <input
                     type="date"
                     aria-label={`${d.base} 입력`}
                     value={base[d.key] || ''}
-                    onChange={(e) => setBase((b) => ({ ...b, [d.key]: e.target.value }))}
+                    onChange={(e) => onPickDate(d, e.target.value)}
                     className="h-9 rounded-lg border border-ink-200 bg-white px-2.5 text-[12px] text-ink-700 outline-none focus:border-brand-300"
                   />
                   {r && (
@@ -521,14 +475,14 @@ function DeadlineCard({ step, caseId }) {
                       <span className={cx('rounded-md px-2 py-1 text-[11px] font-bold tabular-nums', r.dday < 0 ? 'bg-red-50 text-red-500' : r.dday <= 3 ? 'bg-brand-50 text-brand-600' : 'bg-ink-100 text-ink-600')}>
                         {fmtDate(r.iso)} · {r.dday < 0 ? `D+${-r.dday}` : r.dday === 0 ? 'D-DAY' : `D-${r.dday}`}
                       </span>
-                      {caseId && (
-                        <button
-                          type="button"
-                          onClick={() => { addTodo(caseId, d.label, r.iso); toast('준비사항에 담았어요') }}
-                          className="text-[12px] font-semibold text-brand-500 hover:underline"
-                        >
-                          준비사항에 담기
-                        </button>
+                      {caseId && added[d.key] && (
+                        <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-brand-500">
+                          <Check size={12} /> 일정에 등록됨
+                          <Link to="/app/schedule" className="ml-1 font-medium text-ink-400 underline hover:text-brand-500">보기</Link>
+                        </span>
+                      )}
+                      {!caseId && (
+                        <span className="text-[11.5px] text-ink-400">사건을 고르면 일정에도 자동으로 등록됩니다</span>
                       )}
                     </>
                   )}
@@ -550,7 +504,7 @@ function DeadlineCard({ step, caseId }) {
 /* ══════════════ 이 단계 준비물 ══════════════ */
 
 function MaterialCard({ step, typeKey }) {
-  const items = materialsFor(typeKey, step?.key)
+  const items = stageGuide(typeKey, step?.key).materials
   return (
     <Card className="p-5">
       <div className="flex items-center gap-2">

@@ -200,7 +200,7 @@ function Topbar({ onMenu }) {
   const markAllRead = () => persist(new Set(notificationList.map((item) => item.id)))
   const markRead = (id) => persist(new Set([...read, id]))
   return (
-    <header data-tour="topbar" className="sticky top-0 z-30 flex h-[72px] items-center justify-between gap-3 border-b border-ink-100 bg-white/90 px-4 sm:px-7 backdrop-blur">
+    <header data-tour="topbar" className="sticky top-0 z-30 flex h-[98px] items-center justify-between gap-[26px] bg-white px-4 sm:pl-7 sm:pr-0">
       <button onClick={onMenu} className="lg:hidden p-2 -ml-2 text-ink-700" aria-label="메뉴 열기">
         <Menu />
       </button>
@@ -209,7 +209,7 @@ function Topbar({ onMenu }) {
         <button
           onClick={() => setOpen((v) => !v)}
           data-tour="notifications"
-          className="relative grid h-10 w-10 place-items-center rounded-full text-ink-600 hover:bg-ink-100"
+          className="relative grid h-12 w-12 place-items-center rounded-full text-ink-600 hover:bg-ink-100"
           aria-label="알림"
         >
           <Bell />
@@ -265,13 +265,13 @@ function Topbar({ onMenu }) {
         )}
       </div>
 
-      <Link data-tour="profile" to="/app/my" className="flex items-center gap-2.5 rounded-full py-1 pl-1 pr-3 hover:bg-ink-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300">
-        <span className="grid h-9 w-9 place-items-center rounded-full bg-brand-100 text-sm font-bold text-brand-500">
+      <Link data-tour="profile" to="/app/my" className="flex h-20 w-[217px] items-center gap-2 rounded-full hover:bg-ink-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300">
+        <span className="grid h-[45px] w-[45px] shrink-0 place-items-center rounded-full bg-brand-50 text-[19px] font-bold text-brand-500">
           {displayUser.name?.[0] || '나'}
         </span>
         <span className="hidden sm:block leading-tight text-left">
           <span className="block text-[20px] font-semibold leading-[1.4] text-ink-900">{displayUser.name}</span>
-          <span className="block text-[14px] leading-[1.4] text-ink-500">{displayUser.email}</span>
+          <span className="block text-[14px] font-medium leading-[1.4] text-ink-500">{displayUser.email}</span>
         </span>
       </Link>
     </header>

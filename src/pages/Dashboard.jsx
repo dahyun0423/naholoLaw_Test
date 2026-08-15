@@ -22,13 +22,15 @@ import CaseNewModal from '../components/CaseNewModal.jsx'
 import HelpMedia from '../components/HelpMedia.jsx'
 import { helpContents, popularFaq, dateLabel } from '../data/mock.js'
 import { caseEvidence, caseDocs, caseUpcoming, caseTodoList, caseTitle } from '../lib/casebook.js'
-import { Calendar as CalendarIcon, Clock, ArrowRight, ChevronRight, Video, Book, FileText, HelpCircle, Folder, ExternalLink, Sparkles, Check } from '../components/icons.jsx'
+import { Calendar as CalendarIcon, Clock, ArrowRight, ChevronRight, Video, Book, FileText, HelpCircle, Folder, ExternalLink, Check } from '../components/icons.jsx'
 import gavelImg from '../assets/dash/gavel.png'
 import notebookImg from '../assets/dash/notebook.png'
 import calendarImg from '../assets/dash/calendar.png'
+import aiSparkImg from '../assets/dash/ai-spark.png'
 
 const WEEK = ['월', '화', '수', '목', '금', '토', '일']
 const HELP_ICON = { 동영상: Video, 가이드: Book, 템플릿: FileText }
+const FIGMA_CARD = 'border border-ink-200 bg-white shadow-[inset_0_6px_10px_-2px_rgba(130,130,132,0.10),inset_0_-10px_50px_-6px_rgba(255,255,255,0.40),inset_0_-40px_30px_-8px_#e2e8f0,inset_0_-80px_60px_-30px_#f7f9ff]'
 
 export default function Dashboard() {
   const { user } = useAuth()
@@ -52,6 +54,9 @@ export default function Dashboard() {
   const nextUp = upcomingItems.find((t) => t.dday >= 0) || null
   const dday = nextUp ? (nextUp.dday === 0 ? 'D-DAY' : `D-${nextUp.dday}`) : '일정 없음'
   const urgentCase = rawCases.find((item) => item.id === urgent?.caseId) || activeRaw
+  const imminent = upcomingItems.filter((item) => item.dday >= 0 && item.dday <= 7).length
+  const visibleUpcoming = upcomingItems.slice(0, 3)
+  const highlightedUpcoming = Math.max(0, visibleUpcoming.length - 1)
   const completedTasks = rawCases
     .flatMap((item) => caseTodoList(item).filter((todo) => todo.done).map((todo) => ({ ...todo, caseId: item.id })))
     .slice(0, 2)
@@ -75,16 +80,16 @@ export default function Dashboard() {
   }
 
   const kpis = [
-    { label: '진행 중인 사건', value: `${running}건`, badge: running ? `${running}건 진행 중` : '진행 사건 없음', to: '/app/cases' },
+    { label: '진행 중인 사건', value: `${running}건`, badge: `${imminent}건 기일 임박`, to: '/app/cases' },
     { label: '다음 변론기일', value: dday, badge: nextUp ? dateLabel(nextUp.due) : '등록된 일정 없음', to: '/app/schedule' },
-    { label: '생성한 문서', value: `${docCount}개`, badge: docCount ? '문서 관리에서 확인' : '아직 생성 전', to: '/app/documents' },
-    { label: '등록된 증거', value: `${evCount}개`, badge: evCount ? `${evCount}개 정리됨` : '아직 등록 전', to: '/app/evidence' },
+    { label: '생성한 문서', value: `${docCount}개`, badge: `${docCount}개 제출 완료`, to: '/app/documents' },
+    { label: '등록된 증거', value: `${evCount}`, badge: `갑호증 ${evCount}개`, to: '/app/evidence' },
   ]
 
   return (
-    <div className="space-y-6 pb-2">
+    <div className="mx-auto max-w-[1091px] space-y-6 pb-2">
       {/* ── 인사 ── */}
-      <div className="flex flex-wrap items-start justify-between gap-3 px-4 pb-5 pt-2">
+      <div className="flex h-[95px] flex-wrap items-start justify-between gap-3 px-4 pt-1">
         <div>
           <h1 className="text-[30px] font-semibold leading-[1.35] text-ink-900">안녕하세요, {user?.name || '고객'}님</h1>
           <p className="mt-1 text-[14px] font-medium text-ink-500">
@@ -98,10 +103,10 @@ export default function Dashboard() {
       </div>
 
       {/* ── 지금 제일 급한 일 + AI 제안 ── */}
-      <div className="grid gap-3 lg:grid-cols-[1.56fr_1fr]">
-        <Card className="relative min-h-[180px] overflow-hidden rounded-[20px] p-7 sm:p-8">
-          <div className="min-w-0">
-            <p className="max-w-[68%] text-[24px] font-semibold leading-[1.45] text-brand-400 sm:text-[28px]">
+      <div className="grid gap-3 xl:grid-cols-[653px_426px]">
+        <div className={cx('relative h-[180px] overflow-hidden rounded-[20px]', FIGMA_CARD)}>
+          <div className="absolute left-[50px] top-[37px] min-w-0">
+            <p className="max-w-[350px] text-[28px] font-semibold leading-[1.4] text-brand-400">
               {urgent ? urgent.text : `${caseTitle(activeRaw)} 확인`}
               {urgent && (
                 <span className="ml-2 whitespace-nowrap text-red-500">
@@ -110,7 +115,7 @@ export default function Dashboard() {
               )}
               <span className="block">지금 바로 준비하세요!</span>
             </p>
-            <p className="mt-2 text-[12px] font-medium text-ink-500">
+            <p className="mt-1 text-[14px] font-medium leading-[1.4] tracking-[-0.28px] text-ink-500">
               {urgent
                 ? `${urgentCase?.form?.court || '법원 미정'} ${urgentCase?.caseNo || ''} · ${dateLabel(urgent.due)}까지`
                 : `${activeRaw?.form?.court || '법원 미정'} ${activeRaw?.caseNo || '사건번호 없음'}`}
@@ -119,52 +124,55 @@ export default function Dashboard() {
           <button
             type="button"
             onClick={() => navigate(urgent?.typeKey === 'filing' ? '/app/documents' : `/app/cases/${urgent?.caseId || activeRaw.id}`)}
-            className="mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-[14px] border border-ink-200 bg-white px-5 text-[15px] font-semibold text-ink-600 shadow-sm transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 sm:absolute sm:right-0 sm:top-0 sm:mt-0 sm:min-w-[178px] sm:rounded-bl-[20px] sm:rounded-tr-[20px]"
+            className={cx('absolute right-0 top-0 inline-flex h-14 w-[248px] items-center justify-center gap-1 rounded-[20px] text-[18px] font-bold tracking-[-0.36px] text-ink-600 transition-colors hover:text-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300', FIGMA_CARD)}
           >
             {urgent?.typeKey === 'filing' ? '바로 작성하러 가기' : '바로 확인하러 가기'}
             <ArrowRight size={16} />
           </button>
-        </Card>
+        </div>
 
-        <Card className="min-h-[180px] rounded-[20px] p-7">
-          <h2 className="flex items-center gap-3 text-[20px] font-semibold text-brand-400">
-            <Sparkles size={24} className="text-brand-300" /> AI가 제안한 주요 작업
+        <div className={cx('relative h-[180px] overflow-hidden rounded-[20px]', FIGMA_CARD)}>
+          <span className="absolute left-[34px] top-[17px] h-[51px] w-[50px] overflow-hidden" aria-hidden="true">
+            <img src={aiSparkImg} alt="" className="absolute -left-[4px] -top-[12px] h-[75px] w-[57px] object-cover" />
+          </span>
+          <h2 className="absolute left-[96px] top-[28px] text-[20px] font-semibold leading-[30px] text-brand-400">
+            AI가 제안 주요 작업
           </h2>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Chip onClick={() => navigate('/app/documents')}>{urgent?.typeKey === 'filing' ? urgent.text : '준비서면 작성 권장'}{urgent?.dday >= 0 && urgent.dday <= 3 && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-500">긴급</span>}</Chip>
+          <div className="absolute left-[38px] top-[79px] flex w-[307px] flex-wrap gap-2.5">
+            <Chip onClick={() => navigate('/app/documents')}>준비서면 작성 권장<span className="rounded-full bg-red-50 px-2 py-1 text-[12px] font-semibold leading-4 text-red-300">긴급</span></Chip>
             <Chip onClick={() => navigate('/app/evidence')}>증거 보완 권장</Chip>
-            <Chip onClick={() => navigate('/app/schedule')}>답변 일정 점검하기</Chip>
+            <Chip onClick={() => navigate('/app/schedule')}>답변 예정 권장하기</Chip>
           </div>
-        </Card>
+        </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-1 sm:grid-cols-2 xl:grid-cols-4">
         {kpis.map((k) => (
           <Link
             key={k.label}
             to={k.to}
             aria-label={`${k.label} ${k.value} — ${k.badge}`}
-            className="group min-h-[134px] rounded-[20px] border border-ink-200 bg-white px-6 py-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-colors hover:border-brand-200 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+            className={cx('group relative h-[188px] rounded-[20px] transition-colors hover:border-brand-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300', FIGMA_CARD)}
           >
-            <span className="block text-[17px] font-semibold text-brand-700">{k.label}</span>
-            <span className="mt-1 block truncate text-[30px] font-bold leading-[1.35] text-brand-700">{k.value}</span>
-            <span className="mt-2 inline-flex max-w-full truncate rounded-full bg-brand-50 px-3 py-1 text-[13px] font-medium text-brand-400 group-hover:bg-white">{k.badge}</span>
+            <span className="absolute left-9 top-[26px] block text-[20px] font-semibold leading-[1.4] text-brand-700">{k.label}</span>
+            <span className="absolute left-9 top-[58px] block truncate text-[34px] font-extrabold leading-[1.4] text-brand-700">{k.value}</span>
+            <span className="absolute left-[34px] top-[123px] inline-flex h-9 max-w-[210px] items-center truncate rounded-[20px] bg-brand-50 px-4 text-[20px] font-medium tracking-[-0.4px] text-brand-300">{k.badge}</span>
           </Link>
         ))}
       </div>
 
       {/* 기존 Figma의 300px 일정 카드 비율과 타임라인 UI를 유지한다. */}
-      <div className="grid gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
+      <div className="grid gap-6 xl:grid-cols-[300px_767px]">
         {/* 다가오는 일정 */}
-        <Card className="min-h-[486px] rounded-[20px] p-6">
+        <div className="h-[686px] overflow-hidden rounded-[20px] border border-ink-200 bg-white p-6">
           <div>
             <p className="text-[13px] font-medium text-ink-500">
               {now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
             </p>
-            <h2 className="mt-1 text-[22px] font-semibold text-ink-900">다가오는 일정</h2>
+            <h2 className="mt-2 text-[24px] font-semibold leading-[1.4] tracking-[-0.48px] text-ink-900">다가오는 일정</h2>
           </div>
 
-          <div className="mt-5 grid grid-cols-7 gap-1 text-center">
+          <div className="mt-[21px] grid grid-cols-7 gap-1 text-center">
             {week.map((d, i) => {
               const today = d.toDateString() === now.toDateString()
               return (
@@ -176,29 +184,26 @@ export default function Dashboard() {
             })}
           </div>
 
-          {upcomingItems.length > 0 ? (
-            <ol className="relative mt-5 space-y-3 border-l border-brand-200 pl-4">
-              {upcomingItems.slice(0, 3).map((item, index) => (
+          {visibleUpcoming.length > 0 ? (
+            <ol className="relative mt-5 space-y-2 border-l border-brand-200 pl-[26px]">
+              {visibleUpcoming.map((item, index) => (
                 <li key={`${item.caseId}-${item.id}`} className="relative">
                   <span className={cx(
-                    'absolute -left-[21px] top-4 h-2.5 w-2.5 rounded-full ring-4 ring-white',
-                    index === 0 ? 'bg-brand-300 ring-brand-100' : item.dday < 0 ? 'bg-red-300' : 'border border-brand-300 bg-white',
+                    'absolute -left-[31px] top-[7px] h-[9px] w-[9px] rounded-full ring-4 ring-white',
+                    index === highlightedUpcoming ? 'bg-brand-300 ring-brand-100' : 'border border-brand-300 bg-white',
                   )} />
                   <Link
                     to={`/app/cases/${item.caseId}`}
                     className={cx(
-                      'block rounded-[10px] px-4 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300',
-                      index === 0 ? 'bg-brand-300 text-white hover:bg-brand-400' : 'bg-ink-50 hover:bg-brand-50',
+                      'block h-[62px] rounded-[10px] px-[15px] py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300',
+                      index === highlightedUpcoming ? 'bg-brand-300 text-white hover:bg-brand-400' : 'bg-ink-100 hover:bg-brand-50',
                     )}
                   >
-                    <p className={cx('flex items-center gap-1.5 text-[14px] font-semibold', index === 0 ? 'text-white' : 'text-ink-900')}>
-                      <Clock size={14} className={cx('shrink-0', index === 0 ? 'text-white' : 'text-brand-400')} />
+                    <p className={cx('flex items-center gap-1.5 text-[16px] font-semibold leading-[1.6]', index === highlightedUpcoming ? 'text-white' : 'text-ink-900')}>
+                      <Clock size={16} className={cx('shrink-0', index === highlightedUpcoming ? 'text-white' : 'text-brand-400')} />
                       <span className="min-w-0 flex-1 truncate">{item.text}</span>
-                      <span className={cx('shrink-0 text-xs font-bold', index === 0 ? 'text-white' : item.dday < 0 ? 'text-red-500' : 'text-brand-500')}>
-                        {item.dday < 0 ? `D+${-item.dday}` : item.dday === 0 ? '오늘' : `D-${item.dday}`}
-                      </span>
                     </p>
-                    <p className={cx('mt-1 truncate text-[11px] font-medium', index === 0 ? 'text-white/85' : 'text-ink-500')}>{item.due} · {item.caseName}</p>
+                    <p className={cx('ml-6 truncate text-[12px] font-medium leading-[19px]', index === highlightedUpcoming ? 'text-white/85' : 'text-ink-700')}>{item.due}</p>
                   </Link>
                 </li>
               ))}
@@ -211,25 +216,24 @@ export default function Dashboard() {
             </div>
           )}
 
-          <div className="mt-5 border-t border-ink-100 pt-4">
-            <p className="text-[14px] font-semibold text-ink-800">완료된 작업</p>
+          <div className="mt-4 border-t border-ink-100 px-0 pt-3">
+            <p className="text-[16px] font-semibold leading-[25px] text-ink-800">완료된 작업</p>
             {completedTasks.length ? (
               <ul className="mt-3 space-y-2">
                 {completedTasks.map((item) => (
-                  <li key={`${item.caseId}-${item.id}`} className="flex items-center gap-2 text-[13px] font-medium text-ink-600">
-                    <Check size={14} className="shrink-0 text-brand-300" />
+                  <li key={`${item.caseId}-${item.id}`} className="flex items-center gap-2 text-[14px] font-medium leading-[22px] text-ink-600">
+                    <Check size={16} className="shrink-0 text-brand-300" />
                     <span className="truncate">{item.text || item.title}</span>
                   </li>
                 ))}
               </ul>
             ) : <p className="mt-2 text-[12px] font-medium text-ink-400">완료한 작업이 아직 없어요.</p>}
           </div>
-          <Link to="/app/schedule" className="mt-4 inline-flex text-[12px] font-semibold text-brand-500 hover:underline">일정 전체보기 →</Link>
-        </Card>
+        </div>
 
-        <div className="space-y-4">
+        <div className="space-y-6">
         {/* 최근 사건 */}
-        <Card className="rounded-[20px] p-6">
+        <div className={cx('h-[246px] rounded-[20px] px-[25px] py-4', FIGMA_CARD)}>
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-[18px] font-semibold text-ink-900">최근 사건</h2>
@@ -237,14 +241,14 @@ export default function Dashboard() {
               </div>
               <Link to="/app/cases" className="rounded-lg px-2 py-1 text-[13px] font-medium text-brand-500 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300">전체보기</Link>
             </div>
-            <ul className="mt-4 space-y-1.5">
-              {rawCases.slice(0, 3).map((c) => {
+            <ul className="mt-3 space-y-1">
+              {rawCases.slice(0, 2).map((c) => {
                 const pending = caseTodoList(c).filter((item) => !item.done)
                 return (
                   <li key={c.id}>
                     <Link
                       to={`/app/cases/${c.id}`}
-                      className="group flex min-h-[52px] items-center gap-3 rounded-[10px] border border-ink-200 px-4 py-2.5 transition-colors hover:border-brand-300 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+                      className="group flex h-[72px] items-center gap-3 rounded-[10px] border border-ink-200 px-4 py-2.5 transition-colors hover:border-brand-300 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
                     >
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-2">
@@ -259,15 +263,15 @@ export default function Dashboard() {
                 )
               })}
             </ul>
-        </Card>
+        </div>
 
-        <div className="grid gap-4 xl:grid-cols-2">
-          <Card className="rounded-[20px] p-6">
+        <div className="grid gap-6 xl:grid-cols-2">
+          <div className={cx('h-[407px] rounded-[20px] p-[26px]', FIGMA_CARD)}>
             <div className="flex items-center justify-between">
               <h2 className="text-[18px] font-semibold text-ink-900">도움 콘텐츠</h2>
               <Link to="/app/guide" className="text-[14px] font-medium text-brand-400 hover:underline">더보기 →</Link>
             </div>
-            <ul className="mt-4 space-y-2.5">
+            <ul className="mt-7 space-y-4">
               {helpContents.map((h) => {
                 const Icon = HELP_ICON[h.type] || FileText
                 return (
@@ -275,7 +279,7 @@ export default function Dashboard() {
                     <button
                       type="button"
                       onClick={() => setHelp(h)}
-                      className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-ink-200 px-4 py-3 text-left transition-colors hover:border-brand-200 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2"
+                      className="flex h-[57px] w-full items-center gap-3 rounded-[10px] border border-ink-200 px-4 text-left transition-colors hover:border-brand-200 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
                     >
                       <Icon size={16} className="shrink-0 text-brand-400" />
                       <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-ink-800">{h.title}</span>
@@ -285,26 +289,26 @@ export default function Dashboard() {
                 )
               })}
             </ul>
-          </Card>
+          </div>
 
-          <Card className="rounded-[20px] p-6">
-            <h2 className="text-[18px] font-semibold text-ink-900">자주 묻는 질문</h2>
-            <ul className="mt-4 space-y-2.5">
+          <div className={cx('h-[407px] rounded-[20px] p-[26px]', FIGMA_CARD)}>
+            <h2 className="text-[18px] font-semibold text-ink-900">질문이 많은 — 자주 묻는 질문</h2>
+            <ul className="mt-4 space-y-3">
               {popularFaq.map((f) => (
                 <li key={f.q}>
                   <button
                     type="button"
                     onClick={() => setFaq(f)}
-                    className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-ink-200 px-4 py-3 text-left transition-colors hover:border-brand-200 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2"
+                    className="flex h-[69px] w-full items-center gap-2 rounded-[10px] border border-ink-200 px-[13px] text-left transition-colors hover:border-brand-200 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
                   >
                     <HelpCircle size={16} className="shrink-0 text-brand-400" />
-                    <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-ink-800">{f.q}</span>
+                    <span className="min-w-0 flex-1 truncate text-[16px] font-medium leading-6 text-ink-800">{f.q}</span>
                     <ChevronRight size={16} className="shrink-0 text-ink-300" />
                   </button>
                 </li>
               ))}
             </ul>
-          </Card>
+          </div>
         </div>
         </div>
       </div>

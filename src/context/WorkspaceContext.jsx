@@ -36,14 +36,20 @@ const readPrecedentItems = () => {
 }
 
 export function WorkspaceProvider({ children }) {
-  const figmaPreview = import.meta.env.DEV && new URLSearchParams(window.location.search).get('figma') === '1'
+  const previewParams = new URLSearchParams(window.location.search)
+  const figmaPreview = import.meta.env.DEV && previewParams.get('figma') === '1'
+  const resetFigmaPreview = figmaPreview && previewParams.get('figmaReset') === '1'
+  const keepDemoData = import.meta.env.DEV && previewParams.get('empty') !== '1'
   // 내가 실제로 만든 사건 (소장 작성에서 생성) — 화면들이 공유하는 한 줄기
   //
-  // 미리보기에서는 데모 사건을 저장소에 심고 시작한다. 메모리 배열로만 들고 있으면
-  // 일정을 하나만 추가해도 저장소를 다시 읽는 순간 데모가 사라진다.
+  // 개발 중에는 데모 사건을 저장소에 한 번 심어 둔다. 일반 주소로 새로 열어도 사건관리·
+  // 절차안내 캐러셀을 바로 테스트할 수 있고, 이미 수정한 데모/사용자 사건은 덮어쓰지 않는다.
+  // 빈 상태 화면이 필요할 때만 ?empty=1을 사용한다.
   const [myCases, setMyCases] = useState(() => {
-    // 캡처용 주소는 이전 개발 세션의 저장값과 섞지 않고 항상 완성형 예시로 시작한다.
-    if (figmaPreview) seedCases(figmaWorkspaceCases, { force: true })
+    // 미리보기 데이터도 사용자가 바꾼 상태를 유지한다. 매 새로고침마다 강제로 다시
+    // 심으면 사건 상태·할 일·일정 변경이 모두 원래 더미값으로 되돌아간다.
+    // 완성형 캡처 데이터를 처음부터 다시 만들 때만 ?figma=1&figmaReset=1을 쓴다.
+    if (keepDemoData) seedCases(figmaWorkspaceCases, { force: resetFigmaPreview })
     return listCases()
   })
   const [activeCaseId, setActiveCaseId] = useState(null)
@@ -71,9 +77,10 @@ export function WorkspaceProvider({ children }) {
     return saved
   }, [])
 
-  const updateStatus = useCallback((id, status) => {
-    setCaseStatus(id, status)
-    setMyCases(listCases())
+  const updateStatus = useCallback((id, status, options) => {
+    const saved = setCaseStatus(id, status, options)
+    if (saved) setMyCases(listCases())
+    return saved
   }, [])
 
   /** 소장 없이 사건만 먼저 등록한다 */

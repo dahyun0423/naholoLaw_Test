@@ -43,15 +43,24 @@ export function listCases() {
 }
 
 /**
- * 데모 사건을 저장소에 한 번 심는다 (미리보기 전용).
+ * 데모 사건을 저장소에 한 번 심는다 (개발·미리보기 전용).
  *
  * 데모 사건을 메모리 배열로만 들고 있으면, 일정 하나만 추가해도 저장소를 다시 읽어
  * 화면을 맞추는 과정에서 데모가 통째로 사라진다. 심어 두면 그때부터는 보통 사건과
  * 똑같이 고치고 지울 수 있다. 이미 저장된 것이 있으면 건드리지 않는다.
  */
 export function seedCases(list, { force = false } = {}) {
-  if (!force && read().length) return false
-  return write(list)
+  if (force) return write(list)
+
+  // 저장된 것이 하나라도 있으면 통째로 건너뛰던 때가 있었다. 그러면 데모 사건을
+  // 새로 추가해도 이미 뭔가 저장해 둔 브라우저에는 **영영 들어가지 않는다.**
+  // 그래서 통째로 보는 대신 id 단위로 본다 — 없는 것만 채우고, 이미 있는 것은
+  // 사용자가 고쳤을 수 있으니 그대로 둔다.
+  const stored = read()
+  const has = new Set(stored.map((c) => c.id))
+  const missing = list.filter((c) => !has.has(c.id))
+  if (!missing.length) return false
+  return write([...stored, ...missing])
 }
 
 export const getCase = (id) => read().find((c) => c.id === id) || null
@@ -165,16 +174,41 @@ export function saveComplaintAsCase(typeKey, form, id) {
   return write([...rest, next]) ? next : null
 }
 
+const FLOW_KEYS = ['deal', 'notice', 'draft', 'file', 'trial', 'judge']
+
+// 상단의 사건 상태는 업무 상태, 아래 바는 실제 소송 절차라 칸 수가 다르다.
+// 직접 상태를 바꿀 때는 가장 자연스러운 절차 위치로 함께 옮겨 두 화면이 어긋나지 않게 한다.
+const STATUS_FLOW_CURRENT = {
+  '작성 중': 'draft',
+  '제출 준비': 'file',
+  '접수함': 'trial',
+  '진행 중': 'trial',
+  '종결': 'judge',
+}
+
+const flowDoneBefore = (currentKey) => {
+  const current = FLOW_KEYS.indexOf(currentKey)
+  return Object.fromEntries(FLOW_KEYS.map((key, index) => [key, index < current]))
+}
+
 /** 사건의 상태를 바꾼다 (작성 중 → 제출 준비 → 접수함 → 진행 중 → 종결) */
-export function setCaseStatus(id, status) {
+export function setCaseStatus(id, status, { reason = '' } = {}) {
   return patch(id, (c) => {
     if (c.status === status) return
     c.status = status
+    const currentFlow = STATUS_FLOW_CURRENT[status]
+    if (currentFlow) c.flowDone = flowDoneBefore(currentFlow)
     // 단계마다 '처음 닿은 때'를 남긴다. 되돌렸다가 다시 와도 처음 시각을 지킨다 —
     // 트래커에 찍히는 날짜는 "언제 여기까지 왔나"이지 "마지막으로 눌렀나"가 아니다.
     c.statusAt = c.statusAt || {}
     if (!c.statusAt[status]) c.statusAt[status] = Date.now()
-    logInto(c, { kind: 'status', title: `진행 표시를 「${status}」로 바꿈`, fresh: true })
+    logInto(c, {
+      kind: 'status',
+      title: `진행 표시를 「${status}」로 바꿈`,
+      desc: String(reason || '').trim(),
+      source: reason ? 'user' : 'app',
+      fresh: true,
+    })
   })
 }
 
@@ -199,6 +233,7 @@ export function setFiling(id, { caseNo, filedAt, filedVia }) {
     if (first) {
       if (c.status === '작성 중' || c.status === '제출 준비') {
         c.status = '접수함'
+        c.flowDone = flowDoneBefore('trial')
         c.statusAt = c.statusAt || {}
         c.statusAt['접수함'] = c.filedAt ? new Date(`${c.filedAt}T12:00:00`).getTime() : Date.now()
       }
@@ -833,12 +868,14 @@ export function caseFlow(c) {
  * 완료인데 앞 칸은 미완료인 상태가 생기고, 화면의 파란 선도 뒤로 움직이지 않는다.
  * 고른 칸 앞은 완료, 고른 칸부터 뒤는 미완료로 맞춰 항상 연속된 한 상태만 저장한다.
  */
-export function setFlowStep(id, key) {
+export function setFlowStep(id, key, { note = '', skipped = '', clearSkipped = '' } = {}) {
   return patch(id, (c) => {
-    const keys = ['deal', 'notice', 'draft', 'file', 'trial', 'judge']
-    const picked = keys.indexOf(key)
+    const picked = FLOW_KEYS.indexOf(key)
     if (picked < 0) return
-    c.flowDone = Object.fromEntries(keys.map((step, index) => [step, index < picked]))
+    c.flowDone = flowDoneBefore(key)
+    c.flowSkipped = { ...(c.flowSkipped || {}) }
+    if (skipped) c.flowSkipped[skipped] = true
+    if (clearSkipped) delete c.flowSkipped[clearSkipped]
     const label = { deal: '분쟁 발생', notice: '내용증명', draft: '소장 작성', file: '법원 접수', trial: '변론', judge: '판결' }[key]
     const nextStatus = {
       deal: '작성 중', notice: '작성 중', draft: '작성 중',
@@ -848,7 +885,7 @@ export function setFlowStep(id, key) {
       c.status = nextStatus
       c.statusAt = { ...(c.statusAt || {}), [nextStatus]: Date.now() }
     }
-    logInto(c, { kind: 'status', title: `현재 진행 단계 — ${label}`, source: 'user' })
+    logInto(c, { kind: 'status', title: `현재 진행 단계 — ${label}`, desc: note, source: 'user', fresh: true })
   })
 }
 
