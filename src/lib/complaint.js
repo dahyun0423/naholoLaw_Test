@@ -7,6 +7,9 @@
 //  · 비용 계산       : 인지대 · 송달료 · 소액사건 판정
 
 
+import { extraFileNames } from './evidenceMatch.js'
+import { tidy, formalize } from './koreanFormal.js'
+
 /* ─────────────────────────── 포맷 · 계산 ─────────────────────────── */
 
 export const won = (n) => (Number(n) || 0).toLocaleString('ko-KR')
@@ -19,6 +22,15 @@ export function fmtDate(v) {
   // "미납이 시작된 달"처럼 연-월만 들어오는 값도 있다
   if (!d) return `${y}. ${Number(m)}.`
   return `${y}. ${Number(m)}. ${Number(d)}.`
+}
+
+/** 'YYYY-MM-DD'의 다음 날 — 변제기 다음 날부터 발생하는 지연손해금 기산일에 사용 */
+function nextDate(v) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(v || ''))) return ''
+  const parsed = new Date(`${v}T00:00:00Z`)
+  if (Number.isNaN(parsed.getTime())) return ''
+  parsed.setUTCDate(parsed.getUTCDate() + 1)
+  return parsed.toISOString().slice(0, 10)
 }
 
 /**
@@ -79,8 +91,22 @@ export const SERVICE_FEE_IS_ESTIMATE = true
 
 export const serviceFee = (parties = 2) => parties * SERVICE_FEE_PER_PARTY
 
-/** 소액사건심판법 — 소가 3,000만원 이하 */
-export const isSmallClaim = (sueValue) => Number(sueValue) > 0 && Number(sueValue) <= 30_000_000
+/**
+ * 소액사건인가.
+ *
+ * 소액사건심판규칙 제1조의2 — 「소송목적의 값이 3,000만원을 초과하지 아니하는
+ * **금전 기타 대체물이나 유가증권의 일정한 수량의 지급을 목적으로 하는** 제1심 민사사건」.
+ *
+ * 금액만 보면 안 된다. 건물명도처럼 물건의 인도를 구하는 사건은 금액이 아무리 적어도
+ * 소액사건이 아니다 — 여기서 잘못 표시하면 사용자가 소액사건 절차를 기대하게 된다.
+ */
+const MONEY_CLAIM_TYPES = new Set(['loan', 'deposit', 'wage', 'tort'])
+export const isSmallClaim = (sueValue, typeKey) => {
+  const money = Number(sueValue)
+  if (!(money > 0 && money <= 30_000_000)) return false
+  // 유형을 모르고 부르는 자리(비용 계산기 등)는 금액만으로 판단한다
+  return typeKey === undefined || MONEY_CLAIM_TYPES.has(typeKey)
+}
 
 export function costSummary(sueValue, parties = 2) {
   const stamp = stampFee(sueValue)
@@ -92,6 +118,35 @@ export function costSummary(sueValue, parties = 2) {
     small: isSmallClaim(sueValue),
     estimate: SERVICE_FEE_IS_ESTIMATE,   // 합계에 미확정 값이 섞여 있음
   }
+}
+
+/* ─────────────────── 이자제한법상 최고이자율 ───────────────────
+   이자제한법(법률 제20714호) 제2조
+     ① 금전대차 계약상 최고이자율은 연 25% 범위에서 대통령령으로 정한다
+        → 「이자제한법 제2조제1항의 최고이자율에 관한 규정」(2021. 7. 7. 시행) **연 20%**
+     ③ 최고이자율을 초과하는 부분은 **무효**
+     ⑤ 대차원금이 **10만원 미만**인 대차의 이자에는 제1항을 적용하지 않는다
+   제7조 인가·허가·등록을 마친 금융업·대부업과 불법사금융업자에는 적용하지 않는다
+        → 개인 간 대여를 전제로 하는 화면이라 여기서는 언제나 적용된다고 본다.
+
+   20%를 넘겨 약정했다고 그 이율을 그대로 청구취지에 적으면 초과분은 어차피
+   인용되지 않는다. 그래서 입력할 때 먼저 알리고, 소장에는 20%까지만 청구로 적되
+   약정한 이율 자체는 청구원인에 사실대로 남긴다. */
+export const MAX_INTEREST_RATE = 20
+const RATE_CAP_MIN_PRINCIPAL = 100_000
+
+/** 최고이자율이 적용되는 대차인가 (제2조 제5항) */
+export const rateCapApplies = (principal) => Number(principal) >= RATE_CAP_MIN_PRINCIPAL
+
+/** 약정 이자율이 최고이자율을 넘었는가 — 넘으면 입력 화면에서 경고한다 */
+export const overMaxRate = (rate, principal) =>
+  rateCapApplies(principal) && Number(rate) > MAX_INTEREST_RATE
+
+/** 청구에 쓸 이자율 — 최고이자율을 넘는 약정은 연 20%로 깎아서 적는다 */
+export const claimRate = (rate, principal) => {
+  const n = Number(rate)
+  if (!Number.isFinite(n) || n <= 0) return 0
+  return rateCapApplies(principal) ? Math.min(n, MAX_INTEREST_RATE) : n
 }
 
 export const courts = [
@@ -114,6 +169,475 @@ const note = (tone, body, o = {}) => ({ kind: 'note', tone, body, ...o })
 const files = (key, label, o = {}) => ({ kind: 'files', key, label, ...o })
 const repeat = (key, label, columns, o = {}) => ({ kind: 'repeat', key, label, columns, ...o })
 
+/**
+ * 5단계(최고·청구 이력)의 필드 묶음.
+ *
+ * 최고 방법과 최고일은 **지연손해금 기산일**을 정하는 값이라 반드시 골라 받는다.
+ * 자유서술에서 정규식으로 날짜를 추측하면 기산일이 통째로 틀어진다.
+ * 구어체로 받는 것은 고를 수 없는 것 하나 — 피고가 실제로 한 말이다.
+ *
+ * @param pending 「현재 상황」 예시에 쓸 종결형 문구. 플레이스홀더에는 연결형으로 바꿔 넣는다.
+ */
+const aiDemandFields = ({ verb, pending, examples = [] }) => [
+  radio('demandWay', `${verb}할 때 어떤 방법을 썼나요?`, [
+    '내용증명을 보냈어요', '문자·카톡으로 요구했어요', '전화·구두로만 요구했어요', '요구한 적 없어요',
+  ], { required: true, guideGroup: 'demand' }),
+  date('demandDate', `${verb}한 날`, {
+    required: true,
+    half: true,
+    guideGroup: 'demand',
+    when: (f) => f.demandWay && f.demandWay !== '요구한 적 없어요',
+    info: '문자·내용증명·통화기록에서 확인되는 날짜를 적어주세요. 이 날의 다음 날부터 지연손해금이 붙습니다.',
+  }),
+  note('warn', '요구한 적이 없어도 소장 부본이 송달되면 그날 최고한 것으로 봐요. 다만 지연손해금 기산일이 늦어집니다.', {
+    guideGroup: 'demand', when: (f) => f.demandWay === '요구한 적 없어요',
+  }),
+  {
+    kind: 'aiPrompt', key: 'demandResult', context: 'response', required: true,
+    guideGroup: 'demand',
+    when: (f) => f.demandWay && f.demandWay !== '요구한 적 없어요',
+    eyebrow: '그 뒤 상황은 평소 말로 답해주세요',
+    question: '피고는 원고의 요구에 뭐라고 했고, 지금은 어떤 상태인가요?',
+    why: '방법과 날짜는 위에서 골랐어요. 여기에는 피고가 실제로 한 말과 이후 상황만 적으면 AI가 최고 경위와 불이행 사실로 나눠 정리해요.',
+    placeholder: `예) 조금만 기다려 달라고 했는데 ${pending.replace(/어요$/, '고')}, 지금은 연락도 받지 않아요.`,
+    exampleGroups: [
+      {
+        label: '피고 반응 추가',
+        items: examples.length ? examples : [
+          '조금만 기다려 달라고 했어요.',
+          '아무 답이 없고 연락도 받지 않아요.',
+          '해결하지 않겠다고 했어요.',
+        ],
+      },
+      {
+        label: '현재 상황 추가',
+        items: [`${pending}.`, '그 뒤로 연락이 끊겼어요.', '일부만 처리하고 나머지는 그대로예요.'],
+      },
+    ],
+  },
+]
+
+const aiDemandStep = ({ title, ...rest }) => ({
+  id: 'ai-demand',
+  guided: true,
+  title,
+  fields: aiDemandFields(rest),
+})
+
+// 첨부서류 — 갑호증이 아니라 소장 말미 「첨부서류」란에 들어가는 것들.
+// 고르기와 파일 올리기가 한 묶음이어야 해서 같은 fold 이름을 쓴다.
+const ATTACH_FOLD = '함께 낼 서류도 확인할게요'
+const ATTACH_OPTIONS = [
+  '소가계산서', '위임장', '법인등기부등본', '가족관계증명서', '부동산 등기사항증명서', '주민등록초본',
+]
+
+const aiEvidenceStep = (options) => ({
+  id: 'ai-evidence',
+  guided: true,
+  title: '가지고 있는 자료를 알려주세요',
+  fields: [
+    note('info', 'AI는 없는 증거를 만들지 않아요. 실제로 가지고 있는 자료만 고르고, 제출할 파일은 직접 올려주세요.'),
+    checks('evidenceItems', '실제로 가지고 있는 자료를 골라주세요', options, {
+      required: true,
+      guideGroup: 'evidence',
+      info: '체크는 준비물 확인용이에요. 실제 소장의 갑호증으로 넣으려면 아래에 파일을 올려야 해요.',
+    }),
+    files('evidenceFiles', '있다면 파일도 올려주세요', { guideGroup: 'evidence', fold: '파일도 지금 올릴게요' }),
+    { kind: 'evidenceGap' },
+    checks('attachExtra', '증거 말고 함께 낼 서류가 있나요?', ATTACH_OPTIONS, {
+      fold: ATTACH_FOLD,
+      hint: '소장 말미 「첨부서류」란에 들어갑니다. 증거(갑호증)와는 다릅니다.',
+    }),
+    files('attachFiles', '첨부서류 파일 올리기', {
+      fold: ATTACH_FOLD,
+      role: 'attachment',
+      info: '체크한 서류의 파일이에요. 갑호증이 아니라 첨부서류로 들어가므로 호증 번호가 붙지 않습니다.',
+    }),
+    { kind: 'attachGap', fold: ATTACH_FOLD },
+  ],
+})
+
+/**
+ * 대여금 소장의 3~6단계는 법률 용어를 묻지 않는다.
+ * 다만 청구취지·청구원인에 직접 들어가는 날짜·금액·지급방법·변제기는
+ * AI가 추측하지 않도록 각각의 입력값으로 정확히 받고, 배경과 대화만 평소 말투로 받는다.
+ * 1·2단계의 법원·청구·당사자 정보는 전자소송포털 입력값이라 기존 구조를 그대로 둔다.
+ */
+const loanAiSteps = [
+  {
+    id: 'ai-relation',
+    guided: true,
+    title: '피고와 어떤 사이인가요?',
+    fields: [
+      {
+        kind: 'aiPrompt', key: 'aiRelationshipDetail', context: 'relationship', required: true,
+        eyebrow: '평소 말로 답해주세요',
+        question: '피고와 어떤 사이이고, 왜 돈을 빌려줬나요?',
+        why: '아래 + 예시를 눌러 관계와 약속을 추가한 뒤, 실제 상황에 맞게 고쳐 쓰세요.',
+        placeholder: '예) 대학 동창인데 가게 보증금이 급하다고 해서 빌려줬어요. 가게 계약이 끝나면 바로 갚겠다고 했어요.',
+        exampleGroups: [
+          {
+            label: '관계 추가',
+            items: [
+              '대학 동창으로 오래 알고 지냈어요.',
+              '직장에서 함께 일하며 알게 됐어요.',
+              '가족·친척 사이예요.',
+              '거래처 관계로 알게 됐어요.',
+            ],
+          },
+          {
+            label: '약속 추가',
+            items: [
+              '피고가 가게 보증금이 급하다고 부탁했어요.',
+              '가게 계약이 끝나면 바로 갚겠다고 약속했어요.',
+              '급여를 받으면 전부 갚겠다고 약속했어요.',
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'ai-facts',
+    guided: true,
+    title: '언제, 얼마를, 어떻게 빌려줬나요?',
+    fields: [
+      note('info', '아래 날짜와 금액은 청구취지·청구원인에 그대로 들어가는 핵심 정보예요. 기억에 의존하기보다 차용증이나 이체내역을 보고 입력해주세요.'),
+      date('loanDate', '빌려주기로 약속한 날', { required: true, half: true, guideGroup: 'loan-core', info: '차용증을 쓴 날이나 돈을 빌려주기로 합의한 날이에요.' }),
+      money('loanAmount', '처음 빌려준 총액', { required: true, half: true, guideGroup: 'loan-core', info: '일부를 돌려받았더라도 처음 빌려준 전체 금액을 적으세요.' }),
+      radio('payDateSame', '실제로 돈을 건넨 날은 언제인가요?', ['약속한 날 바로', '다른 날'], { required: true, guideGroup: 'payment' }),
+      date('payDate', '실제로 돈을 건넨 날', {
+        required: true, half: true, guideGroup: 'payment', when: (f) => f.payDateSame === '다른 날',
+        info: '계좌이체라면 이체일, 현금이면 실제로 건넨 날이에요.',
+      }),
+      radio('loanMethod', '어떤 방법으로 돈을 건넸나요?', ['계좌이체', '현금으로 전달', '수표로 전달', '그 밖의 방법'], { required: true, guideGroup: 'payment' }),
+      text('loanMethodEtc', '어떤 방법이었나요?', {
+        required: true, guideGroup: 'payment', when: (f) => f.loanMethod === '그 밖의 방법',
+        placeholder: '예) 피고가 지정한 가족 명의 계좌로 이체',
+      }),
+      radio('loanTimes', '몇 번에 걸쳐 건넸나요?', ['한 번에 전부', '여러 번 나눠서'], { required: true, guideGroup: 'payment' }),
+      area('loanSchedule', '나눠서 건넨 날짜와 금액', {
+        required: true, rows: 3, guideGroup: 'payment', when: (f) => f.loanTimes === '여러 번 나눠서',
+        placeholder: '예) 2025. 3. 10. 700만원 / 2025. 3. 25. 500만원',
+        info: '각 이체내역과 맞도록 한 줄에 한 건씩 적어주세요.',
+      }),
+      radio('dueSet', '언제까지 갚기로 했나요?', ['날짜를 정했어요', '날짜를 정하지 않았어요'], { required: true, guideGroup: 'due' }),
+      date('dueDate', '갚기로 한 날', {
+        required: true, half: true, guideGroup: 'due', when: (f) => f.dueSet === '날짜를 정했어요',
+        info: '차용증이나 대화에서 약속한 변제일을 적으세요.',
+      }),
+      radio('interestSet', '이자를 따로 정했나요?', ['정했어요', '정하지 않았어요'], { required: true, guideGroup: 'interest' }),
+      num('interestRate', '약정 이자율', {
+        required: true, half: true, unit: '%', guideGroup: 'interest', when: (f) => f.interestSet === '정했어요',
+        info: '연 이율을 적으세요. 월 이율만 정했다면 연 이율 확인이 필요해요.',
+        hint: `이자제한법상 약정 최고이자율은 연 ${MAX_INTEREST_RATE}%예요.`,
+      }),
+      note('warn', `약정 이자율이 **이자제한법상 최고이자율(연 ${MAX_INTEREST_RATE}%)**을 넘습니다. 초과하는 부분은 같은 법 제2조 제3항에 따라 **무효**여서 법원에서 인용되지 않아요. 청구취지에는 연 ${MAX_INTEREST_RATE}%까지만 적고, 실제로 약정한 이율은 청구원인에 사실대로 남깁니다.`, {
+        guideGroup: 'interest',
+        when: (f) => f.interestSet === '정했어요' && overMaxRate(f.interestRate, f.loanAmount),
+      }),
+    ],
+  },
+  {
+    id: 'ai-demand',
+    guided: true,
+    title: '돌려받은 돈과 독촉 내용을 알려주세요',
+    fields: [
+      radio('repaid', '지금까지 돌려받은 돈이 있나요?', ['한 푼도 못 받았어요', '일부 돌려받았어요'], { required: true, guideGroup: 'repayment' }),
+      money('repaidAmount', '돌려받은 금액', {
+        required: true, half: true, guideGroup: 'repayment', when: (f) => f.repaid === '일부 돌려받았어요',
+      }),
+      date('repaidDate', '마지막으로 돌려받은 날', {
+        required: true, half: true, guideGroup: 'repayment', when: (f) => f.repaid === '일부 돌려받았어요',
+      }),
+      radio('repaidKind', '돌려받은 돈을 어디에서 뺄까요?', ['원금에서 빼기', '이자에서 먼저 빼기'], {
+        required: true, guideGroup: 'repayment', when: (f) => f.repaid === '일부 돌려받았어요',
+        info: '잘 모르겠다면 이자에서 먼저 빼는 것이 일반적인 충당 순서예요.',
+      }),
+      ...aiDemandFields({
+        verb: '반환을 요구', pending: '아직 한 푼도 갚지 않았어요',
+        examples: ['두 달만 기다려 달라고 했어요.', '아무 답이 없고 연락도 받지 않아요.', '갚지 않겠다고 했어요.'],
+      }),
+    ],
+  },
+  aiEvidenceStep(['차용증·금전소비대차계약서', '계좌이체 내역', '문자·카톡 대화', '내용증명 우편물', '녹취록', '지급명령 결정문']),
+]
+
+/**
+ * 대여금에서 정한 원칙을 다른 소장에도 그대로 적용한다.
+ * 날짜·금액·당사자처럼 AI가 추측하면 안 되는 사실은 구조화된 값으로 받고,
+ * 사건 경위와 상대방 반응만 사용자의 말로 받아 소장 문장으로 정리한다.
+ */
+const wageAiSteps = [
+  {
+    id: 'ai-work',
+    guided: true,
+    title: '어디서 어떤 조건으로 일했나요?',
+    fields: [
+      {
+        kind: 'aiPrompt', key: 'workStory', context: 'work', required: true,
+        eyebrow: '평소 말로 답해주세요',
+        question: '어디서, 누구의 지시를 받으며 일했나요?',
+        why: '업무명·급여·근무 기간은 아래 칸에서 받아요. 여기에는 근무한 곳과 지시를 받은 관계만 적으면 AI가 근로계약 체결 사실로 정리해요.',
+        placeholder: '예) 피고가 운영하는 식당에서, 피고가 정해준 시간표대로 일했어요.',
+        exampleGroups: [
+          { label: '근무한 곳 추가', items: ['피고가 운영하는 식당에서 일했어요.', '피고 회사 물류센터에서 일했어요.', '피고 사무실로 출근했어요.'] },
+          { label: '지시 관계 추가', items: ['피고가 정해준 시간표대로 일했어요.', '피고의 지시를 받아 업무를 했어요.', '피고가 직접 근무를 관리했어요.'] },
+        ],
+      },
+      radio('employmentStatus', '지금도 근무 중인가요?', ['퇴사했어요', '아직 근무 중이에요'], { required: true, guideGroup: 'work-date' }),
+      date('hireDate', '입사한 날', { required: true, half: true, guideGroup: 'work-date' }),
+      date('leaveDate', '퇴사한 날', {
+        required: true, half: true, guideGroup: 'work-date', when: (f) => f.employmentStatus === '퇴사했어요',
+      }),
+      text('jobTitle', '주로 한 일', { required: true, half: true, guideGroup: 'pay', placeholder: '예) 홀서빙·매장 정리' }),
+      radio('payKind', '급여 계산 방식', ['월급', '시급'], { required: true, guideGroup: 'pay' }),
+      money('payAmount', '약속한 급여액', { required: true, half: true, guideGroup: 'pay' }),
+      select('payDay', '급여를 받기로 한 날', ['매월 25일', '매월 10일', '매월 말일', '기타'], { required: true, half: true, guideGroup: 'pay' }),
+      text('payDayEtc', '어떤 날에 받기로 했나요?', {
+        required: true, guideGroup: 'pay', when: (f) => f.payDay === '기타', placeholder: '예) 매월 5일 / 격주 금요일',
+      }),
+      radio('workerCount', '평소 함께 일한 근로자는 몇 명인가요?', ['5인 미만', '5인 이상'], { required: true, guideGroup: 'pay' }),
+      note('warn', '5인 미만 사업장은 일부 가산수당 적용이 달라질 수 있어요. 실제 근무 인원을 기준으로 골라주세요.', { when: (f) => f.workerCount === '5인 미만' }),
+    ],
+  },
+  {
+    id: 'ai-unpaid',
+    guided: true,
+    title: '어느 기간의 어떤 돈을 못 받았나요?',
+    fields: [
+      checks('unpaidItems', '못 받은 항목을 모두 골라주세요', ['임금', '퇴직금', '연장근로수당', '주휴수당', '기타'], { required: true, guideGroup: 'unpaid' }),
+      text('unpaidEtcName', '기타 항목 이름', {
+        required: true, guideGroup: 'unpaid', when: (f) => (f.unpaidItems || []).includes('기타'), placeholder: '예) 연차수당·상여금·식대',
+      }),
+      money('calcWage', '못 받은 임금', { required: true, half: true, guideGroup: 'unpaid', when: (f) => (f.unpaidItems || []).includes('임금') }),
+      money('calcSeverance', '못 받은 퇴직금', { required: true, half: true, guideGroup: 'unpaid', when: (f) => (f.unpaidItems || []).includes('퇴직금') }),
+      money('calcOvertime', '못 받은 연장근로수당', { required: true, half: true, guideGroup: 'unpaid', when: (f) => (f.unpaidItems || []).includes('연장근로수당') }),
+      money('calcHoliday', '못 받은 주휴수당', { required: true, half: true, guideGroup: 'unpaid', when: (f) => (f.unpaidItems || []).includes('주휴수당') }),
+      money('calcEtc', '기타 미지급액', { required: true, half: true, guideGroup: 'unpaid', when: (f) => (f.unpaidItems || []).includes('기타') }),
+      { kind: 'sum', keys: ['calcWage', 'calcSeverance', 'calcOvertime', 'calcHoliday', 'calcEtc'], label: '항목 합계', compare: 'amount' },
+      {
+        kind: 'aiPrompt', key: 'calcBasis', context: 'calculation', required: true,
+        eyebrow: '기간과 계산만 평소 말로 답해주세요',
+        question: '각 돈은 어느 기간의 것이고, 어떤 기준으로 계산했나요?',
+        why: '항목과 금액은 위에서 받았어요. 여기에는 그 돈이 어느 달의 것인지와 계산 기준만 적으면 AI가 항목별 청구 근거로 정리해요.',
+        placeholder: '예) 2026년 3월과 4월치예요. 퇴직금은 3년 근무한 평균임금으로 계산했어요.',
+        exampleGroups: [
+          { label: '체불 기간 추가', items: ['2026년 3월과 4월치예요.', '퇴사 직전 두 달치예요.', '입사 때부터 계속 일부만 받았어요.'] },
+          { label: '계산 기준 추가', items: ['급여명세서에 적힌 금액으로 계산했어요.', '출퇴근기록에 있는 시간을 합산했어요.'] },
+        ],
+      },
+      radio('laborReport', '고용노동청에 진정했나요?', ['진정 접수함', '안 함'], { required: true, guideGroup: 'labor' }),
+      text('reportNo', '진정 접수번호', { half: true, guideGroup: 'labor', when: (f) => f.laborReport === '진정 접수함', placeholder: '예) 2026-서울남부-01234' }),
+      select('reportDoc', '체불금품확인원', ['발급 완료', '신청 중', '미발급'], { half: true, guideGroup: 'labor', when: (f) => f.laborReport === '진정 접수함' }),
+    ],
+  },
+  aiDemandStep({
+    title: '임금을 달라고 요구한 적 있나요?', verb: '지급을 요구', pending: '아직 임금을 받지 못했어요',
+    examples: ['곧 입금하겠다고 했지만 아직 주지 않았어요.', '회사 사정이 어렵다며 기다려 달라고 했어요.', '아무 답이 없고 연락도 받지 않아요.'],
+  }),
+  aiEvidenceStep(['근로계약서', '급여명세서', '출퇴근기록', '통장 입금내역', '체불금품확인원', '문자·카톡 대화']),
+]
+
+const depositAiSteps = [
+  {
+    id: 'ai-lease',
+    guided: true,
+    title: '보증금을 언제, 얼마 맡겼나요?',
+    fields: [
+      note('info', '계약일·보증금액·기간은 소장 청구원인에 그대로 들어가는 값이에요. 기억에 의존하기보다 임대차계약서를 보고 입력해주세요.'),
+      radio('leaseKind', '어떤 임대차인가요?', ['주택', '상가'], { required: true, guideGroup: 'lease-core' }),
+      { kind: 'address', key: 'propertyAddr', label: '임차목적물 주소', required: true, guideGroup: 'lease-core' },
+      date('contractDate', '계약을 맺은 날', { required: true, half: true, guideGroup: 'lease-core' }),
+      money('depositAmount', '보증금액', { required: true, half: true, guideGroup: 'lease-core' }),
+      // 요건사실이 둘이다 — ①계약 체결 ②보증금 지급. 같은 날이 아닐 수 있어 따로 받는다.
+      date('depositPaidDate', '보증금을 낸 날', {
+        half: true, guideGroup: 'lease-core',
+        info: '계약일과 달라도 됩니다. 계약금·잔금으로 나눠 냈다면 잔금 낸 날을 적으세요.',
+      }),
+      date('leaseStart', '임대차 시작일', { half: true, guideGroup: 'lease-term' }),
+      date('leaseEnd', '임대차 종료일', { required: true, half: true, guideGroup: 'lease-term' }),
+      radio('endWay', '계약이 어떻게 끝났나요?', ['기간 만료', '묵시적 갱신 후 해지통고', '합의 해지'], { required: true, guideGroup: 'lease-term' }),
+      radio('handover', '집을 비워주셨나요? (목적물 인도)', ['비워줬어요', '아직 살고 있어요'], { required: true, guideGroup: 'handover' }),
+      date('handoverDate', '인도(이사 완료)일', { required: true, half: true, guideGroup: 'handover', when: (f) => f.handover === '비워줬어요' }),
+      note('warn', '보증금 반환은 집을 비워주는 것과 동시이행 관계예요. 인도를 마친 사실이 승패를 가르니 이사확인서·검침내역을 꼭 올려주세요.'),
+      radio('leaseReg', '임차권등기명령을 신청했나요?', ['신청·완료', '안 함'], { required: true, guideGroup: 'handover' }),
+    ],
+  },
+  {
+    id: 'ai-refuse',
+    guided: true,
+    title: '임대인이 반환을 거부하는 이유는?',
+    fields: [
+      checks('refuseReasons', '들어보신 이유를 모두 골라주세요', [
+        '원상회복 비용을 공제하겠다', '미납 차임·관리비를 공제하겠다', '새 임차인이 구해지면 주겠다', '연락이 닿지 않는다', '이유 없이 미루기만 한다',
+      ], { required: true, guideGroup: 'refuse' }),
+      {
+        kind: 'aiPrompt', key: 'refuseDetail', context: 'refusal', required: true,
+        guideGroup: 'refuse',
+        eyebrow: '들은 말 그대로 적어주세요',
+        question: '임대인이 실제로 뭐라고 말했나요?',
+        why: '거부 이유는 위에서 골랐어요. 여기에는 임대인이 실제로 한 말 — 얼마를 어떤 명목으로 빼겠다고 했는지, 언제까지 주겠다고 했는지만 그대로 적어주세요.',
+        placeholder: '예) 도배·장판 교체비 120만원을 빼고 주겠다는 문자만 반복하고, 날짜를 물어도 답하지 않아요.',
+        exampleGroups: [
+          {
+            label: '들은 말 추가',
+            items: [
+              '얼마를 빼겠다고 금액까지 말했어요.',
+              '견적서는 보여주지 않았어요.',
+              '언제 주겠다는 날짜를 말하지 않아요.',
+            ],
+          },
+          {
+            label: '연락 상황 추가',
+            items: [
+              '문자만 보내고 통화는 피해요.',
+              '전화를 받지 않아요.',
+              '읽고 답을 하지 않아요.',
+            ],
+          },
+        ],
+      },
+      // 다투는 금액을 소장에서 미리 특정해 두면 쟁점이 좁혀진다 (1단계 안내에서 예고한 자리)
+      money('deductClaim', '임대인이 공제하겠다는 금액', { half: true, guideGroup: 'refuse', placeholder: '없으면 비워두세요' }),
+      note('info', '“새 임차인이 구해지면 준다”는 것은 법적으로 반환을 거부할 사유가 아니에요. 그대로 적어두시면 반박 근거가 됩니다.', { when: (f) => (f.refuseReasons || []).includes('새 임차인이 구해지면 주겠다') }),
+      note('warn', '원상회복 비용을 공제하려면 임대인이 그 금액을 증명해야 해요. 구체적 견적 없이 하는 공제 주장은 받아들여지지 않는 경우가 많습니다.', { when: (f) => (f.refuseReasons || []).includes('원상회복 비용을 공제하겠다') }),
+    ],
+  },
+  aiDemandStep({
+    title: '반환을 요구한 적 있나요?', verb: '반환을 요구', pending: '아직 보증금을 돌려받지 못했어요',
+    // 「새 임차인이 구해지면 주겠다」는 4단계 체크와 겹치므로 예시에서 뺀다
+    examples: ['조금만 기다려 달라고 했어요.', '견적서를 보내겠다고만 했어요.', '아무 답이 없고 연락도 받지 않아요.'],
+  }),
+  aiEvidenceStep(['임대차계약서', '보증금 입금내역', '전입세대열람내역·확정일자', '내용증명 우편물', '이사확인서·검침내역', '임차권등기 등기부등본', '문자·카톡 대화']),
+]
+
+const tortAiSteps = [
+  {
+    id: 'ai-incident',
+    guided: true,
+    title: '언제, 어디서, 무슨 일이 있었나요?',
+    fields: [
+      radio('hasContract', '상대방과 계약 관계가 있었나요?', ['없음 (사고·불법행위)', '있음 (계약 위반)'], { required: true, guideGroup: 'incident' }),
+      radio('tortKind', '어떤 사건에 가까운가요?', ['일반 (기)', '교통사고 (자)', '산업재해 (산)', '의료 (의)'], { required: true, guideGroup: 'incident' }),
+      date('incidentDate', '사고·피해가 생긴 날', { required: true, half: true, guideGroup: 'incident' }),
+      {
+        kind: 'aiPrompt', key: 'incidentStory', context: 'incident', required: true,
+        eyebrow: '평소 말로 답해주세요',
+        question: '어디서, 상대방이 구체적으로 무엇을 했나요?',
+        why: '사건 종류와 날짜는 위에서 골랐어요. 여기에는 장소와 상대방이 한 행동을 그대로 적으면 AI가 발생 경위와 책임 근거로 정리해요.',
+        placeholder: '예) 강남대로 교차로에서 상대방이 신호를 위반해 제 차 왼쪽을 들이받았고, 목을 다쳐 12주 치료를 받았어요.',
+        exampleGroups: [
+          { label: '장소 추가', items: ['교차로에서 일어났어요.', '공사 현장에서 일어났어요.', '병원 진료 중에 일어났어요.'] },
+          { label: '상대방 행동 추가', items: ['신호를 위반해 제 차를 들이받았어요.', '약속한 공사를 끝내지 않았어요.', '안전조치를 하지 않았어요.'] },
+          { label: '피해 결과 추가', items: ['다쳐서 병원 치료를 받았어요.', '차량이 파손되어 수리했어요.', '일을 하지 못해 수입이 줄었어요.'] },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'ai-damage',
+    guided: true,
+    title: '손해액을 항목별로 알려주세요',
+    fields: [
+      note('info', '1단계의 청구금액과 아래 항목 합계가 같아야 해요. 영수증·견적서·소득자료에 있는 금액을 보고 입력해주세요.'),
+      checks('damageKinds', '생긴 손해를 모두 골라주세요', ['치료비·수리비 (적극손해)', '일하지 못한 손해 (일실수입)', '위자료'], { required: true, guideGroup: 'damage' }),
+      money('dmgDirect', '치료비·수리비', { required: true, half: true, guideGroup: 'damage', when: (f) => (f.damageKinds || []).includes('치료비·수리비 (적극손해)') }),
+      money('dmgIncome', '일하지 못한 기간의 수입', { required: true, half: true, guideGroup: 'damage', when: (f) => (f.damageKinds || []).includes('일하지 못한 손해 (일실수입)') }),
+      money('dmgSolace', '위자료', { required: true, half: true, guideGroup: 'damage', when: (f) => (f.damageKinds || []).includes('위자료') }),
+      { kind: 'sum', keys: ['dmgDirect', 'dmgIncome', 'dmgSolace'], label: '손해액 합계', compare: 'amount' },
+      radio('ownFault', '원고에게도 잘못이 있다고 보나요?', ['없음', '일부 있음'], { required: true, guideGroup: 'fault' }),
+      num('ownFaultRate', '예상 과실비율', { required: true, half: true, unit: '%', guideGroup: 'fault', when: (f) => f.ownFault === '일부 있음' }),
+      {
+        kind: 'aiPrompt', key: 'calcBasis', context: 'calculation', required: true,
+        eyebrow: '계산 과정은 평소 말로 답해주세요',
+        question: '그 금액이 나오기까지 어떻게 계산했나요?',
+        why: '쓴 자료는 아래에서 고르면 돼요. 여기에는 계산 과정 — 무엇에 무엇을 곱하고 무엇을 뺐는지만 적으면 AI가 항목별 산정 근거로 정리해요.',
+        placeholder: '예) 못 번 돈은 사고 전 3개월 평균급여에 쉬었던 4주를 곱했고, 보험사가 준 720만원은 빼고 계산했어요.',
+        exampleGroups: [
+          { label: '계산 방법 추가', items: ['치료 때문에 쉬었던 기간을 곱했어요.', '영수증 금액을 그대로 합산했어요.', '견적서에 적힌 금액으로 잡았어요.'] },
+          { label: '공제 추가', items: ['보험사가 지급한 금액은 빼고 계산했어요.', '이미 받은 합의금은 뺐어요.'] },
+        ],
+      },
+      checks('calcDocs', '계산에 사용한 자료를 골라주세요', ['진단서·소견서', '치료비 영수증', '수리비 견적서', '급여명세서·소득금액증명', '사고사실확인원', '보험사 지급내역'], { required: true, guideGroup: 'documents' }),
+    ],
+  },
+  aiDemandStep({
+    title: '배상해 달라고 요구한 적 있나요?', verb: '배상을 요구', pending: '아직 배상을 받지 못했어요',
+    examples: ['보험으로 처리하겠다고 했지만 진행하지 않았어요.', '책임이 없다며 배상을 거절했어요.', '합의금을 제안했지만 실제 손해액보다 적었어요.'],
+  }),
+  aiEvidenceStep(['사고 관련 자료(사진·영상)', '진단서·소견서', '치료비·수리비 영수증', '급여명세서·소득자료', '사고사실확인원', '내용증명 우편물']),
+]
+
+const evictAiSteps = [
+  {
+    id: 'ai-property',
+    guided: true,
+    title: '어떤 건물을 누가 점유하고 있나요?',
+    fields: [
+      area('propertyDesc', '부동산의 표시', {
+        rows: 3, required: true, guideGroup: 'property',
+        placeholder: '등기사항증명서의 건물 표시를 그대로 입력해주세요.',
+        info: '판결 주문과 강제집행에 그대로 쓰이는 정보라 주소만 쓰지 말고 동·호수·면적까지 등기사항증명서대로 적어야 해요.',
+      }),
+      radio('ownership', '이 부동산을 돌려달라고 할 권리는 어디서 생기나요?', ['원고 소유', '원고가 소유자로부터 임대 권한을 받음'], { required: true, guideGroup: 'right' }),
+      date('ownDate', '소유권을 취득한 날', { required: true, half: true, guideGroup: 'right', when: (f) => f.ownership === '원고 소유' }),
+      text('ownRight', '소유자에게 받은 권한', {
+        required: true, guideGroup: 'right', when: (f) => f.ownership === '원고가 소유자로부터 임대 권한을 받음',
+        placeholder: '예) 소유자 홍길동으로부터 임대·관리를 위임받음',
+      }),
+      radio('occupancy', '피고는 지금 어떻게 점유하고 있나요?', ['계속 거주 중', '영업 중', '비어 있음'], { required: true, guideGroup: 'occupancy' }),
+      radio('evictReason', '왜 비워달라고 하나요?', ['월세를 밀렸어요', '계약이 끝났는데 나가지 않아요', '계약 없이 점유하고 있어요'], { required: true, guideGroup: 'occupancy' }),
+    ],
+  },
+  {
+    id: 'ai-evict-facts',
+    guided: true,
+    title: '계약 내용과 미납 내역을 알려주세요',
+    fields: [
+      radio('leaseKind', '어떤 임대차였나요?', ['주택', '상가'], { required: true, guideGroup: 'lease', when: (f) => f.evictReason !== '계약 없이 점유하고 있어요' }),
+      date('contractDate', '계약한 날', { required: true, half: true, guideGroup: 'lease', when: (f) => f.evictReason !== '계약 없이 점유하고 있어요' }),
+      date('leaseEnd', '계약이 끝난 날', { required: true, half: true, guideGroup: 'lease', when: (f) => f.evictReason === '계약이 끝났는데 나가지 않아요' }),
+      money('rent', '월세', { required: true, half: true, guideGroup: 'lease', when: (f) => f.evictReason !== '계약 없이 점유하고 있어요' }),
+      date('unpaidFrom', '월세를 못 받은 첫 달', { required: true, half: true, guideGroup: 'arrears', when: (f) => f.evictReason === '월세를 밀렸어요' }),
+      num('unpaidMonths', '밀린 개월 수', { required: true, half: true, unit: '개월', guideGroup: 'arrears', when: (f) => f.evictReason === '월세를 밀렸어요' }),
+      note('warn', '주택은 통상 2기, 상가는 3기의 차임이 연체되어야 연체를 이유로 계약을 해지할 수 있어요. 현재 입력한 개월 수로 해지가 가능한지 확인해주세요.', {
+        guideGroup: 'arrears',
+        when: (f) => f.evictReason === '월세를 밀렸어요' && Number(f.unpaidMonths) > 0
+          && ((f.leaseKind === '주택' && Number(f.unpaidMonths) < 2) || (f.leaseKind === '상가' && Number(f.unpaidMonths) < 3)),
+      }),
+      money('unpaidUtil', '밀린 관리비·공과금', { half: true, guideGroup: 'arrears', when: (f) => f.evictReason === '월세를 밀렸어요', placeholder: '없으면 비워두세요' }),
+      area('unpaidDetail', '월별 미납 내역', {
+        rows: 3, required: true, guideGroup: 'arrears', when: (f) => f.evictReason === '월세를 밀렸어요',
+        placeholder: '예) 2026. 4. 월세 150만원 / 2026. 5. 월세 150만원',
+      }),
+      radio('terminated', '계약 해지를 알렸나요?', ['통고했어요', '아직이에요'], { required: true, guideGroup: 'termination', when: (f) => f.evictReason === '월세를 밀렸어요' }),
+      date('terminateDate', '해지 통고가 도달한 날', { required: true, half: true, guideGroup: 'termination', when: (f) => f.evictReason === '월세를 밀렸어요' && f.terminated === '통고했어요' }),
+      radio('endNotice', '계약 종료·갱신거절을 알렸나요?', ['알렸어요', '따로 알리지 않았어요'], { required: true, guideGroup: 'termination', when: (f) => f.evictReason === '계약이 끝났는데 나가지 않아요' }),
+      date('endNoticeDate', '계약 종료를 알린 날', { required: true, half: true, guideGroup: 'termination', when: (f) => f.evictReason === '계약이 끝났는데 나가지 않아요' && f.endNotice === '알렸어요' }),
+      date('occupyStart', '피고가 점유하기 시작한 날', { required: true, half: true, guideGroup: 'unauthorized', when: (f) => f.evictReason === '계약 없이 점유하고 있어요' }),
+      {
+        // 인도 사유와 현재 점유 상태는 3단계에서 이미 골랐다. 여기서는 그 사이에
+        // 실제로 오간 일 — 고를 수 없는 정황만 받는다.
+        kind: 'aiPrompt', key: 'evictStory', context: 'occupancy', required: true,
+        eyebrow: '고른 항목 말고, 그 사이에 있었던 일만 적어주세요',
+        question: '비워달라고 하게 되기까지 피고와 어떤 일이 있었나요?',
+        why: '사유와 현재 상태는 앞에서 골랐어요. 여기에는 그 사이의 경위 — 언제 무슨 말이 오갔고 피고가 어떻게 나왔는지만 적으면 AI가 인도청구의 원인으로 정리해요.',
+        placeholder: '예) 두 달치를 먼저 밀렸을 때 전화로 독촉했더니 다음 달에 몰아서 주겠다고 했는데, 그 뒤로 한 번도 입금하지 않았어요.',
+        exampleGroups: [
+          { label: '그동안의 경위 추가', items: ['밀리기 시작했을 때 전화로 독촉했어요.', '다음 달에 몰아서 주겠다고 했어요.', '보증금에서 빼라고만 하고 있어요.'] },
+          { label: '피고 태도 추가', items: ['짐과 열쇠를 넘기지 않았어요.', '이사 갈 곳을 못 구했다고 해요.', '연락을 받지 않아요.'] },
+        ],
+      },
+    ],
+  },
+  aiDemandStep({
+    title: '건물을 비워달라고 요구한 적 있나요?', verb: '퇴거를 요구', pending: '아직 건물을 비워주지 않았어요',
+    examples: ['곧 나가겠다고 했지만 그대로 점유하고 있어요.', '계약이 끝나지 않았다며 거절했어요.', '아무 답이 없고 계속 영업하고 있어요.'],
+  }),
+  aiEvidenceStep(['임대차계약서', '부동산 등기부등본', '미납 차임 내역·통장거래내역', '해지·종료 통보 내용증명', '문자·카톡 대화', '현장 사진']),
+]
+
 /** 5단계(최고·청구 이력)는 유형별로 문구만 다르고 구조가 같다 */
 const demandStep = (title, verb, evidenceHint) => ({
   title,
@@ -134,7 +658,7 @@ const demandStep = (title, verb, evidenceHint) => ({
 
 /** 6단계(증거·첨부)는 유형별 기본 목록만 다르다 */
 const evidenceStep = (options) => ({
-  title: '증거자료 · 서명',
+  title: '증거자료',
   fields: [
     // 체크리스트는 '무엇을 준비해야 하는지' 알려주는 용도.
     // 실제 갑호증이 되는 것은 아래에서 올린 파일이다.
@@ -144,13 +668,15 @@ const evidenceStep = (options) => ({
     }),
     files('evidenceFiles', '증거 파일 올리기'),
     { kind: 'evidenceGap' },
-    checks('attachExtra', '증거 말고 함께 낼 서류가 있나요?', [
-      '소가계산서', '위임장', '법인등기부등본', '가족관계증명서', '부동산 등기사항증명서', '주민등록초본',
-    ], {
+    checks('attachExtra', '증거 말고 함께 낼 서류가 있나요?', ATTACH_OPTIONS, {
       hint: '소장 말미 「첨부서류」란에 들어갑니다. 증거(갑호증)와는 다릅니다.',
       info: '증거는 「입증방법」, 나머지 제출 서류는 「첨부서류」로 나뉘어 들어갑니다. 포털도 둘을 구분해서 받아요 — 첨부서류로 낸 문서는 증거로 쓸 수 없고 판결에 효력이 없습니다. 소가계산서는 소가 산정이 복잡한 사건(명도·확인의 소 등)에서 요구될 수 있어요.',
     }),
-    { kind: 'signature', key: 'signature' },
+    files('attachFiles', '첨부서류 파일 올리기', {
+      role: 'attachment',
+      info: '체크한 서류의 파일이에요. 갑호증이 아니라 첨부서류로 들어가므로 호증 번호가 붙지 않습니다.',
+    }),
+    { kind: 'attachGap' },
   ],
 })
 
@@ -200,8 +726,8 @@ export const commonSteps = [
       text('pName', '이름 / 상호', { required: true, half: true, placeholder: '홍길동', tab: '원고' }),
       text('pRrn', '주민등록번호', {
         required: true, half: true, placeholder: '750101-1234567',
-        showKey: 'pRrnShow', showDefault: false, tab: '원고',
-        info: '「제출문서에 보임」을 끄면 그 항목은 소장 본문에서 빠지고 법원에만 별도로 알립니다. 주민등록번호는 법이 요구하는 기재사항이 아니어서 기본값이 표시 안 함이에요. 다만 개인 상대 소송이라면 나중에 강제집행을 위해 주민등록상 주소·주민번호 확인이 필요해집니다.',
+        showKey: 'pRrnShow', showDefault: true, tab: '원고',
+        info: '법원 소장 양식은 원고 이름 옆에 주민등록번호를 적습니다(뒤 6자리는 가려서 나갑니다). 민사소송규칙 제2조가 요구하는 기재사항은 이름·주소·연락처까지지만, 실무에서는 당사자를 특정하고 나중에 집행까지 이어가기 위해 원고 주민등록번호를 적어 냅니다. 「제출문서에 보임」을 끄면 본문에서 빠지고 법원에만 별도로 알립니다.',
       }),
       {
         kind: 'address', key: 'pAddr', label: '주소', required: true, tab: '원고',
@@ -358,7 +884,12 @@ export const complaintTypes = [
             placeholder: '예: 매 분기 말일 / 매월 15일 / 3개월마다',
             hint: '청구원인에 그대로 들어가니 "매월 15일"처럼 문장에 넣어 읽히는 표현으로 적어주세요.',
           }),
-          note('warn', '이자제한법상 최고이율은 연 20%예요. 넘으면 초과분은 무효로 처리됩니다.', { when: (f) => f.interestSet === '약정함' }),
+          note('warn', `약정 이자율이 **이자제한법상 최고이자율(연 ${MAX_INTEREST_RATE}%)**을 넘습니다. 초과하는 부분은 같은 법 제2조 제3항에 따라 **무효**여서 법원에서 인용되지 않아요. 청구취지에는 연 ${MAX_INTEREST_RATE}%까지만 적고, 실제로 약정한 이율은 청구원인에 사실대로 남깁니다.`, {
+            when: (f) => f.interestSet === '약정함' && overMaxRate(f.interestRate, f.loanAmount),
+          }),
+          note('info', `이자제한법상 약정 최고이자율은 연 ${MAX_INTEREST_RATE}%예요. 넘겨 약정하면 초과분은 무효가 됩니다(대차원금 10만원 미만은 적용 제외).`, {
+            when: (f) => f.interestSet === '약정함' && !overMaxRate(f.interestRate, f.loanAmount),
+          }),
           radio('dueSet', '갚기로 한 날(변제기)을 정했나요?', ['날짜로 정함', '정하지 않음'], { required: true }),
           date('dueDate', '변제기', { when: (f) => f.dueSet === '날짜로 정함' }),
           note('info', '변제기 다음 날부터 지연손해금이 붙어요. 오른쪽 청구취지에 자동 반영했습니다.', { when: (f) => f.dueSet === '날짜로 정함' }),
@@ -642,7 +1173,14 @@ export const isVisible = (field, form) => (field.when ? !!field.when(form) : tru
 
 /** 유형별 전체 6단계 (공통 2 + 유형별 4) */
 export function allSteps(type) {
-  return [...commonSteps, ...(type?.steps || [])]
+  const aiSteps = {
+    loan: loanAiSteps,
+    deposit: depositAiSteps,
+    wage: wageAiSteps,
+    tort: tortAiSteps,
+    evict: evictAiSteps,
+  }
+  return [...commonSteps, ...(aiSteps[type?.key] || type?.steps || [])]
 }
 
 const filled = (v) => (Array.isArray(v) ? v.length > 0 : v !== undefined && v !== null && String(v).trim() !== '')
@@ -680,7 +1218,8 @@ export function stepSummary(idx, type, form) {
   if (!first) return ''
   const v = form[first.key]
   const shown = first.kind === 'money' ? `${won(v)}원` : first.kind === 'date' ? fmtDate(v) : Array.isArray(v) ? v.join(', ') : String(v)
-  return `${first.label} · ${shown.length > 40 ? `${shown.slice(0, 40)}…` : shown}`
+  if (first.kind === 'aiPrompt') return `답변 · ${shown.length > 48 ? `${shown.slice(0, 48)}…` : shown}`
+  return `${first.label || step.title} · ${shown.length > 40 ? `${shown.slice(0, 40)}…` : shown}`
 }
 
 /* ─────────────────────────── 미리보기 생성 ─────────────────────────── */
@@ -699,7 +1238,9 @@ const addrOf = (form, key) => {
   if (!base) return ''
   const zip = form[`${key}Zip`]
   const detail = form[`${key}Detail`]
-  return [zip ? `(${zip})` : '', base, detail].filter(Boolean).join(' ')
+  // 법원 양식은 상세주소를 쉼표로 잇는다 — `남부순환로 1820, 503호`
+  const street = detail ? `${base}, ${detail}` : base
+  return [zip ? `(${zip})` : '', street].filter(Boolean).join(' ')
 }
 
 
@@ -725,8 +1266,9 @@ function claimHead(form, amountText) {
 }
 
 /** 피고가 여럿이면 소송비용·가집행 문구도 복수형이 된다 */
+// 법원 양식의 문구는 "피고가 부담한다" — 「피고의 부담으로 한다」도 쓰이지만 서식을 따른다
 const costLine = (form) =>
-  defendantsOf(form).length ? '소송비용은 피고들의 부담으로 한다.' : '소송비용은 피고의 부담으로 한다.'
+  defendantsOf(form).length ? '소송비용은 피고들이 부담한다.' : '소송비용은 피고가 부담한다.'
 
 /** 첫 피고 외에 추가된 피고들 — 이름이 비어 있는 줄은 버린다 */
 function defendantsOf(form) {
@@ -739,16 +1281,43 @@ export function partyCount(form) {
   return 1 + 1 + defendantsOf(form).length
 }
 
+/**
+ * 법원 서식은 사람 이름을 `김 지 민`처럼 한 자씩 띄어 적는다.
+ *
+ * 다만 상호에까지 적용하면 `주식회사 라비드웨딩`이 `주 식 회 사 …`로 벌어진다.
+ * 그래서 **공백 없는 2~4자 한글**, 즉 개인 이름 꼴일 때만 띄운다.
+ */
+export const spaceName = (v) => {
+  const name = String(v || '').trim()
+  return /^[가-힣]{2,4}$/.test(name) ? [...name].join(' ') : name
+}
+
+/**
+ * 갑호증에 적는 이름은 **파일명이 아니라 서증명**이다.
+ * `계좌이체_확인증.pdf`를 그대로 적으면 서식이 아니라 파일 목록으로 읽힌다.
+ */
+export const evidenceLabel = (v) => String(v || '')
+  .replace(/\.[a-z0-9]{2,5}$/i, '')
+  .replace(/[_]+/g, ' ')
+  .trim()
+
+/** 주민등록번호 뒤 6자리는 가린다 — 법원 양식도 `890201-1******` 꼴로 적는다 */
+const maskRrn = (v) => {
+  const digits = String(v || '').replace(/[^0-9]/g, '')
+  if (digits.length < 7) return String(v || '')
+  return `${digits.slice(0, 6)}-${digits.slice(6, 7)}${'*'.repeat(6)}`
+}
+
 function partyLines(form) {
   // 「소장 표시」가 꺼진 항목은 본문에서 빼고, 법원에만 알린다는 각주를 남긴다
   const show = (key, dflt = true) => form[key] ?? dflt
   const hidden = []
 
   const p = [
-    `원　고　${or(form.pName, '2단계에서 이름을 입력해 주세요')}${
+    `원　고　${or(spaceName(form.pName), '2단계에서 이름을 입력해 주세요')}${
       form.pForeignName ? ` (${F(form.pForeignName)})` : ''
     }${
-      form.pRrn && show('pRrnShow', false) ? ` (${String(form.pRrn).slice(0, 8)}*****)` : ''
+      form.pRrn && show('pRrnShow', true) ? ` (${maskRrn(form.pRrn)})` : ''
     }`,
     `　　　　${or(addrOf(form, 'pAddr'), '2단계에서 주소를 입력해 주세요')}`,
   ]
@@ -761,27 +1330,28 @@ function partyLines(form) {
   else if (form.pLegalRep === '법정대리인이 있어요') {
     p.push(`　　　　위 원고는 소송능력이 없으므로 법정대리인 ${or(form.pLegalRepName, '법정대리인')}`)
   }
-  if (form.pRrn && !show('pRrnShow', false)) hidden.push('원고 주민등록번호')
+  if (form.pRrn && !show('pRrnShow', true)) hidden.push('원고 주민등록번호')
 
+  // 법원 서식은 「전화 … 　 전자우편 …」을 한 줄에 잇는다. 「이메일」이 아니라 「전자우편」이다.
   const contact = []
   if (form.pTel && show('pTelShow')) contact.push(`전화 ${F(form.pTel)}`)
   if (form.pFax && show('pFaxShow')) contact.push(`팩스 ${F(form.pFax)}`)
-  if (contact.length) p.push(`　　　　${contact.join('　')}`)
+  if (form.pEmail && show('pEmailShow')) contact.push(`전자우편 ${F(form.pEmail)}`)
+  if (contact.length) p.push(`　　　　${contact.join('　　')}`)
   if (form.pTel && !show('pTelShow')) hidden.push('원고 전화번호')
   if (form.pFax && !show('pFaxShow')) hidden.push('원고 팩스번호')
 
-  if (form.pEmail && show('pEmailShow')) p.push(`　　　　이메일 ${F(form.pEmail)}`)
-  else if (form.pEmail) hidden.push('원고 이메일')
+  if (form.pEmail && !show('pEmailShow')) hidden.push('원고 이메일')
 
-  p.push(`　　　　송달장소 : ${
-    form.pService === '다른 주소로 받겠습니다'
-      ? or(addrOf(form, 'pServiceAddr'), '송달받을 주소')
-      : '위 주소와 같음'
-  }`)
+  // 송달장소는 **주소와 다를 때만** 적는다. 법원 양식에 "위 주소와 같음" 줄은 없고,
+  // 없는 줄을 넣으면 당사자란이 서식보다 한 줄씩 길어진다.
+  if (form.pService === '다른 주소로 받겠습니다') {
+    p.push(`　　　　송달장소 : ${or(addrOf(form, 'pServiceAddr'), '송달받을 주소')}`)
+  }
 
   const d = [
-    `피　고　${or(form.dName, '2단계에서 이름을 입력해 주세요')}${
-      form.dRrn && show('dRrnShow', false) ? ` (${String(form.dRrn).slice(0, 8)}*****)` : ''
+    `피　고　${or(spaceName(form.dName), '2단계에서 이름을 입력해 주세요')}${
+      form.dRrn && show('dRrnShow', false) ? ` (${maskRrn(form.dRrn)})` : ''
     }`,
     `　　　　${or(addrOf(form, 'dAddr'), '2단계에서 주소를 입력해 주세요')}`,
   ]
@@ -804,17 +1374,19 @@ function partyLines(form) {
     d[0] = d[0].replace('피　고　', '피　고　1. ')
     for (let i = 1; i < d.length; i++) d[i] = d[i].replace(/^　　　　/, '　　　　　　')
     more.forEach((x, i) => {
-      d.push(`　　　　${i + 2}. ${or(x.name, `피고 ${i + 2} 이름`)}`)
+      d.push(`　　　　${i + 2}. ${or(spaceName(x.name), `피고 ${i + 2} 이름`)}`)
       d.push(`　　　　　　${or(x.addr, `피고 ${i + 2} 주소`)}`)
       if (x.tel) d.push(`　　　　　　전화 ${F(x.tel)}`)
     })
   }
 
-  const lines = [...p, ...d]
-  if (hidden.length) {
-    lines.push('')
-    lines.push(`　　　　※ ${F(hidden.join(', '))}는 법원에만 제출하고 이 서면에는 표시하지 않습니다.`)
-  }
+  // 법원 양식은 원고란과 피고란 사이를 한 줄 띄운다 — 붙여 놓으면 한 덩어리로 읽힌다
+  const lines = [...p, '', ...d]
+  // 「무엇을 뺐는지」는 작성자에게 하는 말이지 법원에 내는 문장이 아니다.
+  // 법원 서식에는 이런 줄이 없으므로 화면에만 띄우고 인쇄본에서는 뺀다.
+  lines.note = hidden.length
+    ? `${hidden.join(', ')}는 소장 본문에서 뺐어요. 법원에는 당사자표시서로 따로 냅니다.`
+    : ''
   return lines
 }
 
@@ -839,7 +1411,8 @@ function citeFor(form, kind) {
   const re = EVIDENCE_PATTERN[kind]
   if (!re) return ''
   const i = files.findIndex((x) => re.test(x.name || ''))
-  return i === -1 ? '' : ` ${F(`(갑 제${i + 1}호증 ${files[i].name})`)}`
+  // 본문 인용도 입증방법과 같은 서증명으로 — 한쪽만 파일명이면 대조가 안 된다
+  return i === -1 ? '' : ` ${F(`(갑 제${i + 1}호증 ${evidenceLabel(files[i].name)})`)}`
 }
 
 // '기타'를 고르면 사용자가 직접 적은 값으로 바꿔 넣는다.
@@ -906,9 +1479,11 @@ function demandLines(form, verb) {
   if (!form.demandWay) return []
   const way = DEMAND_WAY[form.demandWay] || form.demandWay
   const out = [`원고는 ${date$(form.demandDate, '최고일')} 피고에게 ${F(way)}${byParticle(way)} ${verb}${objectParticle(verb)} 최고하였습니다.`]
-  // 상대방의 반응은 채무 승인(시효 중단)·이행 거절의 근거가 되므로 그대로 옮긴다
+  // 상대방의 반응은 채무 승인·이행 거절의 근거가 될 수 있으므로 사실은 보존하되,
+  // 사용자의 구어체를 소장 문장으로 바꿔 넣는다.
+  const response = organizeComplaintAnswer(form.demandResult, 'response')
   out.push(form.demandResult
-    ? `\u3000\u3000이에 대한 피고의 반응은 다음과 같습니다. ${F(form.demandResult)}`
+    ? `\u3000\u3000${F(response)}`
     : '\u3000\u3000그러나 피고는 아무런 응답이 없습니다.')
   return out
 }
@@ -919,8 +1494,324 @@ function payWhen(form) {
   return '같은 날'
 }
 
+/**
+ * 화면에서 보여줄 "AI가 정리한 문장"과 소장 본문이 같은 규칙을 쓰게 한다.
+ * 실제 모델 연결 전에도 사용자의 구어체를 그대로 복사하지 않고 당사자 호칭과 서면 종결어를 맞춘다.
+ */
+export function organizeComplaintAnswer(value, context = 'general') {
+  // 말버릇·말줄임표·맞춤법은 어느 갈래로 가든 먼저 걷어낸다.
+  // 이걸 뒤로 미루면 「아니 근데 막」이 그대로 소장에 실린다.
+  const source = tidy(value)
+  if (!source) return ''
+
+  if (context === 'response') {
+    const prepared = source
+      .replace(/\r/g, '')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/카톡/g, '카카오톡 메시지')
+      .replace(/두\s*달\s*만/g, '두 달만')
+      .replace(/기다려달라고/g, '기다려 달라고')
+
+    return prepared
+      .split(/\n+|(?<=[.!?])\s+/)
+      .map((sentence) => sentence.trim().replace(/[.!?]+$/, ''))
+      .filter(Boolean)
+      .map((sentence) => {
+        if (/기다려\s*달라고/.test(sentence) && /아직|그대로|주지|지급하지|해결하지|나가지|점유/.test(sentence)) {
+          const duration = sentence.match(/([가-힣0-9]+\s*(?:개월|달)만)/)?.[1] || '조금만'
+          return `피고는 원고에게 ${duration} 기다려 달라고 요청하였으나, 현재까지 그 의무를 이행하지 아니하고 있습니다.`
+        }
+        if (/아무 답|답이 없|연락도 받지|연락을 받지|연락이 끊/.test(sentence)) {
+          return '피고는 원고의 요구에 답변하지 아니하고, 이후 연락에도 응하지 않고 있습니다.'
+        }
+        if (/거절|책임이 없|하지 않겠|해결하지 않겠/.test(sentence)) {
+          return '피고는 원고의 요구를 거절하며 그 의무를 이행하지 않겠다는 의사를 밝혔습니다.'
+        }
+        if (/일부만/.test(sentence)) {
+          return '피고는 의무의 일부만 이행하였을 뿐, 나머지는 현재까지 이행하지 아니하고 있습니다.'
+        }
+        return organizeComplaintAnswer(sentence, 'general')
+      })
+      .join(' ')
+  }
+
+  if (context === 'relationship') {
+    const rewritten = source
+      .replace(/\r/g, '')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/^대학 동창으로 ([^.!?]+?) 알고 지냈고,?\s*/g, '원고와 피고는 대학 동창으로 $1 알고 지내온 관계입니다. ')
+      .replace(/^대학 동창으로 ([^.!?]+?) 알고 지냈어요\.?/g, '원고와 피고는 대학 동창으로 $1 알고 지내온 관계입니다.')
+      .replace(/^대학 동창(?:인데|이에요|입니다)\.?/g, '원고와 피고는 대학 동창 관계입니다.')
+      .replace(/직장에서 함께 일하며 알게 됐어요\.?/g, '원고와 피고는 직장에서 함께 근무하며 알게 된 관계입니다.')
+      .replace(/가족[·ㆍ]?친척 사이예요\.?/g, '원고와 피고는 가족·친척 관계입니다.')
+      .replace(/거래처 관계로 알게 됐어요\.?/g, '원고와 피고는 거래관계에서 알게 되었습니다.')
+      .replace(/피고가 가게 보증금이 급하다고 부탁해서 빌려줬어요\.?/g, '피고가 가게 보증금이 필요하다고 요청하여 원고는 피고에게 금원을 대여하였습니다.')
+      .replace(/피고가 가게 보증금이 급하다고 부탁했어요\.?/g, '피고는 가게 보증금이 필요하다고 하며 원고에게 금원의 대여를 요청하였습니다.')
+      .replace(/가게 계약이 끝나면 바로 갚겠다고 약속했어요\.?/g, '피고는 가게 계약이 종료되면 대여금을 즉시 변제하겠다고 약정하였습니다.')
+      .replace(/급여를 받으면 전부 갚겠다고 약속했어요\.?/g, '피고는 급여를 받으면 대여금 전액을 변제하겠다고 약정하였습니다.')
+    return organizeComplaintAnswer(rewritten, 'general')
+  }
+
+  if (context === 'demand') {
+    const prepared = source
+      .replace(/\r/g, '')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/카톡/g, '카카오톡 메시지')
+      .replace(/두\s*달\s*만/g, '두 달만')
+      .replace(/기다려달라고/g, '기다려 달라고')
+      .replace(/갚아달라고/g, '갚아 달라고')
+
+    const formal = prepared
+      .split(/\n+|(?<=[.!?])\s+/)
+      .map((sentence) => sentence.trim().replace(/[.!?]+$/, ''))
+      .filter(Boolean)
+      .map((sentence) => {
+        if (/아직\s*(?:갚으라고|변제하라고)\s*말하지 않았/.test(sentence)) {
+          return '원고는 아직 피고에게 별도로 대여금 반환을 요구하지 아니하였으며, 이 사건 소장 부본의 송달로써 그 반환을 최고합니다.'
+        }
+
+        const dateMatch = sentence.match(/(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/)
+        const dateText = dateMatch ? `${dateMatch[1]}. ${Number(dateMatch[2])}. ${Number(dateMatch[3])}. ` : ''
+        const method = sentence.includes('내용증명')
+          ? '내용증명을 보내'
+          : sentence.includes('카카오톡 메시지')
+            ? '카카오톡 메시지로'
+            : sentence.includes('문자')
+              ? '문자 메시지로'
+              : sentence.includes('전화')
+                ? '전화로'
+                : /직접|구두/.test(sentence)
+                  ? '구두로'
+                  : ''
+        const isDemand = /갚아\s*달라고|갚으라고|변제하라고|내용증명/.test(sentence)
+        if (isDemand && method) {
+          const count = /여러 번|수차례/.test(sentence) ? '수차례 ' : ''
+          return `원고는 ${dateText}피고에게 ${method} ${count}대여금의 반환을 요구하였습니다.`
+        }
+
+        if (/기다려\s*달라고/.test(sentence) && /전화.*받지|메시지.*읽지|연락.*않|연락.*없/.test(sentence)) {
+          const duration = sentence.match(/([가-힣0-9]+\s*(?:개월|달)만)/)?.[1] || '조금만'
+          return `피고는 원고에게 ${duration} 기다려 달라고 요청하였으나, 그 후 원고의 전화와 카카오톡 메시지에 응하지 않고 있으며 현재까지 대여금을 변제하지 아니하고 있습니다.`
+        }
+        if (/기다려\s*달라고/.test(sentence) && /갚지|안\s*갚|변제하지|못\s*받/.test(sentence)) {
+          const duration = sentence.match(/([가-힣0-9]+\s*(?:개월|달)만)/)?.[1] || '조금만'
+          return `피고는 원고에게 ${duration} 기다려 달라고 요청하였으나, 현재까지 대여금을 변제하지 아니하고 있습니다.`
+        }
+        if (/기다려\s*달라고/.test(sentence)) {
+          const duration = sentence.match(/([가-힣0-9]+\s*(?:개월|달)만)/)?.[1] || '조금만'
+          return `피고는 원고에게 ${duration} 기다려 달라고 요청하였습니다.`
+        }
+        if (/아무 답|답이 없|연락도 받지|연락을 받지/.test(sentence)) {
+          return '피고는 원고의 반환 요구에 답변하지 아니하고, 그 후 원고의 연락에도 응하지 않고 있습니다.'
+        }
+        if (/갚지 않겠|변제하지 않겠/.test(sentence)) {
+          return '피고는 대여금을 변제하지 않겠다는 의사를 밝혔습니다.'
+        }
+
+        return sentence
+          .replace(/갚지 않네요|아직(?:도)? 갚지 않았어요|안 갚았어요/g, '현재까지 대여금을 변제하지 아니하고 있습니다')
+          .replace(/말했어요/g, '말하였습니다')
+          .replace(/했어요/g, '하였습니다')
+      })
+      .join(' ')
+
+    return organizeComplaintAnswer(formal, 'general')
+  }
+
+  let normalized = source
+    .replace(/\r/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/저는/g, '원고는')
+    .replace(/제가/g, '원고가')
+    .replace(/저한테|제게/g, '원고에게')
+    .replace(/상대방은|그 사람은/g, '피고는')
+    .replace(/상대방이|그 사람이/g, '피고가')
+    .replace(/상대방에게|그 사람에게/g, '피고에게')
+    .replace(/상대방한테|그 사람한테/g, '피고에게')
+    .replace(/한테/g, '에게')
+    .replace(/상대방|그 사람/g, '피고')
+    .replace(/카톡/g, '카카오톡 메시지')
+    .replace(/카카오톡 메시지으로/g, '카카오톡 메시지로')
+    .replace(/빌려줬어요|빌려주었습니다|빌려줬습니다/g, '대여하였습니다')
+    .replace(/돈을 보냈어요|돈을 보냈습니다/g, '금원을 송금하였습니다')
+    .replace(/갚기로 했어요|갚기로 했습니다/g, '변제하기로 약정하였습니다')
+    .replace(/한 푼도 못 받았어요|한 푼도 못 받았습니다/g, '현재까지 전혀 변제받지 못하였습니다')
+    .replace(/못 받았어요|못 받았습니다/g, '변제받지 못하였습니다')
+    .replace(/안 갚았어요|갚지 않았어요|안 갚았습니다|갚지 않았습니다/g, '변제하지 아니하였습니다')
+    .replace(/연락이 끊겼어요|연락이 끊겼습니다/g, '그 후 연락에 응하지 않고 있습니다')
+
+  if (context === 'work') {
+    normalized = normalized
+      .replace(/^회사에서/g, '피고가 운영하는 사업장에서')
+      .replace(/^식당에서/g, '피고가 운영하는 식당에서')
+      .replace(/월급으로 받기로 했어요/g, '월급제로 지급받기로 약정하였습니다')
+      .replace(/시급으로 계산해 받기로 했어요/g, '시급제로 계산하여 지급받기로 약정하였습니다')
+      .replace(/받기로 했어요/g, '지급받기로 약정하였습니다')
+      .replace(/일했어요/g, '근무하였습니다')
+      .replace(/([가-힣]+)을 했어요/g, '$1 업무를 수행하였습니다')
+  }
+
+  if (context === 'incident') {
+    normalized = normalized
+      .replace(/제 차|내 차/g, '원고 차량')
+      .replace(/원고 차량를/g, '원고 차량을')
+      .replace(/들이받았어요|충격했어요/g, '충격하였습니다')
+      .replace(/다쳤어요/g, '상해를 입었습니다')
+      .replace(/치료를 받았어요/g, '치료를 받았습니다')
+      .replace(/수리했어요/g, '수리하였습니다')
+      .replace(/수입이 줄었어요/g, '수입이 감소하였습니다')
+  }
+
+  if (context === 'calculation') {
+    normalized = normalized
+      .replace(/합산했고/g, '합산하였고')
+      .replace(/합산했어요/g, '합산하였습니다')
+      .replace(/계산했어요/g, '계산하였습니다')
+      .replace(/기준으로 했어요/g, '기준으로 산정하였습니다')
+      .replace(/금액을 썼어요/g, '금액을 반영하였습니다')
+      .replace(/빼고 계산하였습니다/g, '공제하여 계산하였습니다')
+  }
+
+  if (context === 'refusal') {
+    normalized = normalized
+      .replace(/([가-힣·]+비)를? 빼고 주겠다고 (?:해요|했어요|합니다)/g, '$1를 공제한 뒤 반환하겠다고 주장하고 있습니다')
+      .replace(/([가-힣·]+)를? 빼겠다고 (?:해요|했어요|합니다)/g, '$1를 공제하겠다고 주장하고 있습니다')
+      .replace(/새 세입자가 들어오면 주겠다고 (?:해요|했어요|합니다)/g, '새로운 임차인이 구해지면 보증금을 반환하겠다고 주장하고 있습니다')
+      .replace(/날짜를 정해주지 않아요/g, '반환 시기를 특정하지 아니하고 있습니다')
+      .replace(/문자만 (?:보내고|반복하고) 있어요/g, '문자 메시지만 반복하여 보내고 있습니다')
+      .replace(/전화를 받지 않아요/g, '원고의 전화에 응하지 않고 있습니다')
+      .replace(/돌려주지 않고 있어요/g, '보증금을 반환하지 아니하고 있습니다')
+  }
+
+  if (context === 'occupancy') {
+    normalized = normalized
+      .replace(/월세가 ([^.!?]+?) 밀렸어요/g, '피고는 $1분의 차임을 연체하였습니다')
+      .replace(/계약기간이 끝났어요/g, '임대차계약 기간이 만료되었습니다')
+      .replace(/허락 없이 들어와 점유하고 있어요/g, '피고는 원고의 허락 없이 위 부동산을 점유하고 있습니다')
+      .replace(/지금도 거주하고 있어요/g, '피고는 현재까지 위 부동산에 거주하며 점유하고 있습니다')
+      .replace(/계속 영업하고 있어요/g, '피고는 현재까지 위 부동산에서 영업하며 점유하고 있습니다')
+      .replace(/나가겠다고 했지만/g, '인도하겠다고 하였으나')
+  }
+
+  if (context === 'background') {
+    normalized = normalized
+      .replace(/사업 자금이 급하다고 해서/g, '피고가 사업 자금이 필요하다고 요청하여')
+      .replace(/사업 자금이 급하다고 부탁해서/g, '피고가 사업 자금이 필요하다고 요청하여')
+      .replace(/(?:피고가 )?가게 보증금이 급하다고 부탁해서/g, '피고가 가게 보증금이 필요하다고 요청하여')
+      .replace(/돈을 대여하였습니다/g, '금원을 대여하였습니다')
+      .replace(/요청하여 대여하였습니다/g, '요청하여 금원을 대여하였습니다')
+  }
+
+  if (context === 'facts') {
+    normalized = normalized
+      .replace(/(\d{4}년\s*\d{1,2}월\s*\d{1,2}일)에\s*/g, '$1 ')
+      .replace(/([\d,]+만원)을 계좌로 보냈어요/g, '피고에게 $1을 계좌이체의 방법으로 지급하였습니다')
+      .replace(/([\d,]+원)을 계좌로 보냈어요/g, '피고에게 $1을 계좌이체의 방법으로 지급하였습니다')
+      .replace(/까지 전부 갚기로 했고/g, '까지 전액을 변제하기로 약정하였고')
+      .replace(/까지 전부 갚기로 했어요/g, '까지 전액을 변제하기로 약정하였습니다')
+      .replace(/이자는 따로 정하지 않았어요/g, '이자는 별도로 약정하지 아니하였습니다')
+      .replace(/이자는 따로 정하지 않았습니다/g, '이자는 별도로 약정하지 아니하였습니다')
+  }
+
+  if (context === 'evidence') {
+    const list = normalized
+      .replace(/[이가] 있어요\.?$/g, '')
+      .replace(/[이가] 있습니다\.?$/g, '')
+      .replace(/을 보유하고 있습니다\.?$/g, '')
+    normalized = `원고가 보유한 입증자료는 ${list}입니다.`
+  }
+
+  // 낱말 정리와 종결어미는 공용 규칙표(koreanFormal)가 맡는다
+  return formalize(normalized)
+}
+
+function loanAiBody(form) {
+  const amount = money$(claimAmountOf(form), '1단계에서 청구금액을 입력해 주세요')
+  // 약정 이율이 최고이자율을 넘으면 청구는 연 20%까지만 — 초과분은 무효라 인용되지 않는다
+  const capped = form.interestSet === '정했어요' && overMaxRate(form.interestRate, form.loanAmount)
+  const agreedRate = form.interestSet === '정했어요' && form.interestRate
+    ? `연 ${claimRate(form.interestRate, form.loanAmount)}%`
+    : '연 5%'
+  const hasFixedDueDate = form.dueSet === '날짜를 정했어요' && form.dueDate
+  const delayClause = hasFixedDueDate
+    ? `${date$(nextDate(form.dueDate), '갚기로 한 날의 다음 날')}부터 이 사건 소장 부본 송달일까지는 ${F(agreedRate)}, 그 다음 날부터 다 갚는 날까지는 ${F('연 12%')}`
+    : `이 사건 소장 부본 송달 다음 날부터 다 갚는 날까지는 ${F('연 12%')}`
+  const claims = [
+    `${claimHead(form, amount)} 및 이에 대하여 ${delayClause}의 ${hasFixedDueDate ? '각 ' : ''}비율로 계산한 돈을 지급하라.`,
+    costLine(form),
+    '제1항은 가집행할 수 있다.',
+  ]
+
+  const legacyRelationLabel = {
+    '친구·지인': '친구·지인 관계',
+    '가족·친척': '가족·친척 관계',
+    '직장·거래 관계': '직장 또는 거래 관계',
+    '그 밖의 관계': '그 밖의 인적 관계',
+  }[form.partyRelationKind]
+  const background = organizeComplaintAnswer(form.aiRelationshipDetail, 'relationship')
+  const extraFacts = organizeComplaintAnswer(form.aiFactsDetail, 'facts')
+  const method = {
+    '계좌이체': '계좌이체의 방법으로',
+    '현금으로 전달': '현금으로',
+    '수표로 전달': '수표로',
+    '그 밖의 방법': form.loanMethodEtc ? `${form.loanMethodEtc}의 방법으로` : '',
+  }[form.loanMethod] || ''
+  const payDate = form.payDateSame === '다른 날' ? date$(form.payDate, '실제 지급일') : date$(form.loanDate, '대여일')
+
+  const reasons = []
+  reasons.push(
+    background
+      ? F(background)
+      : legacyRelationLabel
+        ? `원고와 피고는 ${F(legacyRelationLabel)}입니다.`
+        : P('3단계에서 피고와의 관계와 대여 배경을 적어주세요'),
+  )
+  reasons.push(`원고는 ${date$(form.loanDate, '빌려주기로 약속한 날')} 피고와 사이에 ${money$(form.loanAmount, '처음 빌려준 총액')}을 대여하기로 하는 금전소비대차계약을 체결하였습니다.${citeFor(form, 'contract')}`)
+  if (form.interestSet === '정했어요') {
+    reasons.push(`　　이자는 ${or(form.interestRate, '약정 이자율', (x) => `연 ${x}%`)}로 약정하였습니다.`)
+    if (capped) {
+      reasons.push(`　　다만 「이자제한법」 제2조 제1항 및 같은 항의 위임에 따른 「이자제한법 제2조제1항의 최고이자율에 관한 규정」이 정한 최고이자율은 연 ${MAX_INTEREST_RATE}퍼센트이고, 이를 초과하는 부분은 같은 조 제3항에 따라 무효이므로, 원고는 연 ${MAX_INTEREST_RATE}퍼센트의 비율로 계산한 이자만을 청구합니다.`)
+    }
+  } else if (form.interestSet === '정하지 않았어요') {
+    reasons.push('　　당사자 사이에 이자는 별도로 약정하지 아니하였습니다.')
+  }
+  reasons.push(`원고는 ${payDate} 피고에게 위 대여금 ${money$(form.loanAmount, '처음 빌려준 총액')}을 ${method} 지급하였습니다.${citeFor(form, 'payment')}`.replace('을  지급', '을 지급'))
+  if (form.loanTimes === '여러 번 나눠서' && form.loanSchedule) {
+    reasons.push(`　　구체적인 지급 일자와 금액은 다음과 같습니다. ${F(form.loanSchedule)}`)
+  }
+  if (extraFacts) reasons.push(`　　대여 당시 추가로 나눈 약속은 다음과 같습니다. ${F(extraFacts)}`)
+  reasons.push(
+    form.dueSet === '날짜를 정했어요'
+      ? `변제기는 ${date$(form.dueDate, '갚기로 한 날')}로 정하였고, 그 기한이 이미 지났습니다.`
+      : form.dueSet === '날짜를 정하지 않았어요'
+        ? '변제기를 따로 정하지 아니하여 원고의 반환 요구로 변제기가 도래하였습니다.'
+        : P('4단계에서 갚기로 한 날을 입력해주세요'),
+  )
+  if (form.repaid === '일부 돌려받았어요') {
+    const appropriation = form.repaidKind === '원금에서 빼기'
+      ? '위 금원은 원금에 충당하였습니다.'
+      : form.repaidKind === '이자에서 먼저 빼기'
+        ? '위 금원은 이자에 먼저 충당하였습니다.'
+        : ''
+    reasons.push(`피고는 ${date$(form.repaidDate, '마지막 변제일')} ${money$(form.repaidAmount, '돌려받은 금액')}을 지급하였을 뿐 나머지 대여금을 변제하지 아니하고 있습니다.${appropriation ? ` ${F(appropriation)}` : ''}`)
+  } else if (form.repaid === '한 푼도 못 받았어요') {
+    reasons.push('피고는 현재까지 위 대여금을 전혀 변제하지 아니하고 있습니다.')
+  } else {
+    reasons.push(P('5단계에서 돌려받은 돈이 있는지 선택해주세요'))
+  }
+
+  reasons.push(...demandLines(form, '대여금 반환'))
+  reasons.push('따라서 원고는 피고에게 위 대여금의 지급을 구하기 위하여 이 사건 소를 제기합니다.')
+
+  return { claims: numbered(claims), reasons: numbered(reasons) }
+}
+
 function loanBody(form) {
-  const rate = form.interestSet === '약정함' && form.interestRate ? `연 ${form.interestRate}%` : RATE
+  if (form.partyRelationKind || form.aiRelationshipDetail || form.aiFactsDetail || form.aiDemandDetail) return loanAiBody(form)
+  const capped = form.interestSet === '약정함' && overMaxRate(form.interestRate, form.loanAmount)
+  const rate = form.interestSet === '약정함' && form.interestRate
+    ? `연 ${claimRate(form.interestRate, form.loanAmount)}%`
+    : RATE
   const start = form.dueSet === '날짜로 정함' ? date$(form.dueDate, '변제기') : date$(form.demandDate, '최고일')
   const claims = [
     `${claimHead(form, money$(claimAmountOf(form), '1단계에서 청구금액을 입력해 주세요'))} 및 이에 대하여 ${start}부터 이 사건 소장 부본 송달일까지는 ${F(rate)}, 그 다음 날부터 다 갚는 날까지는 ${F('연 12%')}의 각 비율에 의한 돈을 지급하라.`,
@@ -939,6 +1830,9 @@ function loanBody(form) {
   )
   if (form.interestSet === '약정함') {
     reasons.push(`　　이자는 ${or(form.interestRate, '이자율', (x) => `연 ${x}%`)}로 하고, ${cycleOf(form) ? F(cycleOf(form)) : P('지급 주기')}에 지급받기로 약정하였습니다.`)
+    if (capped) {
+      reasons.push(`　　다만 「이자제한법」 제2조 제1항 및 같은 항의 위임에 따른 「이자제한법 제2조제1항의 최고이자율에 관한 규정」이 정한 최고이자율은 연 ${MAX_INTEREST_RATE}퍼센트이고, 이를 초과하는 부분은 같은 조 제3항에 따라 무효이므로, 원고는 연 ${MAX_INTEREST_RATE}퍼센트의 비율로 계산한 이자만을 청구합니다.`)
+    }
   }
 
   // ③ 계약 내용에 따른 금전 지급(인도) 사실
@@ -1005,7 +1899,7 @@ function depositBody(form) {
     reasons.push(`${P('4단계에서 임대인의 반환 거부 이유를 골라 주세요')}`)
   }
   if (form.refuseDetail) {
-    reasons.push(`　　피고의 구체적인 주장은 다음과 같습니다. ${F(form.refuseDetail)}`)
+    reasons.push(`　　피고의 구체적인 주장은 다음과 같습니다. ${F(organizeComplaintAnswer(form.refuseDetail, 'refusal'))}`)
   }
   // 공제 주장액 — 다투는 금액을 소장에서 미리 특정해 두면 쟁점이 좁혀진다
   if (form.deductClaim) {
@@ -1020,16 +1914,21 @@ function depositBody(form) {
 }
 
 function wageBody(form) {
+  const delayClause = form.employmentStatus === '아직 근무 중이에요'
+    ? `이 사건 소장 부본 송달 다음 날부터 다 갚는 날까지 ${F('연 12%')}`
+    : `${date$(form.leaveDate, '퇴사일')}로부터 14일이 지난 다음 날부터 다 갚는 날까지 ${F('연 20%')}`
   const claims = [
-    `${claimHead(form, money$(claimAmountOf(form), '1단계에서 체불액을 입력해 주세요'))} 및 이에 대하여 ${date$(form.leaveDate, '퇴사일')}부터 14일이 지난 날의 다음 날부터 다 갚는 날까지 ${F('연 20%')}의 비율에 의한 돈을 지급하라.`,
+    `${claimHead(form, money$(claimAmountOf(form), '1단계에서 체불액을 입력해 주세요'))} 및 이에 대하여 ${delayClause}의 비율에 의한 돈을 지급하라.`,
     costLine(form),
     '제1항은 가집행할 수 있다.',
   ]
+  const workStory = organizeComplaintAnswer(form.workStory, 'work')
   const reasons = [
-    `원고는 ${date$(form.hireDate, '3단계에서 입사일을 입력해 주세요')}부터 ${date$(form.leaveDate, '퇴사일')}까지 피고가 운영하는 사업장에서 ${or(form.jobTitle, '담당 업무')}로 근무하였습니다.${citeFor(form, 'work')}`,
+    `원고는 ${date$(form.hireDate, '3단계에서 입사일을 입력해 주세요')}부터 ${form.employmentStatus === '아직 근무 중이에요' ? '현재까지' : `${date$(form.leaveDate, '퇴사일')}까지`} 피고가 운영하는 사업장에서 ${or(form.jobTitle, '담당 업무')} 업무를 수행하며 근무하였습니다.${citeFor(form, 'work')}`,
     `원고의 급여는 ${form.payKind ? F(form.payKind) : P('급여 형태')} ${money$(form.payAmount, '급여액')}이고, 지급일은 ${or(payDayOf(form), '지급일')}이었습니다.`,
     `그런데 피고는 ${unpaidItemsOf(form).length ? F(unpaidItemsOf(form).join('·')) : P('못 받은 항목')}에 해당하는 합계 ${money$(form.unpaidTotal || form.amount, '체불액')}을 현재까지 지급하지 아니하고 있습니다.`,
   ]
+  if (workStory) reasons.splice(1, 0, `　　구체적인 근무 경위는 다음과 같습니다. ${F(workStory)}`)
   // 항목별 내역 — 체불임금 소송에서 무엇을 얼마나 청구하는지 특정하는 부분이다
   const wageParts = [
     ['임금', form.calcWage], ['퇴직금', form.calcSeverance],
@@ -1037,7 +1936,7 @@ function wageBody(form) {
     [form.unpaidEtcName || '기타', form.calcEtc],
   ].filter(([, v]) => v).map(([n, v]) => `${n} ${won(v)}원`)
   if (wageParts.length) reasons.push(`　　항목별 내역은 ${F(wageParts.join(', '))}입니다.`)
-  if (form.calcBasis) reasons.push(`위 금액의 산정 근거는 다음과 같습니다. ${F(form.calcBasis)}`)
+  if (form.calcBasis) reasons.push(`위 금액의 산정 근거는 다음과 같습니다. ${F(organizeComplaintAnswer(form.calcBasis, 'calculation'))}`)
   if (form.workerCount === '5인 미만') {
     reasons.push('　　다만 피고 사업장은 상시 근로자 5인 미만이므로, 연장·야간·휴일근로 가산수당은 청구하지 아니합니다.')
   }
@@ -1056,8 +1955,9 @@ function tortBody(form) {
     costLine(form),
     '제1항은 가집행할 수 있다.',
   ]
+  const incidentStory = organizeComplaintAnswer(form.incidentStory, 'incident')
   const reasons = [
-    `${or(form.incidentStory, '3단계에서 사건 경위를 입력해 주세요')}${citeFor(form, 'medical')}`,
+    `${or(incidentStory, '3단계에서 사건 경위를 입력해 주세요')}${citeFor(form, 'medical')}`,
     `이는 피고의 ${form.hasContract === '있음 (계약 위반)' ? F('채무불이행') : F('불법행위')}에 해당하므로, 피고는 원고가 입은 손해를 배상할 책임이 있습니다.`,
   ]
   // 체크를 해제한 손해 항목은 금액이 남아 있어도 문서에서 빼야 한다 (화면에서만 숨기면 소장에 유령 항목이 남는다)
@@ -1068,7 +1968,7 @@ function tortBody(form) {
   if (kinds.includes('위자료') && form.dmgSolace) parts.push(`위자료 ${won(form.dmgSolace)}원`)
   const total = form.claimAmount || form.amount
   reasons.push(`원고가 입은 손해는 ${parts.length ? F(parts.join(', ')) : P('손해 항목별 금액을 3단계에서 입력해 주세요')}${parts.length ? `으로 합계 ${money$(total, '청구금액')}입니다.` : ''}`)
-  if (form.calcBasis) reasons.push(`위 손해액의 산정 근거는 다음과 같습니다. ${F(form.calcBasis)}`)
+  if (form.calcBasis) reasons.push(`위 손해액의 산정 근거는 다음과 같습니다. ${F(organizeComplaintAnswer(form.calcBasis, 'calculation'))}`)
   if ((form.calcDocs || []).length) {
     reasons.push(`　　위 산정은 ${F(form.calcDocs.join(', '))}에 근거한 것입니다.`)
   }
@@ -1079,31 +1979,60 @@ function tortBody(form) {
 }
 
 function evictBody(form) {
-  const unpaid = (Number(form.rent) || 0) * (Number(form.unpaidMonths) || 0)
+  const reason = form.evictReason || '월세를 밀렸어요'
+  const isArrears = reason === '월세를 밀렸어요'
+  const isExpired = reason === '계약이 끝났는데 나가지 않아요'
+  const isUnauthorized = reason === '계약 없이 점유하고 있어요'
+  const unpaidRent = (Number(form.rent) || 0) * (Number(form.unpaidMonths) || 0)
+  const unpaidTotal = unpaidRent + (Number(form.unpaidUtil) || 0)
+  const defendants = defendantsOf(form).length ? '피고들은' : '피고는'
   const claims = [
     // 명도는 목적물 인도라 '연대'가 성립하지 않는다. 공동점유면 피고들이 함께 인도할 뿐이다.
-    `${defendantsOf(form).length ? '피고들은' : '피고는'} 원고에게 별지 목록 기재 부동산을 인도하라.`,
-    `${claimHead(form, unpaid ? F(`${won(unpaid)}원`) : P('미납 차임 합계'))} 및 이 사건 소장 부본 송달일 다음 날부터 위 부동산 인도 완료일까지 월 ${money$(form.rent, '월세')}의 비율에 의한 돈을 지급하라.`,
-    costLine(form),
-    '제1, 2항은 가집행할 수 있다.',
+    `${defendants} 원고에게 별지 목록 기재 부동산을 인도하라.`,
   ]
+  if (isArrears) {
+    claims.push(`${defendants} 원고에게 ${unpaidTotal ? F(`${won(unpaidTotal)}원`) : P('미납 차임·관리비 합계')} 및 이 사건 소장 부본 송달일 다음 날부터 위 부동산 인도 완료일까지 월 ${money$(form.rent, '월세')}의 비율에 의한 돈을 지급하라.`)
+  } else if (isExpired) {
+    claims.push(`${defendants} 원고에게 ${date$(nextDate(form.leaseEnd), '계약 종료일 다음 날')}부터 위 부동산 인도 완료일까지 월 ${money$(form.rent, '월세')}의 비율에 의한 돈을 지급하라.`)
+  }
+  claims.push(costLine(form))
+  claims.push(isUnauthorized ? '제1항은 가집행할 수 있다.' : '제1, 2항은 가집행할 수 있다.')
+
   // ① 원고에게 인도를 구할 권원이 있다는 사실 — 법원이 공시한 건물인도 요건사실의 첫 항목
   const title = form.ownership === '원고가 소유자로부터 임대 권한을 받음'
     ? `원고는 별지 목록 기재 부동산의 소유자로부터 ${or(form.ownRight, '임대 권한의 내용')}에 따라 이를 임대할 권한을 가지고 있습니다.${citeFor(form, 'register')}`
     : `별지 목록 기재 부동산은 ${form.ownDate ? `${date$(form.ownDate, '소유권 취득일')} 이래 ` : ''}원고의 소유입니다.${citeFor(form, 'register')}`
-  const reasons = [
-    title,
-    `원고는 ${date$(form.contractDate, '3단계에서 계약체결일을 입력해 주세요')} 피고와 사이에 별지 목록 기재 부동산에 관하여 차임 월 ${money$(form.rent, '월세')}으로 하는 ${form.leaseKind ? F(`${form.leaseKind} 임대차`) : '임대차'}계약을 체결하였습니다.${citeFor(form, 'lease')}`,
-    ...(form.leaseEnd ? [`　　임대차 기간은 ${date$(form.leaseEnd, '임대차 종료일')}까지로 정하였습니다.`] : []),
-    `피고는 ${date$(form.unpaidFrom, '미납 시작월')}부터 ${or(form.unpaidMonths, '미납 개월수', (x) => `${x}개월분`)}의 차임 합계 ${unpaid ? F(`${won(unpaid)}원`) : P('미납액')}을 연체하고 있습니다.`,
-    ...(form.unpaidDetail ? [`　　월별 미납 내역은 다음과 같습니다.\n${F(form.unpaidDetail)}`] : []),
-    ...(form.unpaidUtil ? [`　　이와 별도로 미납 관리비·공과금 ${money$(form.unpaidUtil, '금액')}이 있습니다.`] : []),
-    `이는 ${form.leaseKind === '상가' ? F('상가건물 임대차보호법상 3기') : F('민법 제640조의 2기')} 이상의 차임 연체에 해당하여 계약 해지 사유가 됩니다.`,
-  ]
-  if (form.terminated === '통고했어요') {
-    reasons.push(`원고는 ${date$(form.terminateDate, '해지통고 도달일')} 피고에게 계약 해지의 의사표시를 하였고, 그 통고가 도달함으로써 위 임대차계약은 적법하게 해지되었습니다.`)
+  const reasons = [title]
+  const story = organizeComplaintAnswer(form.evictStory, 'occupancy')
+
+  if (isUnauthorized) {
+    reasons.push(`피고는 ${date$(form.occupyStart, '점유 시작일')}부터 원고의 동의나 그 밖의 적법한 권원 없이 별지 목록 기재 부동산을 점유하고 있습니다.`)
+    if (story) reasons.push(`　　구체적인 점유 경위는 다음과 같습니다. ${F(story)}`)
   } else {
-    reasons.push(`${P('해지 통고 사실을 3단계에서 입력해 주세요')}`)
+    reasons.push(`원고는 ${date$(form.contractDate, '4단계에서 계약일을 입력해 주세요')} 피고와 사이에 별지 목록 기재 부동산에 관하여 차임 월 ${money$(form.rent, '월세')}으로 하는 ${form.leaseKind ? F(`${form.leaseKind} 임대차`) : '임대차'}계약을 체결하였습니다.${citeFor(form, 'lease')}`)
+    if (form.leaseEnd) reasons.push(`　　임대차 기간은 ${date$(form.leaseEnd, '임대차 종료일')}까지로 정하였습니다.`)
+
+    if (isArrears) {
+      reasons.push(`피고는 ${date$(form.unpaidFrom, '미납 시작월')}부터 ${or(form.unpaidMonths, '미납 개월수', (x) => `${x}개월분`)}의 차임 합계 ${unpaidRent ? F(`${won(unpaidRent)}원`) : P('미납액')}을 연체하고 있습니다.`)
+      if (form.unpaidDetail) reasons.push(`　　월별 미납 내역은 다음과 같습니다.\n${F(form.unpaidDetail)}`)
+      if (form.unpaidUtil) reasons.push(`　　이와 별도로 미납 관리비·공과금 ${money$(form.unpaidUtil, '금액')}이 있습니다.`)
+      reasons.push(`이는 ${form.leaseKind === '상가' ? F('3기') : F('2기')} 이상의 차임 연체에 해당하여 계약 해지 사유가 됩니다.`)
+      if (form.terminated === '통고했어요') {
+        reasons.push(`원고는 ${date$(form.terminateDate, '해지통고 도달일')} 피고에게 계약 해지의 의사표시를 하였고, 그 통고가 도달함으로써 위 임대차계약은 해지되었습니다.`)
+      } else {
+        reasons.push(P('4단계에서 계약 해지 통고 사실을 입력해 주세요'))
+      }
+    }
+
+    if (isExpired) {
+      reasons.push(`위 임대차계약은 ${date$(form.leaseEnd, '계약 종료일')} 기간 만료로 종료되었습니다.`)
+      if (form.endNotice === '알렸어요') {
+        reasons.push(`원고는 ${date$(form.endNoticeDate, '계약 종료 통지일')} 피고에게 계약 종료 및 갱신거절의 뜻을 알렸습니다.`)
+      } else if (form.endNotice) {
+        reasons.push('원고는 별도의 종료 통지를 하지 아니하였으나, 약정한 임대차 기간은 이미 만료되었습니다.')
+      }
+    }
+    if (story) reasons.push(`　　계약 종료와 점유에 관한 구체적인 경위는 다음과 같습니다. ${F(story)}`)
   }
   if (form.occupancy) {
     const state = {
@@ -1123,13 +2052,19 @@ const bodyBuilders = { loan: loanBody, deposit: depositBody, wage: wageBody, tor
 const TORT_SUFFIX = { '일반 (기)': '(기)', '교통사고 (자)': '(자)', '산업재해 (산)': '(산)', '의료 (의)': '(의)' }
 
 /** 실시간 미리보기 · 전체보기가 함께 쓰는 소장 데이터 */
-/** 첨부서류 목록의 "통" 열을 맞춘다 — 전각 공백으로 서식지처럼 정렬 */
+/**
+ * 첨부서류 목록의 "통" 열을 맞춘다.
+ *
+ * 법원 서식은 수량의 **끝**을 한 줄로 맞춘다 — 「각 1통」과 「1통」이 같은 자리에서 끝난다.
+ * 라벨 뒤만 채우면 '각'이 붙은 줄만 한 칸 튀어나와 열이 어긋나 보인다.
+ */
 function padAttach(rows) {
   // 한글·전각은 2칸, 나머지는 1칸으로 세어 폭을 구한다
   const w = (t) => [...t].reduce((n, c) => n + (c.charCodeAt(0) > 0x2e80 ? 2 : 1), 0)
-  const max = Math.max(...rows.map(([label]) => w(label)))
+  const maxLabel = Math.max(...rows.map(([label]) => w(label)))
+  const maxCount = Math.max(...rows.map(([, count]) => w(count)))
   return rows.map(([label, count]) => {
-    const pad = max - w(label) + 4                       // 여유 2칸(전각) 확보
+    const pad = (maxLabel - w(label)) + (maxCount - w(count)) + 4   // 여유 2칸(전각) 확보
     const gap = '　'.repeat(Math.floor(pad / 2)) + (pad % 2 ? ' ' : '')
     return `${label}${gap}${count}`
   })
@@ -1142,29 +2077,45 @@ export function buildPreview(type, form) {
   const caseName = type.key === 'tort' ? `손해배상${TORT_SUFFIX[form.tortKind] || '(기)'}` : type.caseName
   // 실제로 첨부하는 파일만 갑호증이 된다.
   // 체크박스는 '무엇을 준비할지' 알려주는 체크리스트일 뿐, 그 자체로 증거가 되지 않는다.
-  const evidences = (form.evidenceFiles || []).map((x) => x.name).filter(Boolean)
+  const evidences = (form.evidenceFiles || []).map((x) => evidenceLabel(x.name)).filter(Boolean)
   return {
     caseName,
     title: type.key === 'evict' ? `${caseName} 청구의 소` : `${caseName} 청구의 소`,
     sueValue: effectiveSueValue(form),
     // 청구금액과 소가가 다른 경우(산출불능·비재산권)를 문서에서 구분해 보여준다
     sueValueDeemed: effectiveSueValue(form) !== (Number(form.amount) || 0),
+    // 법원 소장 양식은 소가 바로 아래에 「첩부할 인지액」을 적는다
+    stamp: stampFee(effectiveSueValue(form)),
+    smallClaim: isSmallClaim(effectiveSueValue(form), type?.key),
     parties: partyLines(form),
+    partyNote: partyLines(form).note,
     claims,
     reasons,
     evidences: evidences.length ? evidences : null,
     court: form.court,
-    plaintiff: form.pName,
+    plaintiff: spaceName(form.pName),
     // 첨부서류 — 증거(갑호증)와 별개로 제출하는 서류
     attachments: padAttach([
       ['위 입증방법', '각 1통'],
       ['소장 부본', '1통'],
-      ['송달료 납부서', '1통'],
-      ...(form.attachExtra || []).map((x) => [x, '1통']),
+      ['송달료납부서', '1통'],
+      // 체크한 서류 + 목록에 없어서 직접 올린 파일. 이름이 겹치면 한 번만 적는다.
+      ...attachLines(form, 'attachExtra').map((x) => [x, '1통']),
     ]),
     // 별지 목록 — 판결 주문에 그대로 들어가므로 문서에 반드시 붙어야 한다
     appendix: appendix || null,
   }
+}
+
+/**
+ * 첨부서류란에 적을 이름들 — 체크한 항목이 먼저, 목록에 없어서 파일로만 올린 것이 뒤.
+ * 체크 항목과 파일 이름이 겹치면 같은 서류이므로 한 줄로 합친다.
+ * 체크만 하고 파일을 안 올려도 이름은 적힌다 — 발급받아 낼 수 있기 때문이다.
+ * 소장과 신청서가 같은 규칙을 쓴다.
+ */
+export function attachLines(form, listKey = 'attachExtra', filesKey = 'attachFiles') {
+  const checked = form?.[listKey] || []
+  return [...checked, ...extraFileNames(checked, form?.[filesKey])]
 }
 
 /* ─────────────────────────── 필수 기재사항 체크 ─────────────────────────── */

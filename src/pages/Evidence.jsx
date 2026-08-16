@@ -185,17 +185,9 @@ export default function Evidence() {
   ), [figmaPreview, rawCases, rows])
 
   /* ── 짚어 줄 것 ──
-     화면에 상자로 붙여 두면 며칠 만에 배경이 된다. 들어올 때 한 번 알리고,
-     그 뒤로는 문제가 있는 줄 자체에 표시해 거기서 고치게 한다. */
+     여기는 서류를 보관하는 곳이다. 들어오자마자 무언가를 훑어 알려 주지 않는다.
+     기한이 지났거나 파일에 경고가 붙은 것만 세어 두고, 사용자가 「확인할 것」을 눌렀을 때 보여준다. */
   const notices = useMemo(() => boardNotices(rows), [rows])
-  useEffect(() => {
-    if (figmaPreview) return
-    if (notices.length === 0) return
-    // 한 번 본 알림으로 계속 붙잡지 않는다 — 이번 방문에 한 번이면 충분하다
-    if (sessionStorage.getItem('naholo_evidence_notice') === '1') return
-    sessionStorage.setItem('naholo_evidence_notice', '1')
-    setNoticeOpen(true)
-  }, [notices.length, figmaPreview])
 
   const goNotice = (n) => {
     setNoticeOpen(false)
@@ -305,7 +297,7 @@ export default function Evidence() {
             <button
               onClick={() => setNoticeOpen(true)}
               className="relative inline-flex h-9 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-5 text-[14px] font-semibold text-red-500 transition hover:bg-red-100"
-              title="AI가 찾은 확인할 것"
+              title="기한이 지났거나 확인이 필요한 서류"
             >
               <Bell size={15} /> 확인할 것
               <span className="grid h-4 min-w-4 place-items-center rounded-full bg-red-500 px-1 text-[12px] font-bold leading-none text-white">{notices.length}</span>
@@ -369,12 +361,12 @@ export default function Evidence() {
         onManage={billing.openPortal}
       />
 
-      {/* 들어올 때 한 번 — AI가 훑어 본 결과 */}
+      {/* 「확인할 것」을 눌렀을 때만 열린다 */}
       <Modal
         open={noticeOpen}
         onClose={() => setNoticeOpen(false)}
         title="확인할 것이 있어요"
-        sub={`AI가 서류 ${rows.length}건을 훑어 ${notices.length}가지를 찾았습니다`}
+        sub={`제출 기한과 파일 상태에서 ${notices.length}가지를 찾았습니다`}
         maxW="max-w-lg"
         footer={<Button size="sm" className="w-full justify-center" onClick={() => setNoticeOpen(false)}><Check size={14} /> 확인했어요</Button>}
       >

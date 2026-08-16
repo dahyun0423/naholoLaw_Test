@@ -15,7 +15,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useToast } from '../context/ToastContext.jsx'
 import { useWorkspace } from '../context/WorkspaceContext.jsx'
-import { Card, Button, Badge, inputCls, cx } from '../components/ui.jsx'
+import { Card, Button, cx } from '../components/ui.jsx'
 import Modal from '../components/Modal.jsx'
 import ComplaintWizard from '../components/ComplaintWizard.jsx'
 import BriefWizard from '../components/BriefWizard.jsx'
@@ -25,10 +25,9 @@ import CostCalculator from '../components/CostCalculator.jsx'
 import TemplateViewer from '../components/TemplateViewer.jsx'
 import { writingTips } from '../data/mock.js'
 import { caseTitle } from '../lib/casebook.js'
-import { draftDocs } from '../lib/docboard.js'
+import { boardRows, groupLabel } from '../lib/docboard.js'
 import { checkDoc } from '../lib/docgate.js'
-import { savedAgo } from '../lib/complaint.js'
-import { ArrowRight, FileText, AlertTriangle, Check } from '../components/icons.jsx'
+import { ArrowRight, FileText, Check, DocFolder } from '../components/icons.jsx'
 
 import calcImg from '../assets/doc/calculator.png'
 import guideImg from '../assets/doc/guidebook.png'
@@ -42,6 +41,29 @@ const wizards = {
   brief: BriefWizard,
   evidence: EvidenceListBuilder,
   petition: PetitionWizard,
+}
+
+/** 목록은 손에 잡히는 만큼만 편다 — 나머지는 각자의 전체 화면에서 본다 */
+const RECENT_LIMIT = 5
+
+const timeOf = (v) => {
+  const t = typeof v === 'number' ? v : new Date(v || 0).getTime()
+  return Number.isFinite(t) ? t : 0
+}
+
+/** 생성일은 날짜만 보여준다 — 시각까지 적으면 열이 흔들린다 */
+const ymd = (v) => {
+  if (!v) return '—'
+  if (typeof v === 'string') return v.slice(0, 10)
+  const d = new Date(v)
+  if (!Number.isFinite(d.getTime())) return '—'
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** 문서 제목 → 실제로 내려받는 파일 이름. 제목의 설명용 줄표는 파일명에서 뺀다 */
+const fileName = (title) => {
+  const clean = String(title || '문서').replace(/[—–]/g, ' ').trim().replace(/\s+/g, '_')
+  return `${clean || '문서'}.pdf`
 }
 
 const DOC_TYPES = [
@@ -59,18 +81,31 @@ export default function Documents() {
   const [selected, setSelected] = useState(null)
   const [wizard, setWizard] = useState(null)
   const [wizardCaseId, setWizardCaseId] = useState(null)
+  const [deferCaseLink, setDeferCaseLink] = useState(false)
+  const [browseWithoutCase, setBrowseWithoutCase] = useState(false)
   const [gate, setGate] = useState(null)      // 전제가 안 맞을 때 띄우는 안내
   const [pickCase, setPickCase] = useState(false)
   const [calc, setCalc] = useState(false)
   const [amount, setAmount] = useState('')
   const [template, setTemplate] = useState(false)
+  const complaintCase = browseWithoutCase ? null : activeRaw
 
   /** 문서를 열기 전에 전제를 확인한다 — 안 맞으면 막지 않고 알린다 */
   const openDoc = (kind, caseId = null) => {
+    // 사건과 함께 여는 소장은 그 사건의 유형을 그대로 쓴다.
+    // 사건 없이 구경하거나 시작한 소장만 유형을 고르고, 완성된 뒤 사건에 연결한다.
+    const shouldDeferCaseLink = kind === 'complaint' && !caseId
     const g = checkDoc(kind, rawCases)
-    if (g) { setGate({ ...g, kind }); return }
-    setWizardCaseId(caseId || (kind === 'complaint' ? activeRaw?.id || null : null))
+    if (g) { setGate({ ...g, kind, caseId, deferCaseLink: shouldDeferCaseLink }); return }
+    setSelected(kind)
+    setWizardCaseId(caseId)
+    setDeferCaseLink(shouldDeferCaseLink)
     setWizard(kind)
+  }
+
+  const openFromDocumentHome = (kind) => {
+    const linkedCaseId = kind === 'complaint' ? complaintCase?.id || null : null
+    openDoc(kind, linkedCaseId)
   }
 
   useEffect(() => {
@@ -78,9 +113,11 @@ export default function Documents() {
     const caseId = location.state?.caseId
     if (kind !== 'complaint' || !caseId) return
     if (rawCases.some((c) => c.id === caseId)) {
+      setBrowseWithoutCase(false)
       setActiveCaseId(caseId)
       setSelected(kind)
       setWizardCaseId(caseId)
+      setDeferCaseLink(false)
       setWizard(kind)
     }
     navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
@@ -89,11 +126,25 @@ export default function Documents() {
   if (wizard) {
     const Wizard = wizards[wizard]
     const linkedCase = wizardCaseId ? rawCases.find((c) => c.id === wizardCaseId) || null : null
-    return <Wizard initialCase={linkedCase} onExit={() => { setWizard(null); setWizardCaseId(null); setSelected(null) }} />
+    return (
+      <Wizard
+        initialCase={linkedCase}
+        deferCaseLink={deferCaseLink}
+        onExit={() => {
+          setWizard(null)
+          setWizardCaseId(null)
+          setDeferCaseLink(false)
+          setSelected(null)
+        }}
+      />
+    )
   }
 
-  // 아직 쓰는 중인 문서 — 완성본은 증빙자료에서 본다
-  const drafts = rawCases.flatMap((c) => draftDocs(c).map((d) => ({ ...d, caseId: c.id, caseName: caseTitle(c) })))
+  // 실제로 파일이 만들어진 문서 — 증거 업로드는 '생성'이 아니라 빼 둔다
+  const created = boardRows(rawCases)
+    .filter((r) => r.group !== 'evidence')
+    .map((r) => ({ ...r, madeAt: r.latest?.createdAt || r.updatedAt || r.createdAt }))
+    .sort((a, b) => timeOf(b.madeAt) - timeOf(a.madeAt))
 
   const TOOLS = [
     { key: 'calc', title: '소송 비용 계산기', desc: '청구 금액에 따른 인지대와 송달료를 자동으로 계산합니다.', img: calcImg, on: () => setCalc(true) },
@@ -110,12 +161,10 @@ export default function Documents() {
           <p className="mt-1 text-sm text-ink-500">필요한 정보를 입력하면 AI가 자동으로 법률 문서를 작성합니다</p>
         </div>
 
-        {/* 문서는 반드시 어떤 사건에 붙는다. 어느 사건인지 안 보이면
-            사건이 여러 건일 때 남의 사건 소장을 덮어쓴다. */}
-        {activeRaw ? (
+        {activeRaw && !browseWithoutCase && (
           <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-ink-200 bg-white px-4 py-2.5">
             <FileText size={15} className="shrink-0 text-brand-300" />
-            <span className="text-[12px] text-ink-500">이 사건의 문서</span>
+            <span className="text-[12px] text-ink-500">현재 선택된 사건</span>
             <span className="text-[13px] font-bold text-ink-900">{caseTitle(activeRaw)}</span>
             <span className="text-[12px] text-ink-500">{activeRaw.caseNo || '사건번호 없음'}</span>
             {rawCases.length > 1 && (
@@ -123,25 +172,42 @@ export default function Documents() {
                 사건 바꾸기
               </button>
             )}
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-brand-200 bg-brand-50 px-4 py-2.5">
-            <AlertTriangle size={15} className="shrink-0 text-brand-300" />
-            <span className="text-[12.5px] text-brand-600">아직 사건이 없어요 — 문서를 만들면 새 사건이 함께 생깁니다</span>
-            <Link
-              to="/app/cases"
-              state={{ openNewCase: true, from: 'documents-empty' }}
-              className="text-[12px] font-semibold text-brand-600 hover:underline"
+            <button
+              type="button"
+              onClick={() => { setBrowseWithoutCase(true); setSelected(null) }}
+              className="text-[12px] font-semibold text-ink-500 hover:text-brand-500 hover:underline"
             >
-              사건 먼저 만들기
-            </Link>
+              사건 없이 소장 둘러보기
+            </button>
+          </div>
+        )}
+
+        {activeRaw && browseWithoutCase && (
+          <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-brand-200 bg-brand-50 px-4 py-2.5">
+            <FileText size={15} className="shrink-0 text-brand-400" />
+            <span className="text-[12px] font-bold text-brand-600">사건 없이 소장 둘러보는 중</span>
+            <span className="text-[12px] text-brand-500">소장 유형을 자유롭게 선택할 수 있어요.</span>
+            <button
+              type="button"
+              onClick={() => { setBrowseWithoutCase(false); setSelected(null) }}
+              className="text-[12px] font-semibold text-brand-600 underline underline-offset-2"
+            >
+              선택한 사건으로 돌아가기
+            </button>
           </div>
         )}
       </div>
 
-      {/* ── 1. 무엇을 만들 것인가 ── */}
+      {/* 사건이 있으면 해당 유형으로 바로, 없으면 유형을 자유롭게 둘러본다. */}
       <Card data-guide="doc-types" className="p-6">
         <h2 className="text-[17px] font-bold text-ink-900">작성할 문서 유형을 선택하세요</h2>
+        <p className="mt-1 text-[13px] leading-5 text-ink-500">
+          {complaintCase
+            ? `소장을 선택하면 「${caseTitle(complaintCase)}」 사건에 맞는 유형으로 바로 시작해요.`
+            : browseWithoutCase
+              ? '사건에 연결하지 않고 전체 소장 유형과 작성 화면을 자유롭게 둘러볼 수 있어요.'
+              : '아직 사건이 없어도 괜찮아요. 소장을 선택하면 유형별 작성 화면을 자유롭게 둘러볼 수 있어요.'}
+        </p>
         <div className="mt-5 grid justify-items-center gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {DOC_TYPES.map((d) => (
             <TypeCard
@@ -149,13 +215,19 @@ export default function Documents() {
               d={d}
               on={selected === d.key}
               onClick={() => setSelected(d.key)}
-              onOpen={() => openDoc(d.key)}
+              onOpen={() => openFromDocumentHome(d.key)}
             />
           ))}
         </div>
         <div className="mt-5 flex items-center justify-end gap-3">
-          {selected && <span className="text-[13px] text-ink-500">{DOC_TYPES.find((d) => d.key === selected)?.axis}</span>}
-          <Button disabled={!selected} onClick={() => openDoc(selected)}>다음 <ArrowRight size={16} /></Button>
+          {selected && (
+            <span className="text-[13px] text-ink-500">
+              {selected === 'complaint' && complaintCase
+                ? '선택된 사건 유형으로 바로 시작해요'
+                : DOC_TYPES.find((d) => d.key === selected)?.axis}
+            </span>
+          )}
+          <Button disabled={!selected} onClick={() => openFromDocumentHome(selected)}>다음 <ArrowRight size={16} /></Button>
         </div>
       </Card>
 
@@ -164,51 +236,19 @@ export default function Documents() {
         {TOOLS.map((t) => <ToolCard key={t.key} t={t} />)}
       </div>
 
-      {/* ── 3. 아직 쓰는 중인 것 ──
-          완성된 문서는 증빙자료에서 제출 상태와 함께 관리한다. 여기에는 이어서 써야 할
-          초안만 남긴다 — 두 곳에 같은 목록을 두면 어디가 최신인지 알 수 없다. */}
-      <div data-guide="doc-recent" className="grid gap-5 lg:grid-cols-[1.2fr_1fr]">
-        <Card className="p-6">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-[15px] font-bold text-ink-900">작성 중인 문서</h3>
-            <Button as={Link} to="/app/evidence" size="sm" variant="ghost">완성된 문서 보기 <ArrowRight size={14} /></Button>
-          </div>
-          {drafts.length === 0 ? (
-            <div className="mt-4 grid place-items-center gap-2 rounded-xl bg-ink-50 py-10 text-center">
-              <FileText size={26} className="text-ink-300" />
-              <p className="text-[13px] font-medium text-ink-500">작성 중인 문서가 없습니다</p>
-              <p className="text-xs text-ink-400">위에서 문서 유형을 골라 시작하세요. 완성한 문서는 증빙자료로 넘어갑니다.</p>
-            </div>
-          ) : (
-            <ul className="mt-4 space-y-2">
-              {drafts.map((d) => (
-                <li key={`${d.caseId}-${d.id}`}>
-                  <button
-                    type="button"
-                    onClick={() => { setActiveCaseId(d.caseId); openDoc(d.kind, d.caseId) }}
-                    className="flex w-full items-center gap-3 rounded-xl border border-ink-100 p-3 text-left transition-colors hover:bg-ink-50"
-                  >
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-400"><FileText size={15} /></span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-semibold text-ink-800">{d.title}</span>
-                      <span className="block truncate text-[12px] text-ink-400">{d.caseName} · {savedAgo(d.updatedAt)}</span>
-                    </span>
-                    <span className="flex shrink-0 items-center gap-2">
-                      <span className="h-1.5 w-16 overflow-hidden rounded-full bg-ink-100">
-                        <span className="block h-full rounded-full bg-brand-300" style={{ width: `${d.progress ?? 0}%` }} />
-                      </span>
-                      <span className="w-9 text-right text-[12px] font-semibold tabular-nums text-ink-500">{d.progress ?? 0}%</span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+      {/* ── 3. 지금까지 만든 것 ──
+          최근 5건까지만 편다 — 사건이 늘면 이 자리가 화면을 다 먹고,
+          정작 위의 "무엇을 만들 것인가"가 밀려나 보이지 않는다.
+          전체는 증빙자료에서 제출 상태와 함께 본다.
 
-        <Card className="p-6">
-          <h3 className="text-[15px] font-bold text-ink-900">작성 팁</h3>
-          <ul className="mt-4 space-y-3">
+          두 카드는 격자의 stretch로 같은 높이를 쓴다 — 아래 끝이 어긋나면
+          섹션이 두 조각으로 읽힌다. 그래서 제목 크기·안쪽 여백도 맞춰 둔다. */}
+      <div data-guide="doc-recent" className="grid items-stretch gap-5 lg:grid-cols-[1.2fr_1fr]">
+        <RecentDocs rows={created.slice(0, RECENT_LIMIT)} total={created.length} />
+
+        <Card className="flex flex-col p-6">
+          <h3 className="text-[18px] font-semibold leading-7 text-ink-900">작성 팁</h3>
+          <ul className="mt-6 space-y-3">
             {writingTips.map((t) => (
               <li key={t} className="flex gap-2 text-[13px] leading-relaxed text-ink-600">
                 <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-brand-300" />{t}
@@ -224,7 +264,7 @@ export default function Documents() {
         onClose={() => setPickCase(false)}
         maxW="max-w-md"
         title="어느 사건의 문서인가요?"
-        sub="고른 사건에 이 문서가 붙습니다."
+        sub="고른 사건을 현재 작업 기준으로 사용합니다. 새 소장은 완성 후 따로 연결할 수 있어요."
         footer={<Button variant="neutral" onClick={() => setPickCase(false)}>닫기</Button>}
       >
         <div className="space-y-2">
@@ -234,7 +274,12 @@ export default function Documents() {
               <button
                 key={c.id}
                 type="button"
-                onClick={() => { setActiveCaseId(c.id); setPickCase(false); toast(`「${caseTitle(c)}」 기준으로 봅니다`) }}
+                onClick={() => {
+                  setBrowseWithoutCase(false)
+                  setActiveCaseId(c.id)
+                  setPickCase(false)
+                  toast(`「${caseTitle(c)}」 기준으로 봅니다`)
+                }}
                 className={cx(
                   'flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors',
                   on ? 'border-brand-300 bg-brand-50' : 'border-ink-200 hover:border-ink-300 hover:bg-ink-50',
@@ -263,7 +308,13 @@ export default function Documents() {
           <div className="flex w-full flex-wrap items-center justify-between gap-3">
             <button
               type="button"
-              onClick={() => { const k = gate.kind; setGate(null); setWizard(k) }}
+              onClick={() => {
+                const { kind, caseId, deferCaseLink: shouldDefer } = gate
+                setGate(null)
+                setWizardCaseId(caseId || null)
+                setDeferCaseLink(!!shouldDefer)
+                setWizard(kind)
+              }}
               className="text-[13px] font-semibold text-ink-500 underline underline-offset-2 hover:text-ink-700"
             >
               {gate?.proceed}
@@ -274,7 +325,12 @@ export default function Documents() {
                   key={a.label}
                   onClick={() => {
                     setGate(null)
-                    if (a.pick) { setSelected(a.pick); setWizard(a.pick) }
+                    if (a.pick) {
+                      setSelected(a.pick)
+                      setWizardCaseId(gate.caseId || null)
+                      setDeferCaseLink(!!gate.deferCaseLink)
+                      setWizard(a.pick)
+                    }
                     else if (a.to) navigate(a.to)
                   }}
                 >
@@ -329,6 +385,66 @@ export default function Documents() {
   )
 }
 
+/* ────────────────── 최근 생성 문서 ──────────────────
+   Figma 「최근 생성 문서」(1972:41038) 그대로.
+
+     카드   흰 면 · radius 14 · padding 24 · 제목과 표 사이 24
+     제목   18 SemiBold grey900
+     머리글 14 Medium grey600 · 문서명 / 유형 / 생성일
+     줄     폴더 26×18 + gap 12 · 위아래 8 · 안쪽 글 14 Medium grey600 · 밑선 grey100
+
+   머리글은 폴더 자리만큼 들여쓰지 않는다(피그마 그대로). 대신 두 격자의
+   고정 열 폭을 같게 두어 「유형」·「생성일」이 정확히 같은 x에서 시작한다. */
+
+const RECENT_COLS = 'grid-cols-[minmax(0,1fr)_84px_96px] sm:grid-cols-[minmax(0,1fr)_120px_120px]'
+
+function RecentDocs({ rows, total }) {
+  return (
+    <Card className="p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-[18px] font-semibold leading-7 text-ink-900">최근 생성 문서</h3>
+        <Button as={Link} to="/app/evidence" size="sm" variant="ghost">
+          {total > rows.length ? `전체 ${total}건 보기` : '완성된 문서 보기'} <ArrowRight size={14} />
+        </Button>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="mt-6 grid place-items-center gap-2 rounded-xl bg-ink-50 py-10 text-center">
+          <FileText size={26} className="text-ink-300" />
+          <p className="text-[13px] font-medium text-ink-500">아직 만든 문서가 없습니다</p>
+          <p className="text-xs text-ink-400">문서를 끝까지 작성하면 여기에 파일로 남습니다.</p>
+        </div>
+      ) : (
+        <div className="mt-6 flex flex-col gap-2">
+          <div className={cx('grid items-center text-[14px] font-medium leading-7 text-ink-600', RECENT_COLS)}>
+            <span>문서명</span>
+            <span>유형</span>
+            <span>생성일</span>
+          </div>
+          <ul>
+            {rows.map((r) => (
+              <li key={r.key}>
+                <Link
+                  to={`/app/evidence?case=${r.caseKey}`}
+                  title={`${r.caseTitle} · ${r.title}`}
+                  className="flex items-center gap-3 border-b border-ink-100 py-2 transition-colors hover:bg-ink-50"
+                >
+                  <DocFolder className="shrink-0" />
+                  <span className={cx('grid min-w-0 flex-1 items-center py-2 text-[14px] font-medium leading-5 text-ink-600', RECENT_COLS)}>
+                    <span className="truncate pr-2">{fileName(r.title)}</span>
+                    <span className="truncate pr-2">{groupLabel(r.group)}</span>
+                    <span className="tabular-nums">{ymd(r.madeAt)}</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Card>
+  )
+}
+
 /* ────────────────── 문서 유형 카드 ──────────────────
    Figma 컴포넌트셋 「Component 2」의 두 variant를 그대로 옮긴다.
 
@@ -368,12 +484,14 @@ function TypeCard({ d, on, onClick, onOpen }) {
         </span>
       </span>
 
-      {/* 일러스트는 텍스트 바로 아래에 붙는다 — 사이를 벌리지 않는다 */}
-      <span className="relative block w-full">
+      {/* 일러스트는 서류함이 카드 바닥에 닿는 그림이라 **아래를 기준으로 붙인다.**
+          위에서부터 흘려 두면 카드의 고정 높이에 서류함 밑동이 잘려 그림이 끊겨 보인다
+          (원본 248×247, 이 칸은 219 — 잘릴 26px은 그림 위쪽의 빈 여백이다). */}
+      <span className="relative mt-auto block h-[219px] w-full overflow-hidden">
         <img src={doctypeImg} alt="" aria-hidden
-          className={cx('w-full transition-opacity duration-200', on ? 'opacity-0' : 'group-hover:opacity-0')} />
+          className={cx('absolute inset-x-0 bottom-0 w-full transition-opacity duration-200', on ? 'opacity-0' : 'group-hover:opacity-0')} />
         <img src={doctypeOnImg} alt="" aria-hidden
-          className={cx('absolute inset-0 w-full transition-opacity duration-200', on ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')} />
+          className={cx('absolute inset-x-0 bottom-0 w-full transition-opacity duration-200', on ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')} />
       </span>
     </button>
   )
@@ -398,12 +516,15 @@ function ToolCard({ t }) {
         <span className="block text-[18px] font-semibold leading-tight text-ink-700 transition-colors group-hover:text-brand-400">{t.title}</span>
         <span className="mt-1 block text-[12px] font-medium leading-[1.55] text-ink-500 transition-colors group-hover:text-brand-300">{t.desc}</span>
       </span>
+      {/* 사진을 위에서부터 흘리면 120 칸에 걸려 물건이 한가운데서 반토막 난다.
+          아래를 기준으로 붙이면 물건은 온전하고, 잘리는 것은 사진 위쪽 여백뿐이다.
+          오른쪽으로 20 삐져나가는 것은 Figma 그대로 — 카드가 잘라낸다. */}
       <span className="relative mt-auto block h-[120px] w-full overflow-hidden">
         <img
           src={t.img}
           alt=""
           aria-hidden
-          className="absolute -right-5 top-0 h-[209px] w-[194px] max-w-none object-contain"
+          className="absolute -right-5 bottom-0 h-[136px] w-[136px] max-w-none object-contain"
         />
       </span>
     </Comp>

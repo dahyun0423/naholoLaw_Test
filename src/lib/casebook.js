@@ -15,6 +15,7 @@
 
 import { findType, buildPreview, completeness, allSteps, fmtDate } from './complaint.js'
 import { addrOf } from './docschema.js'
+import { missingItems } from './evidenceMatch.js'
 
 const KEY = 'naholo_cases'
 
@@ -63,20 +64,36 @@ export function seedCases(list, { force = false } = {}) {
   return write([...stored, ...missing])
 }
 
+/**
+ * 데모 사건은 소장 유형마다 한 건씩만 둔다. 그 전에는 유형×단계로 찍어낸 사건과
+ * 같은 유형 여러 건이 함께 뿌려졌는데, 이미 저장된 브라우저에는 그것들이 그대로
+ * 남는다 — 목록에서 지우려면 여기서 걷어내야 한다.
+ *
+ * `demo-{유형}{숫자}-case`는 단계별로 찍어내던 사건, 나머지는 손으로 적었던 중복 건이다.
+ */
+const RETIRED_DEMO_IDS = new Set(['demo-gym-case', 'demo-car-case', 'demo-wedding-case', 'demo-repair-case'])
+const RETIRED_DEMO_ID = /^demo-(deposit|wage|tort|evict|loan)[1-9]-case$/
+
+const isRetiredDemo = (id) => RETIRED_DEMO_IDS.has(id) || RETIRED_DEMO_ID.test(id)
+
 /** 배포 브라우저에 남은 오래된 데모만 정리한다. 사용자가 만든 사건은 건드리지 않는다. */
 export function migrateLegacyDemoCases() {
   const current = read()
   let changed = false
   const next = current
     .filter((c) => {
-      if (c.id !== 'demo-gym-case') return true
+      if (!isRetiredDemo(c.id)) return true
       changed = true
       return false
     })
     .map((c) => {
-      if (c.id !== 'demo-labor-case' || c.title !== '근로계약 위반 손해배상') return c
+      // 단계 번호를 제목에 달던 흔적 — 유형마다 한 건이면 번호가 가리킬 형제가 없다
+      const renamed = c.id === 'demo-labor-case' && c.title === '근로계약 위반 손해배상' ? '임금체불 청구'
+        : c.id === 'demo-loan-case' && c.title !== '대여금 반환 청구 (소액)' ? '대여금 반환 청구 (소액)'
+          : ''
+      if (!renamed) return c
       changed = true
-      return { ...c, title: '임금체불 청구' }
+      return { ...c, title: renamed }
     })
   return changed ? write(next) : false
 }
@@ -152,7 +169,7 @@ const slim = (form) => {
   return { ...form, evidenceFiles: form.evidenceFiles.map(({ thumb, ...rest }) => rest) }
 }
 
-export function saveComplaintAsCase(typeKey, form, id) {
+export function saveComplaintAsCase(typeKey, form, id, title = '') {
   const list = read()
   const now = Date.now()
   const prev = id ? list.find((c) => c.id === id) : null
@@ -163,7 +180,7 @@ export function saveComplaintAsCase(typeKey, form, id) {
     kind: 'complaint',
     typeKey,
     // 사건 등록에서 붙인 이름이 있으면 그대로 둔다
-    title: prev?.title || '',
+    title: prev?.title || String(title || '').trim(),
     form: slim(form),
     // 사건번호는 소장에서 오지 않는다. 접수해야 법원이 부여하고, 우리는 조회할 수 없다.
     // 그래서 오직 setFiling()으로만 들어온다. 여기서는 있던 값을 지키기만 한다.
@@ -424,6 +441,30 @@ export function caseSummary(c) {
   }
 }
 
+/**
+ * 이 사건에서 **이미 매겨 놓은 마지막 호증 번호**.
+ *
+ * 호증 번호는 제출 순서대로 붙는다(민사소송규칙 제107조 제2항). 그래서 소장으로 갑1~3을 냈으면
+ * 다음 서면에서 내는 증거는 갑4부터다. 이 번호를 사용자에게 물으면 틀리기 쉬우니
+ * 두 가지 기록에서 직접 센다.
+ *   ① 증빙자료 중 「제출완료」로 표시된 서증의 수
+ *   ② 이미 만든 증거목록·준비서면이 기록해 둔 마지막 호증 번호(endNo)
+ * 둘 중 큰 값이 마지막 번호다. 아직 아무것도 안 냈으면 0.
+ */
+export function lastEvidenceNo(c, exceptDocId) {
+  const submitted = (c?.form?.evidenceFiles || []).filter((f) => f.status === '제출완료').length
+  const recorded = (c?.docs || [])
+    // 지금 쓰고 있는 서면이 지난번에 남긴 번호는 빼야 한다.
+    // 안 그러면 같은 문서를 다시 열 때마다 시작 번호가 저 혼자 밀린다.
+    .filter((d) => d.id !== exceptDocId)
+    .map((d) => Number(d.endNo) || 0)
+    .reduce((max, n) => Math.max(max, n), 0)
+  return Math.max(submitted, recorded)
+}
+
+/** 다음에 매길 호증 번호 — 서면마다 이 값에서 이어 붙인다 */
+export const nextEvidenceNo = (c, exceptDocId) => lastEvidenceNo(c, exceptDocId) + 1
+
 /** 소장 6단계에서 올린 파일 → 갑호증 목록 */
 export function caseEvidence(c) {
   const files = c?.form?.evidenceFiles || []
@@ -431,7 +472,8 @@ export function caseEvidence(c) {
     no: i + 1,
     code: `갑 제${i + 1}호증`,
     file: f.name || `증거 ${i + 1}`,
-    size: f.size ? `${(f.size / 1024 / 1024).toFixed(1)} MB` : '',
+    // 1MB 미만도 보여야 한다 — MB로만 반올림하면 캡처·문서 대부분이 '0.0 MB'가 된다
+    size: f.size ? (f.size < 1024 * 1024 ? `${Math.round(f.size / 1024)} KB` : `${(f.size / 1024 / 1024).toFixed(1)} MB`) : '',
     thumb: f.thumb || '',
     blobPathname: f.blobPathname || '',
     url: f.url || '',
@@ -525,6 +567,34 @@ export function setEvidenceStatus(id, no, status) {
     f.status = status
     f.submittedAt = status === '제출완료' ? new Date().toISOString().slice(0, 10) : ''
     logInto(c, { kind: 'evidence', title: `갑 제${no}호증 — ${status}`, fresh: true })
+  })
+}
+
+/**
+ * 증거 파일을 사건의 증빙자료에 적재한다.
+ *
+ * 증거목록에서 올린 파일도 결국 같은 갑호증이다. 별도 보관함을 두면
+ * 사건 상세의 증빙자료와 증거목록이 어긋나므로, 소장 6단계와 같은 자리에 넣는다.
+ * 체크만 해 두었던 준비물(evidenceItems)은 파일이 올라온 순간 목록에서 뺀다.
+ */
+export function addEvidenceFiles(id, files) {
+  const list = (Array.isArray(files) ? files : [files]).filter((f) => f?.name)
+  if (!list.length) return null
+  return patch(id, (c) => {
+    if (!c.form) c.form = {}
+    const current = c.form.evidenceFiles || []
+    // 같은 파일을 두 번 올리면 호증 번호만 늘어난다 — 파일명이 같으면 갈아끼운다
+    const next = [...current]
+    list.forEach((file) => {
+      const at = next.findIndex((x) => x.name === file.name)
+      if (at >= 0) next[at] = { ...next[at], ...file }
+      else next.push(file)
+    })
+    c.form.evidenceFiles = next
+    // 파일이 올라온 준비물은 체크 목록에서 뺀다 — 이름이 조금 달라도 같은 서류로 본다
+    c.form.evidenceItems = missingItems(c.form.evidenceItems || [], list)
+    const names = list.map((f) => f.name)
+    logInto(c, { kind: 'evidence', title: `증거 ${list.length}건 추가 — ${names.join(', ')}`, fresh: true })
   })
 }
 
@@ -743,7 +813,14 @@ export function caseDocs(c) {
 }
 
 /** 문서 생성 화면이 만든 결과를 사건에 붙인다 */
-export function attachDoc(id, { kind, title, progress = 0, docId }) {
+/**
+ * 사건에 문서를 붙인다.
+ *
+ * 작성 중 자동저장과 「완성/저장」을 구분한다. 예전에는 호출할 때마다 버전을 하나씩
+ * 쌓아서, 글자 몇 자 고치는 동안 「새로 생성한 파일」이 수십 개 생겼다.
+ * 버전은 사용자가 실제로 문서를 한 벌 만들어 냈을 때만(newVersion) 남긴다.
+ */
+export function attachDoc(id, { kind, title, progress = 0, docId, endNo, newVersion = false }) {
   return patch(id, (c) => {
     c.docs = c.docs || []
     const key = docId || kind
@@ -753,15 +830,16 @@ export function attachDoc(id, { kind, title, progress = 0, docId }) {
       const versions = Array.isArray(prev.versions) && prev.versions.length
         ? [...prev.versions]
         : [{ version: 1, createdAt: prev.createdAt || prev.updatedAt, note: '최초 생성본' }]
-      versions.push({ version: versions.length + 1, createdAt: now, note: '새로 생성한 파일' })
-      Object.assign(prev, { title, progress, updatedAt: now, versions })
+      if (newVersion) versions.push({ version: versions.length + 1, createdAt: now, note: '새로 생성한 파일' })
+      Object.assign(prev, { title, progress, updatedAt: now, versions, ...(endNo ? { endNo } : {}) })
     } else {
       c.docs.push({
         id: key, kind, title, progress, createdAt: now, updatedAt: now,
+        ...(endNo ? { endNo } : {}),
         versions: [{ version: 1, createdAt: now, note: '최초 생성본' }],
       })
     }
-    logInto(c, { kind: 'doc', title: `${DOC_LABEL[kind] || '문서'} 작성` })
+    if (newVersion || !prev) logInto(c, { kind: 'doc', title: `${DOC_LABEL[kind] || '문서'} 작성` })
   })
 }
 

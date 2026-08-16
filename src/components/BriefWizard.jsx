@@ -1,89 +1,59 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useToast } from '../context/ToastContext.jsx'
 import { useWorkspace } from '../context/WorkspaceContext.jsx'
-import { Card, Badge, Button, cx } from './ui.jsx'
-import { GenericPaper, Note, Label, WizardShell, CitationPicker } from './docform.jsx'
-import { FileText, Lightbulb, Check } from './icons.jsx'
-import { loadDraft, findType, savedAgo } from '../lib/complaint.js'
+import { Button, cx } from './ui.jsx'
+import { GenericPaper, DocumentDoneView, GenerateNotice, CaseLoadedBanner, SaveDecision, TipCard, fileTipsFor, Note, Label, WizardShell, CitationPicker } from './docform.jsx'
+import { Lightbulb, Check } from './icons.jsx'
+import { findType, savedAgo } from '../lib/complaint.js'
 import { saveFormDraft, loadFormDraft } from '../lib/docschema.js'
 import { citationPolicy, suggestPrecedents, matchedIssue } from '../lib/citation.js'
 import { briefSteps, buildBrief, briefCompleteness, briefSummary, emptyBrief, stages, defenses, detectDefenses } from '../lib/brief.js'
+import { nextEvidenceNo } from '../lib/casebook.js'
+
+const briefDefaultsFromCase = (caseItem) => {
+  const source = caseItem?.form || {}
+  if (!caseItem) return emptyBrief
+  return {
+    ...emptyBrief,
+    court: source.court || '',
+    caseNo: caseItem.caseNo || '',
+    caseName: caseItem.title || findType(caseItem.typeKey)?.caseName || '',
+    plaintiff: source.pName || '',
+    defendant: source.dName || '',
+    side: '원고',
+    // 몇 호증까지 냈는지는 사건 기록에 있다 — 사용자가 기억해서 적을 값이 아니다
+    evidenceStart: String(nextEvidenceNo(caseItem, 'brief')),
+  }
+}
+
+/** 완성 뒤에 할 일 — 서면은 만드는 것보다 제때 내는 게 어렵다 */
+const BRIEF_NEXT = [
+  ['기일 1주 전까지', '전자소송포털에 제출하세요. 늦게 내면 재판부가 못 읽고 들어옵니다.'],
+  ['상대방 수만큼 부본을', '함께 냅니다. 종이로 낼 때는 출력본에 서명·날인하고 간인하세요.'],
+  ['낸 뒤에는', '증빙자료에서 새로 낸 서증을 「제출완료」로 바꿔 두세요. 다음 서면의 호증 번호가 여기서 이어집니다.'],
+]
+
+const BRIEF_RULES = [
+  ['기일 1주 전까지', '제출하는 것이 원칙이에요.'],
+  ['쟁점은 3개 이내로', '압축하세요. 많을수록 흐려집니다.'],
+  ['인정한 사실은', '다시 다투지 마세요.'],
+  ['감정적 표현 대신', '사실과 법리만 적습니다.'],
+]
+
+function BriefTips({ step }) {
+  return (
+    <>
+      <TipCard title="준비서면은 이렇게 씁니다" items={BRIEF_RULES} />
+      <TipCard title={`${step?.title || '이 단계'}에서 알아둘 것`} items={step?.tips} />
+      <TipCard title="파일에 대해" items={fileTipsFor(step)} />
+    </>
+  )
+}
 
 /* 소장 초안 · 진행 중 사건에서 당사자 정보를 그대로 끌어온다 */
-function CaseLoader({ setField, form }) {
-  const draft = useMemo(() => loadDraft(), [])
-  const { myCases } = useWorkspace()          // 데모 목록이 아니라 내가 만든 사건
-  const [picked, setPicked] = useState(null)
-
-  const fromDraft = () => {
-    const t = findType(draft.typeKey)
-    const f = draft.form
-    setField('court', f.court || '')
-    setField('caseName', t?.caseName || '')
-    setField('plaintiff', f.pName || '')
-    setField('defendant', f.dName || '')
-    setField('side', '원고')
-    setPicked('draft')
-  }
-
-  const fromCase = (c) => {
-    setField('court', c.court)
-    // 사건번호는 접수해야 나온다. 없으면 비워 두고 사용자가 채우게 한다 —
-    // 내부 id(case_xxxx)를 넣으면 준비서면에 그대로 찍힌다.
-    setField('caseNo', c.caseNo || '')
-    setField('caseName', c.title)
-    setField('plaintiff', c.plaintiff || '')
-    setField('defendant', c.defendant || '')
-    setPicked(c.id)
-  }
-
-  return (
-    <div>
-      <Label>기존 사건 불러오기</Label>
-      <div className="space-y-2">
-        {draft && (
-          <button
-            type="button"
-            onClick={fromDraft}
-            className={cx(
-              'flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors',
-              picked === 'draft' ? 'border-brand-300 bg-brand-50' : 'border-ink-200 hover:bg-ink-50',
-            )}
-          >
-            <FileText size={17} className="text-brand-400" />
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-ink-900">작성한 소장에서 — {findType(draft.typeKey)?.title}</span>
-              <span className="block text-xs text-ink-500">원고 {draft.form.pName || '(미입력)'} · 피고 {draft.form.dName || '(미입력)'}</span>
-            </span>
-            {picked === 'draft' && <Check size={16} className="shrink-0 text-brand-400" />}
-          </button>
-        )}
-        {myCases.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            onClick={() => fromCase(c)}
-            className={cx(
-              'flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors',
-              picked === c.id ? 'border-brand-300 bg-brand-50' : 'border-ink-200 hover:bg-ink-50',
-            )}
-          >
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-ink-900">{c.title}</span>
-              <span className="block text-xs text-ink-500">
-                {[c.caseNo || '사건번호 없음', c.court].filter(Boolean).join(' · ')}
-              </span>
-            </span>
-            <Badge tone={c.status === '진행 중' ? 'green' : 'gray'}>{c.status}</Badge>
-          </button>
-        ))}
-      </div>
-      <p className="mt-2 text-xs leading-relaxed text-ink-500">
-        불러오면 아래 항목이 자동으로 채워집니다.
-        <b className="text-ink-700"> 사건번호는 접수해야 나오므로</b>, 아직 없으면 비워 두고 나중에 채우세요.
-      </p>
-    </div>
-  )
+function BriefCaseLoader() {
+  const { activeRaw } = useWorkspace()
+  return <CaseLoadedBanner caseTitle={activeRaw?.title || findType(activeRaw?.typeKey)?.title} />
 }
 
 /**
@@ -154,7 +124,7 @@ function makeBriefExtras(cited) {
   return function briefExtras(f, form, setField) {
   if (f.kind === 'opponentAnalyzer') return <OpponentAnalyzer form={form} setField={setField} />
 
-  if (f.kind === 'caseLoader') return <CaseLoader form={form} setField={setField} />
+  if (f.kind === 'caseLoader') return <BriefCaseLoader />
 
   if (f.kind === 'citation') {
     const ctx = { docKind: 'brief', defenses: form.defenses || [] }
@@ -205,46 +175,111 @@ function makeBriefExtras(cited) {
 
 export default function BriefWizard({ onExit }) {
   const toast = useToast()
+  const { citedList, activeCaseId, activeRaw, attachDoc } = useWorkspace()
+  const draftKey = `brief_${activeCaseId || 'unlinked'}`
   // 작성 중인 내용은 새로고침해도 남아야 한다 (소장과 같은 정책)
-  const [form, setForm] = useState(() => loadFormDraft('brief')?.form || emptyBrief)
+  const [form, setForm] = useState(() => loadFormDraft(draftKey)?.form || briefDefaultsFromCase(activeRaw))
   const [open, setOpen] = useState(0)
-  const [savedAt, setSavedAt] = useState(loadFormDraft('brief')?.savedAt || null)
+  const [savedAt, setSavedAt] = useState(loadFormDraft(draftKey)?.savedAt || null)
   const [saveFailed, setSaveFailed] = useState(false)
-  const first = useRef(true)
+  // 소장·증거목록과 같은 마무리 — 「작성 중」 모달 → 「완성」 모달 → 완성 화면
+  const [phase, setPhase] = useState(null)
+  useEffect(() => {
+    if (phase !== 'generating' && phase !== 'ready') return undefined
+    const next = phase === 'generating' ? 'ready' : 'full'
+    const id = setTimeout(() => setPhase(next), phase === 'generating' ? 1600 : 1100)
+    return () => clearTimeout(id)
+  }, [phase])
 
-  const { citedList, activeCaseId, attachDoc } = useWorkspace()
+  /** 사건에 저장한다 — 이때만 새 버전을 남긴다 */
+  const saveBrief = () => {
+    if (!activeCaseId) return false
+    const used = (form.newEvidence || []).filter((x) => x?.name).length
+    const start = Math.max(1, Number(form.evidenceStart) || 1)
+    attachDoc(activeCaseId, {
+      kind: 'brief',
+      title: form.round || '준비서면',
+      progress: briefCompleteness(form),
+      ...(used ? { endNo: start + used - 1 } : {}),
+      newVersion: true,
+    })
+    return true
+  }
+  const first = useRef(true)
 
   useEffect(() => {
     if (first.current) { first.current = false; return }
     const t = setTimeout(() => {
-      if (saveFormDraft('brief', form)) { setSavedAt(Date.now()); setSaveFailed(false) }
+      if (saveFormDraft(draftKey, form, { caseId: activeCaseId })) { setSavedAt(Date.now()); setSaveFailed(false) }
       else setSaveFailed(true)
       // 사건관리에서 "이 사건의 문서"로 보이도록 붙여 둔다
       if (activeCaseId) {
-        attachDoc(activeCaseId, { kind: 'brief', title: form.round || '준비서면', progress: briefCompleteness(form) })
+        // 이번 서면에서 매긴 마지막 호증 번호를 남긴다 — 다음 서면이 여기서 이어 붙인다
+        const used = (form.newEvidence || []).filter((x) => x?.name).length
+        const start = Math.max(1, Number(form.evidenceStart) || 1)
+        attachDoc(activeCaseId, {
+          kind: 'brief',
+          title: form.round || '준비서면',
+          progress: briefCompleteness(form),
+          ...(used ? { endNo: start + used - 1 } : {}),
+        })
       }
     }, 600)
     return () => clearTimeout(t)
-  }, [form, activeCaseId, attachDoc])
+  }, [form, activeCaseId, attachDoc, draftKey])
 
   const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }))
   const extras = useMemo(() => makeBriefExtras(citedList), [citedList])
   const percent = useMemo(() => briefCompleteness(form), [form])
   const doc = useMemo(() => buildBrief(form), [form])
+  const stepsWithAi = useMemo(() => briefSteps.map((step, index) => ({
+    ...step,
+    guided: false,
+    badge: index === 0 ? '사건 자동 불러옴' : 'AI가 문서화',
+    aiAssist: index > 0,
+  })), [])
+
+  // 다 만들면 작성 화면 대신 완성 화면을 그린다 — 모달로 덮지 않는다
+  if (phase === 'full') {
+    return (
+      <DocumentDoneView
+        title="AI가 정리한 준비서면"
+        badge={form.round || '준비서면'}
+        sub="평소 말로 답한 내용을 주장·반박·근거 순서의 준비서면 문장으로 정리했습니다."
+        onEdit={() => setPhase(null)}
+        onExit={onExit}
+        aside={(
+          <>
+            <SaveDecision
+              docName="준비서면"
+              caseTitle={activeRaw?.title}
+              caseId={activeCaseId}
+              onSave={saveBrief}
+              note="사건관리의 문서 목록에 남고, 여기서 매긴 마지막 호증 번호가 기록돼 다음 서면이 이어서 매깁니다."
+            />
+            <TipCard title="이제 이렇게 하시면 돼요" items={BRIEF_NEXT} />
+          </>
+        )}
+      >
+        <GenericPaper doc={doc} />
+      </DocumentDoneView>
+    )
+  }
 
   return (
+    <>
     <WizardShell
       onSave={() => {
-        if (saveFormDraft('brief', form)) { setSavedAt(Date.now()); toast('작성 중인 내용을 저장했습니다') }
+        if (saveFormDraft(draftKey, form, { caseId: activeCaseId })) { setSavedAt(Date.now()); toast('작성 중인 내용을 저장했습니다') }
         else toast('저장에 실패했습니다. 브라우저 저장공간을 확인해 주세요', 'error')
       }}
       savedLabel={saveFailed ? '⚠ 자동저장 실패 — 브라우저 저장공간을 확인하세요' : savedAt ? `${savedAgo(savedAt)} 저장됨` : ''}
       title="준비서면 작성"
       badge={form.round || '준비서면'}
-      sub="이미 진행 중인 사건에 대한 대응 문서예요. 상대방 주장을 정리하고 쟁점별로 반박합니다."
+      sub={activeRaw ? `「${activeRaw.title || findType(activeRaw.typeKey)?.title}」의 사건정보를 불러왔어요. 상대방의 말을 평소 말로 정리하면 AI가 쟁점별 준비서면으로 작성합니다.` : '상대방의 말을 평소 말로 정리하면 AI가 쟁점별 준비서면으로 작성합니다.'}
       stage={1}
       stageLabels={['사건·단계 확인', '주장·반박 작성', '검토·생성']}
-      steps={briefSteps}
+      steps={stepsWithAi}
       open={open}
       setOpen={setOpen}
       form={form}
@@ -252,23 +287,23 @@ export default function BriefWizard({ onExit }) {
       renderExtra={extras}
       stepSummary={(i) => briefSummary(i, form)}
       percent={percent}
+      showPreview={false}
+      splitNavigation
       previewTitle="준비서면 미리보기"
       preview={<GenericPaper doc={doc} />}
       printable={<GenericPaper doc={doc} />}
       onBack={onExit}
-      onDone={() => toast('준비서면 초안이 완성되었습니다', 'success')}
+      onDone={() => setPhase('generating')}
       doneLabel="준비서면 완성하기"
-      extraPanel={
-        <Card className="p-4">
-          <p className="text-sm font-bold text-ink-900">준비서면은 이렇게 씁니다</p>
-          <ul className="mt-2 space-y-1.5 text-[13px] leading-relaxed text-ink-600">
-            <li>· 기일 <b className="text-ink-800">1주 전까지</b> 제출하는 것이 원칙이에요.</li>
-            <li>· 쟁점은 <b className="text-ink-800">3개 이내</b>로 압축하세요. 많을수록 흐려집니다.</li>
-            <li>· 상대방이 <b className="text-ink-800">인정한 사실</b>은 다시 다투지 마세요.</li>
-            <li>· 감정적 표현 대신 <b className="text-ink-800">사실과 법리</b>만 적습니다.</li>
-          </ul>
-        </Card>
-      }
+      sideNote={<BriefTips step={stepsWithAi[open]} />}
     />
+    {(phase === 'generating' || phase === 'ready') && (
+      <GenerateNotice
+        done={phase === 'ready'}
+        doc="준비서면"
+        workingSub="상대방 주장에 대한 반박을 쟁점별로 정리하고 있어요"
+      />
+    )}
+    </>
   )
 }

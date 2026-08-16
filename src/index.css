@@ -190,13 +190,6 @@ body {
   .print-doc table { break-inside: auto; }
   .print-doc tr { break-inside: avoid; }
 
-  /* 서명·날인 자리 — 12pt 상속을 받으면 원 안에서 글자가 넘친다 */
-  .print-doc .sig-stamp { width: 13mm !important; height: 13mm !important; }
-  .print-doc .sig-stamp, .print-doc .sig-stamp * {
-    font-size: 7pt !important;
-    line-height: 1.2 !important;
-  }
-
   /* 별개 서면은 새 장에서 시작해야 한다 — 한 장에 섞이면 접수처가 나눠 보지 못한다 */
   .print-doc .print-page-before { break-before: page; border-top: 0 !important; padding-top: 0 !important; }
 

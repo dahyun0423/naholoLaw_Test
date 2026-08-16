@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useToast } from '../context/ToastContext.jsx'
 import { useWorkspace } from '../context/WorkspaceContext.jsx'
 import { Card, Button, Badge, Progress, cx } from './ui.jsx'
 import Modal from './Modal.jsx'
-import { Check, ArrowRight, FileText, Lightbulb, Scale, X } from './icons.jsx'
+import { Check, ArrowLeft, ArrowRight, FileText, Lightbulb, Sparkles } from './icons.jsx'
 import {
-  Rich, DocHeading, DocSignature, Note, PickList, WizardShell,
-  printSheet,
+  Rich, DocHeading, DocSignature, GenerateNotice, Note, PaperSignNote, PickList, WizardShell,
+  TipCard, fileTipsFor, printSheet,
 } from './docform.jsx'
 import SubmitGuide from './SubmitGuide.jsx'
+import { caseTitle } from '../lib/casebook.js'
+import { missingItems } from '../lib/evidenceMatch.js'
 import {
   complaintTypes, findType, allSteps, completeness, stepSummary,
   buildPreview, requiredChecklist, costSummary, effectiveSueValue, partyCount, won, fmtDate, emptyComplaint,
@@ -64,20 +65,34 @@ function DiagnosisModal({ typeKey, onClose, onGo }) {
 
 /* ══════════════════════ 소장 본문 ══════════════════════ */
 
-export function ComplaintPaper({ doc, dense, signature }) {
+export function ComplaintPaper({ doc, dense }) {
   const today = fmtDate(new Date().toISOString().slice(0, 10))
   return (
     <div className={cx('font-serif leading-loose text-ink-800', dense ? 'text-[11px]' : 'text-[13px]')}>
       <p className="print-lg text-center text-xl font-bold tracking-[0.4em] text-ink-900">소　장</p>
-      <p className="mt-6">사건명 : <b className="font-semibold text-brand-500">{doc.caseName}</b> 청구의 소</p>
-      <p>
-        소송목적의 값 : 금 {doc.sueValue ? <b className="font-semibold text-brand-500">{won(doc.sueValue)}원</b> : <span className="text-ink-300">[ 1단계에서 입력 ]</span>}
-        {doc.sueValueDeemed && <span className="ml-1 text-[0.9em]">(민사소송 등 인지규칙 제18조의2)</span>}
-      </p>
 
-      <div className="mt-4 space-y-0.5">
+      {/* 법원 소장 양식은 **당사자를 먼저** 적고, 그 아래에 사건명과 소가를 둔다.
+          사건명·소가를 위로 올리면 서식이 아니라 표지처럼 읽힌다. */}
+      <div className="mt-6 space-y-0.5">
         {doc.parties.map((l, i) => <p key={i} className="whitespace-pre-wrap"><Rich text={l} /></p>)}
       </div>
+      {/* 작성자에게 하는 말 — 법원 서식에는 없는 줄이라 인쇄본에서는 빠진다 */}
+      {doc.partyNote && <p className="no-print mt-2 text-[0.88em] text-ink-400">※ {doc.partyNote}</p>}
+
+      <p className="mt-6"><b className="font-semibold text-brand-500">{doc.caseName}</b> 청구의 소</p>
+
+      <div className="mt-3 space-y-0.5">
+        <p>
+          소송목적의 값　　{doc.sueValue ? <b className="font-semibold text-brand-500">{won(doc.sueValue)}원</b> : <span className="text-ink-300">[ 1단계에서 입력 ]</span>}
+          {doc.sueValueDeemed && <span className="ml-1 text-[0.9em]">(민사소송 등 인지규칙 제18조의2)</span>}
+        </p>
+        <p>첩부할 인지액　　{doc.sueValue ? <b className="font-semibold text-brand-500">{won(doc.stamp)}원</b> : <span className="text-ink-300">[ 소가를 입력하면 계산됩니다 ]</span>}</p>
+      </div>
+      {doc.smallClaim && (
+        <p className="mt-3 text-[0.92em] text-ink-600">
+          ※ 소송목적의 값이 3,000만원 이하이므로 「소액사건심판법」이 적용되는 소액사건입니다.
+        </p>
+      )}
 
       <DocHeading>청 구 취 지</DocHeading>
       {doc.claims.map((c, i) => <p key={i}><Rich text={c} /></p>)}
@@ -86,15 +101,17 @@ export function ComplaintPaper({ doc, dense, signature }) {
       <DocHeading>청 구 원 인</DocHeading>
       {doc.reasons.map((r, i) => <p key={i} className="whitespace-pre-wrap"><Rich text={r} /></p>)}
 
+      {/* 법원 서식은 입증방법·첨부서류의 항목 번호를 모두 「1.」로 적는다.
+          순번은 갑호증 번호가 이미 나타내므로, 앞의 숫자는 올려 세지 않는다. */}
       <DocHeading>입 증 방 법</DocHeading>
       {doc.evidences
-        ? doc.evidences.map((e, i) => <p key={e + i}>{i + 1}. 갑 제{i + 1}호증　　<b className="font-semibold text-brand-500">{e}</b></p>)
+        ? doc.evidences.map((e, i) => <p key={e + i}>1. 갑 제{i + 1}호증　　<b className="font-semibold text-brand-500">{e}</b></p>)
         : <p className="text-ink-300">[ 6단계에서 증거를 고르면 갑 제1호증부터 자동으로 번호가 매겨집니다 ]</p>}
 
       <DocHeading>첨 부 서 류</DocHeading>
-      {(doc.attachments || []).map((a, i) => <p key={i}>{i + 1}. {a}</p>)}
+      {(doc.attachments || []).map((a, i) => <p key={i}>1. {a}</p>)}
 
-      <DocSignature date={today} name={doc.plaintiff} court={doc.court} signature={signature} />
+      <DocSignature date={today} name={doc.plaintiff} court={doc.court} />
 
       {/* 별지 목록 — 명도 사건은 이게 없으면 판결 주문의 목적물이 특정되지 않는다 */}
       {doc.appendix && (
@@ -110,103 +127,127 @@ export function ComplaintPaper({ doc, dense, signature }) {
   )
 }
 
-/* ══════════════════════ 전체보기 ══════════════════════ */
+/* ══════════════════════ 완성된 소장 ══════════════════════
+   Figma 「AI가 정리한 소장」(2666:227104).
 
-function FullView({ type, form, onClose, onEdit }) {
-  const toast = useToast()
+   모달이 아니라 **한 페이지**다. 소장은 한 번 보고 닫는 알림이 아니라 읽고 고치고
+   인쇄하는 문서라, 뒤 화면이 비치는 창에 가둬 두면 스크롤도 인쇄도 어색해진다.
+
+   본문도 한 장으로 이어 붙인다. 전에는 1면·2면으로 잘라 두 칸에 넣었는데,
+   실제 종이는 내용이 흘러가는 대로 나뉘지 화면 칸에 맞춰 나뉘지 않는다. */
+
+export function FullView({
+  type,
+  form,
+  onClose,
+  onEdit,
+  onSubmit,
+  actionLabel = '전자소송 제출 안내',
+  captureMode = false,
+}) {
   const doc = buildPreview(type, form)
   const checks = requiredChecklist(type, form)
   const okCount = checks.filter((c) => c.ok).length
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 flex max-h-[92vh] w-full max-w-6xl flex-col rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center gap-3 border-b border-ink-100 px-6 py-4">
-          <h3 className="text-lg font-bold text-ink-900">소장 전체보기</h3>
-          <Badge tone="blue">{type.title}</Badge>
-          <Badge tone="gray">전 2면</Badge>
-          <div className="ml-auto flex gap-2">
-            <span className="hidden text-xs text-ink-400 xl:inline">종이 제출용 완성본 · 전자소송은 내용을 붙여넣습니다</span>
-            <Button variant="neutral" size="sm" onClick={onEdit}>수정하기</Button>
-            <Button size="sm" onClick={printSheet}>PDF 저장 · 인쇄</Button>
-            <button onClick={onClose} className="rounded-lg p-1.5 text-ink-400 hover:bg-ink-100"><X size={20} /></button>
+    <div className={cx('space-y-5', captureMode && 'min-h-screen bg-ink-50 p-8')}>
+      {!captureMode && onClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex items-center gap-1 text-sm font-medium text-ink-500 transition-colors hover:text-ink-700"
+        >
+          <ArrowLeft size={16} /> 이전으로 돌아가기
+        </button>
+      )}
+
+      <Card className="flex flex-wrap items-center gap-x-4 gap-y-3 p-5">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h1 className="text-xl font-bold text-ink-900">AI가 정리한 소장</h1>
+            <Badge tone="blue">{type.title}</Badge>
           </div>
+          <p className="mt-1 text-[13px] text-ink-500">입력한 사실을 법원 제출 문장과 소장 순서에 맞춰 정리했습니다.</p>
         </div>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <span className="hidden text-xs text-ink-400 xl:inline">종이 제출용 완성본 · 전자소송은 내용을 붙여넣습니다</span>
+          {onEdit && <Button variant="neutral" onClick={onEdit}>답변 수정하기</Button>}
+          <Button onClick={printSheet}>PDF 저장 · 인쇄</Button>
+          {onSubmit && <Button onClick={onSubmit}>{actionLabel} <ArrowRight size={15} /></Button>}
+        </div>
+      </Card>
 
-        <div className="grid flex-1 gap-4 overflow-y-auto bg-ink-50 p-6 lg:grid-cols-[1fr_1fr_320px]">
-          <div className="rounded-xl border border-ink-200 bg-white p-6">
-            <ComplaintPaper doc={{ ...doc, evidences: null }} dense signature={form.signature} />
-            <p className="mt-6 text-center text-[11px] text-ink-400">- 1 -</p>
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+        <Card className="px-6 py-8 sm:px-12 sm:py-12">
+          <ComplaintPaper doc={doc} />
+        </Card>
+
+        <Card className="p-0">
+          <div className="flex items-center justify-between px-4 pt-4">
+            <h2 className="font-bold text-ink-900">소장 필수 기재사항</h2>
+            <span className="text-sm font-bold text-brand-400">{okCount} / {checks.length}</span>
           </div>
-          <div className="rounded-xl border border-ink-200 bg-white p-6">
-            <div className="font-serif text-[11px] leading-loose text-ink-800">
-              <DocHeading>청 구 원 인</DocHeading>
-              {doc.reasons.map((r, i) => <p key={i} className="whitespace-pre-wrap"><Rich text={r} /></p>)}
-              <DocHeading>입 증 방 법</DocHeading>
-              {doc.evidences
-                ? doc.evidences.map((e, i) => <p key={e + i}>{i + 1}. 갑 제{i + 1}호증　　<b className="font-semibold text-brand-500">{e}</b></p>)
-                : <p className="text-ink-300">[ 6단계에서 증거를 골라 주세요 ]</p>}
-              <DocHeading>첨 부 서 류</DocHeading>
-              {(doc.attachments || []).map((a, i) => <p key={i}>{i + 1}. {a}</p>)}
-            </div>
-            <p className="mt-6 text-center text-[11px] text-ink-400">- 2 -</p>
+          <div className="px-4 pb-3 pt-2"><Progress value={(okCount / checks.length) * 100} /></div>
+          <div className="divide-y divide-ink-100">
+            {checks.map((c) => (
+              <div key={c.no} className="flex gap-2.5 px-4 py-3">
+                <span className={cx('mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md text-white', c.ok ? 'bg-brand-300' : c.warn ? 'bg-red-300' : 'bg-ink-200')}>
+                  {c.ok ? <Check size={13} /> : c.warn ? <span className="text-[11px] font-bold">!</span> : <span className="text-[11px]">-</span>}
+                </span>
+                <div className="min-w-0">
+                  <p className={cx('text-[13px] font-semibold', c.ok === null ? 'text-ink-400' : 'text-ink-900')}>{c.no} {c.label}</p>
+                  <p className={cx('text-xs', c.warn ? 'text-red-500' : 'text-ink-500')}>{c.detail}</p>
+                </div>
+              </div>
+            ))}
           </div>
 
-          <div className="rounded-xl border border-ink-200 bg-white">
-            <div className="flex items-center justify-between px-4 pt-4">
-              <h4 className="font-bold text-ink-900">소장 필수 기재사항</h4>
-              <span className="text-sm font-bold text-brand-400">{okCount} / {checks.length}</span>
-            </div>
-            <div className="px-4 pb-3 pt-2"><Progress value={(okCount / checks.length) * 100} /></div>
-            <div className="divide-y divide-ink-100">
-              {checks.map((c) => (
-                <div key={c.no} className="flex gap-2.5 px-4 py-3">
-                  <span className={cx('mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md text-white', c.ok ? 'bg-brand-300' : c.warn ? 'bg-red-300' : 'bg-ink-200')}>
-                    {c.ok ? <Check size={13} /> : c.warn ? <span className="text-[11px] font-bold">!</span> : <span className="text-[11px]">-</span>}
+          <div className="m-3"><PaperSignNote /></div>
+          <div className="m-3 rounded-xl bg-ink-50 p-3 text-xs leading-relaxed text-ink-500">
+            <p className="font-semibold text-ink-700">간인이 뭔가요?</p>
+            <p className="mt-1">2장 이상일 때 페이지가 이어진다는 표시로 종이 사이에 도장을 걸쳐 찍는 거예요. 전자소송으로 내면 간인은 필요 없습니다.</p>
+          </div>
+
+          <div className="m-3 rounded-xl border border-ink-200 p-3.5">
+            <p className="text-[13px] font-bold text-ink-900">제출 전에 이것만 확인하세요</p>
+            <div className="mt-2.5 space-y-3 text-xs leading-relaxed text-ink-600">
+              {[
+                ['기명날인 — 종이로 낼 때', '출력한 소장 말미 「(인)」 자리에 서명하거나 도장을 찍고, 2장 이상이면 간인하세요. 전자소송은 제출할 때 공동인증서 전자서명으로 갈음합니다.'],
+                ['부본 — 피고 수만큼 더', `법원 제출용 원본 1부 + 피고${form.dName ? ` ${form.dName}` : ''}에게 보낼 부본 1부, 모두 2부를 준비하세요. 부본에는 주민등록번호 뒷자리를 가립니다.`],
+                ['인지대·송달료 납부', `접수 전에 ${won(costSummary(effectiveSueValue(form), partyCount(form)).total)}원을 납부하고 영수증을 함께 냅니다.`],
+              ].map(([title, body], i) => (
+                <div key={title} className="flex gap-2">
+                  <span className="mt-0.5 grid h-[18px] w-[18px] shrink-0 place-items-center rounded-md bg-brand-50 text-[11px] font-bold text-brand-500">{i + 1}</span>
+                  <span className="min-w-0">
+                    <span className="block font-semibold text-ink-800">{title}</span>
+                    <span className="block">{body}</span>
                   </span>
-                  <div className="min-w-0">
-                    <p className={cx('text-[13px] font-semibold', c.ok === null ? 'text-ink-400' : 'text-ink-900')}>{c.no} {c.label}</p>
-                    <p className={cx('text-xs', c.warn ? 'text-red-500' : 'text-ink-500')}>{c.detail}</p>
-                  </div>
                 </div>
               ))}
             </div>
-
-            <div className="m-3 rounded-xl bg-red-50 p-3 text-xs leading-relaxed text-red-500">
-              <p className="font-semibold">간인이 뭔가요?</p>
-              <p className="mt-1">2장 이상일 때 페이지가 이어진다는 표시로 종이 사이에 도장을 걸쳐 찍는 거예요. 전자소송으로 내면 간인은 필요 없습니다.</p>
-            </div>
-
-            <div className="m-3 rounded-xl border border-ink-200 p-3">
-              <p className="text-[13px] font-bold text-ink-900">제출 전에 이것만 확인하세요</p>
-              <div className="mt-2 space-y-2.5 text-xs leading-relaxed text-ink-600">
-                <div>
-                  <p className="font-semibold text-ink-800">① 서명</p>
-                  <p>
-                    {form.signature
-                      ? '올리신 서명이 제출본에 인쇄됩니다. 전자소송이면 이 PDF를 그대로 올리면 돼요.'
-                      : '6단계에서 서명 이미지를 올리거나, 출력한 소장에 자필 서명·도장을 찍으세요.'}
-                  </p>
-                </div>
-                <div>
-                  <p className="font-semibold text-ink-800">② 부본 — 피고 수만큼 더</p>
-                  <p>법원 제출용 원본 1부 + 피고{form.dName ? ` ${form.dName}` : ''}에게 보낼 부본 1부, 모두 2부를 준비하세요. 부본에는 주민등록번호 뒷자리를 가립니다.</p>
-                </div>
-                <div>
-                  <p className="font-semibold text-ink-800">③ 인지대·송달료 납부</p>
-                  <p>접수 전에 {won(costSummary(effectiveSueValue(form), partyCount(form)).total)}원을 납부하고 영수증을 함께 냅니다.</p>
-                </div>
-              </div>
-            </div>
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   )
 }
 
 /* ══════════════════════ 소장 고유 계산 박스 ══════════════════════ */
+
+function AiReviewNote() {
+  return (
+    <div className="rounded-2xl bg-ink-900 p-4 text-white">
+      <p className="flex items-center gap-2 text-sm font-bold"><Sparkles size={16} /> 답변이 끝나면 AI가 소장을 완성해요</p>
+      <div className="mt-3 grid gap-2 text-[12px] leading-relaxed text-ink-200 sm:grid-cols-2">
+        <p>✓ 사용자 표현을 원고·피고 중심 문장으로 변경</p>
+        <p>✓ 청구원인을 사건 순서대로 문단 구성</p>
+        <p>✓ 청구취지와 지연손해금 문구 작성</p>
+        <p>✓ 증거 파일을 갑 제1호증부터 정리</p>
+      </div>
+      <p className="mt-3 border-t border-white/10 pt-3 text-[11px] leading-relaxed text-ink-300">AI가 새로운 사실을 만들어 넣지는 않습니다. 마지막 화면에서 금액·날짜·사실관계를 직접 확인해 주세요.</p>
+    </div>
+  )
+}
 
 function VenueGuide() {
   const rows = [
@@ -278,6 +319,14 @@ function CostBox({ form }) {
   )
 }
 
+/** 왼쪽에 늘 붙는 소장 작성 원칙 — 본문에 흩어 두면 입력 흐름을 끊는다 */
+const COMPLAINT_RULES = [
+  ['판례보다', '실제로 있었던 일과 이를 보여주는 자료가 중요합니다.'],
+  ['AI는', '답변 밖의 사실을 덧붙이지 않고, 입력한 내용을 소장 형식으로만 정리해요.'],
+  ['날짜와 금액은', '기억에 의존하지 말고 계약서·이체내역을 보고 적어 주세요.'],
+  ['마지막 화면에서', '금액·날짜·사실관계를 직접 확인한 뒤 내세요.'],
+]
+
 function makeComplaintExtras(type) {
   return function complaintExtras(f, form, setField) {
   // 체크는 했는데 파일을 안 올린 자료를 짚어준다.
@@ -285,8 +334,7 @@ function makeComplaintExtras(type) {
   if (f.kind === 'evidenceGap') {
     const checked = form.evidenceItems || []
     if (checked.length === 0) return null
-    const uploaded = (form.evidenceFiles || []).map((x) => x.name)
-    const missing = checked.filter((c) => !uploaded.some((u) => u.includes(c) || c.includes(u)))
+    const missing = missingItems(checked, form.evidenceFiles)
     if (missing.length === 0) {
       return <Note tone="ok">체크하신 자료를 모두 올리셨어요. 올린 순서대로 갑 제1호증부터 번호가 매겨집니다.</Note>
     }
@@ -299,6 +347,8 @@ function makeComplaintExtras(type) {
   }
 
   switch (f.kind) {
+    case 'aiReview':
+      return <AiReviewNote />
     case 'venue':
       return <VenueGuide />
     case 'cost':
@@ -312,11 +362,27 @@ function makeComplaintExtras(type) {
       )
     case 'remain': {
       if (!form.loanAmount) return null
-      const remain = (Number(form.loanAmount) || 0) - (Number(form.repaidAmount) || 0)
+      const remain = Math.max(0, (Number(form.loanAmount) || 0) - (Number(form.repaidAmount) || 0))
+      // 1단계에 적은 청구금액(소가)과 어긋나면 짚어 준다.
+      // 받은 돈을 빼지 않고 청구하면 인지대를 더 내고 그만큼 기각된다.
+      const claimed = Number(form.amount) || 0
+      const off = claimed > 0 && remain > 0 && claimed !== remain
       return (
-        <div className="flex justify-between rounded-xl bg-ink-50 px-4 py-3 text-sm">
-          <span className="text-ink-600">남은 청구액</span>
-          <span className="font-bold text-brand-400">{won(Math.max(0, remain))}원</span>
+        <div className="space-y-2">
+          <div className="flex justify-between rounded-xl bg-ink-50 px-4 py-3 text-sm">
+            <span className="text-ink-600">남은 청구액</span>
+            <span className="font-bold text-brand-400">{won(remain)}원</span>
+          </div>
+          {off && (
+            <Note tone="warn">
+              1단계에 적은 청구금액은 <b className="font-semibold">{won(claimed)}원</b>인데, 받은 돈을 빼면{' '}
+              <b className="font-semibold">{won(remain)}원</b>이에요.
+              {claimed > remain
+                ? ' 받은 돈을 빼지 않고 청구하면 그만큼 기각되고, 인지대도 더 냅니다.'
+                : ' 청구금액이 남은 금액보다 적어요.'}
+              {' '}1단계로 돌아가 금액을 맞춰 주세요.
+            </Note>
+          )}
         </div>
       )
     }
@@ -374,57 +440,192 @@ function makeComplaintExtras(type) {
 
 /* ══════════════════════ 작성 화면 ══════════════════════ */
 
-function Writer({ typeKey, form, setForm, caseId, onBack, onDone }) {
+function CaseLinkScreen({ typeKey, form, onBack, onDone }) {
+  const toast = useToast()
+  const type = findType(typeKey)
+  const { rawCases, saveCase, setActiveCaseId } = useWorkspace()
+  const [mode, setMode] = useState('new')
+  const [pickedCaseId, setPickedCaseId] = useState(rawCases[0]?.id || '')
+  const [title, setTitle] = useState(`${type?.title || '소장'}${form.dName ? ` · ${form.dName}` : ''}`)
+
+  const finish = (saved, message) => {
+    if (!saved) {
+      toast('사건 저장에 실패했습니다. 브라우저 저장공간을 확인해 주세요', 'error')
+      return
+    }
+    setActiveCaseId(saved.id)
+    toast(message, 'success')
+    onDone()
+  }
+
+  const saveNew = () => finish(
+    saveCase(typeKey, form, null, title),
+    '완성된 소장을 새 사건에 저장했습니다',
+  )
+
+  const saveExisting = () => {
+    const picked = rawCases.find((item) => item.id === pickedCaseId)
+    if (!picked) return
+    finish(saveCase(typeKey, form, picked.id), `「${caseTitle(picked)}」 사건에 소장을 연결했습니다`)
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-3xl py-8">
+      <button type="button" onClick={onBack} className="mb-5 text-sm font-semibold text-ink-500 hover:text-ink-800">
+        ← 답변 화면으로 돌아가기
+      </button>
+
+      <div className="text-center">
+        <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-brand-50 text-brand-400"><Check size={24} /></span>
+        <h1 className="mt-4 text-2xl font-bold text-ink-900">소장이 완성됐어요</h1>
+        <p className="mt-2 text-sm leading-relaxed text-ink-500">사건에 저장하면 이후 증거·일정·준비서면을 이 소장과 함께 관리할 수 있어요.</p>
+      </div>
+
+      <div className="mt-7 grid gap-3 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => setMode('new')}
+          className={cx(
+            'rounded-2xl border p-5 text-left transition-colors',
+            mode === 'new' ? 'border-brand-300 bg-brand-50' : 'border-ink-200 bg-white hover:border-ink-300',
+          )}
+        >
+          <span className="flex items-center justify-between gap-3">
+            <span className="text-base font-bold text-ink-900">새 사건으로 저장</span>
+            <Badge tone="blue">추천</Badge>
+          </span>
+          <span className="mt-2 block text-[13px] leading-relaxed text-ink-500">처음 시작하는 소송이라면 새 사건을 만들어요.</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setMode('existing')}
+          disabled={!rawCases.length}
+          className={cx(
+            'rounded-2xl border p-5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+            mode === 'existing' ? 'border-brand-300 bg-brand-50' : 'border-ink-200 bg-white hover:border-ink-300',
+          )}
+        >
+          <span className="text-base font-bold text-ink-900">기존 사건에 추가</span>
+          <span className="mt-2 block text-[13px] leading-relaxed text-ink-500">이미 등록한 사건의 소장으로 연결해요.</span>
+        </button>
+      </div>
+
+      <Card className="mt-4 p-5">
+        {mode === 'new' ? (
+          <label className="block">
+            <span className="text-[13px] font-bold text-ink-800">사건 이름</span>
+            <input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="예: 대여금 반환 · 김민수"
+              className="mt-2 w-full rounded-xl border border-ink-200 px-4 py-3 text-sm text-ink-900 outline-none focus:border-brand-300 focus:ring-4 focus:ring-brand-100/60"
+            />
+            <span className="mt-2 block text-xs text-ink-400">내 사건 목록에서 알아보기 위한 이름이에요. 법원에 제출되지는 않아요.</span>
+          </label>
+        ) : (
+          <div>
+            <p className="text-[13px] font-bold text-ink-800">연결할 사건</p>
+            <div className="mt-2 space-y-2">
+              {rawCases.map((item) => (
+                <label key={item.id} className={cx(
+                  'flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3',
+                  pickedCaseId === item.id ? 'border-brand-300 bg-brand-50' : 'border-ink-200',
+                )}>
+                  <input
+                    type="radio"
+                    name="complaint-case"
+                    checked={pickedCaseId === item.id}
+                    onChange={() => setPickedCaseId(item.id)}
+                    className="accent-brand-400"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-bold text-ink-900">{caseTitle(item)}</span>
+                    <span className="block truncate text-xs text-ink-500">{[item.caseNo || '사건번호 없음', item.form?.court, item.status].filter(Boolean).join(' · ')}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+        <button type="button" onClick={onDone} className="text-sm font-semibold text-ink-500 underline underline-offset-4 hover:text-ink-800">
+          나중에 사건에 저장하기
+        </button>
+        <Button
+          disabled={mode === 'new' ? !title.trim() : !pickedCaseId}
+          onClick={mode === 'new' ? saveNew : saveExisting}
+        >
+          {mode === 'new' ? '새 사건으로 저장' : '이 사건에 추가'} <ArrowRight size={16} />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+export function Writer({ typeKey, form, setForm, caseId, deferCaseLink, onBack, onDone, initialStep = 0, captureMode = false }) {
   const toast = useToast()
   const type = findType(typeKey)
   const steps = allSteps(type)
-  const [open, setOpen] = useState(0)
-  const [full, setFull] = useState(false)
+  const [open, setOpen] = useState(initialStep)
+  // 완성 흐름: null → 'generating'(작성 중 알림) → 'ready'(완성 알림) → 'full'(완성 페이지)
+  const [phase, setPhase] = useState(null)
   const [savedAt, setSavedAt] = useState(null)
   const [saveFailed, setSaveFailed] = useState(false)
   const firstRender = useRef(true)
-  // 사건은 소장 초안과 같은 것이다. 한 번 만들어진 사건 id를 계속 물고 간다.
-  const { saveCase, activeCaseId } = useWorkspace()
-  // 사건이 이미 있으면 그 사건의 소장이다. null로 두면 새 사건이 또 하나 생겨
-  // 같은 분쟁이 둘로 쪼개진다.
-  const caseIdRef = useRef(caseId || activeCaseId)
+  const { saveCase } = useWorkspace()
+  // 새 소장은 완성되기 전까지 사건을 만들지 않는다. 기존 사건에서 연 소장만 그 사건에 자동 저장한다.
+  const caseIdRef = useRef(caseId || null)
+
+  // 알림 두 장을 순서대로 지나가게 한다. 화면을 떠나면 타이머도 함께 정리한다.
+  useEffect(() => {
+    if (phase !== 'generating' && phase !== 'ready') return undefined
+    const next = phase === 'generating' ? 'ready' : 'full'
+    const id = setTimeout(() => setPhase(next), phase === 'generating' ? 1600 : 1100)
+    return () => clearTimeout(id)
+  }, [phase])
 
   const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }))
   const extras = useMemo(() => makeComplaintExtras(type), [type])
   const percent = useMemo(() => completeness(type, form), [type, form])
-  const doc = useMemo(() => buildPreview(type, form), [type, form])
 
   // 입력할 때마다 자동 저장 — 새로고침해도 이어서 쓸 수 있게.
-  // 동시에 '사건'으로도 저장한다. 그래야 절차 안내·증빙 자료·일정이 같은 사건을 본다.
+  // 기존 사건에서 연 소장만 사건에도 저장한다. 새 소장은 우선 독립 초안으로 남긴다.
   useEffect(() => {
+    if (captureMode) return undefined
     if (firstRender.current) { firstRender.current = false; return }
     const t = setTimeout(() => {
       const ok = saveDraft(typeKey, form)
-      const saved = saveCase(typeKey, form, caseIdRef.current)
-      if (saved) caseIdRef.current = saved.id
+      const saved = caseIdRef.current ? saveCase(typeKey, form, caseIdRef.current) : true
+      if (saved?.id) caseIdRef.current = saved.id
       if (ok && saved) { setSavedAt(Date.now()); setSaveFailed(false) }
       else setSaveFailed(true)   // 저장소 한도 초과 등 — 조용히 넘기면 작업물을 잃는다
     }, 600)
     return () => clearTimeout(t)
-  }, [typeKey, form, saveCase])
+  }, [captureMode, typeKey, form, saveCase])
+
+  // 완성된 소장은 작성 화면을 덮는 창이 아니라 그 자리를 넘겨받는 페이지다
+  if (phase === 'full') {
+    return (
+      <FullView
+        type={type}
+        form={form}
+        onClose={() => setPhase(null)}
+        onEdit={() => setPhase(null)}
+        onSubmit={onDone}
+        actionLabel={deferCaseLink ? '다음' : '전자소송 제출 안내'}
+      />
+    )
+  }
 
   const stepsWithExtras = steps.map((s, i) => ({
     ...s,
-    badge: i >= 2 ? type.short : undefined,
+    guided: false,
+    badge: i >= 2 ? 'AI가 정리' : undefined,
+    aiAssist: i >= 2,
     hint: i === 0 ? type.amountHint : undefined,
-    // 소장에는 판례를 인용하지 않는다. 담아 둔 판례는 준비서면에서 쓰인다.
-    append: i === steps.length - 1 ? (
-      <div className="mt-5 flex items-start gap-2 rounded-xl bg-ink-50 p-3 text-[13px] leading-relaxed text-ink-600">
-        <Scale size={16} className="mt-0.5 shrink-0 text-brand-400" />
-        <span className="flex-1">
-          소장에는 판례를 넣지 않습니다. 소장은 <b className="text-ink-800">무슨 일이 있었는지</b>를 밝히는 문서라
-          사실과 증거로 씁니다. 법리 다툼은 상대방 답변서를 받은 뒤 <b className="text-ink-800">준비서면</b>에서 벌어져요.
-          미리 찾아 두고 싶다면 판례 검색에서 <b className="text-ink-800">[내 문서에 인용]</b>으로 담아 두세요 —
-          준비서면을 쓸 때 그 목록이 뜹니다.
-        </span>
-        <Link to="/app/search" className="shrink-0 font-semibold text-brand-400">판례 검색 →</Link>
-      </div>
-    ) : null,
   }))
 
   return (
@@ -432,8 +633,15 @@ function Writer({ typeKey, form, setForm, caseId, onBack, onDone }) {
       <WizardShell
         title="소장 작성"
         badge={type.title}
-        sub="왼쪽에 입력하는 내용이 오른쪽 소장에 바로 반영됩니다."
+        sub="중요한 날짜와 금액만 확인하고, 나머지는 평소 말로 답하세요. AI가 마지막에 소장으로 정리합니다."
         stage={1}
+        stageLabels={['소장유형 선택 완료', '사건정보 입력', '완성된 소장 확인']}
+        sideNote={(
+          <>
+            <TipCard title="소장은 이렇게 씁니다" items={COMPLAINT_RULES} />
+            <TipCard title="파일에 대해" items={fileTipsFor(stepsWithExtras[open])} />
+          </>
+        )}
         steps={stepsWithExtras}
         open={open}
         setOpen={setOpen}
@@ -442,27 +650,26 @@ function Writer({ typeKey, form, setForm, caseId, onBack, onDone }) {
         renderExtra={extras}
         stepSummary={(i) => stepSummary(i, type, form)}
         percent={percent}
-        previewTitle="소장 미리보기"
-        preview={<ComplaintPaper doc={doc} signature={form.signature} />}
-        printable={<ComplaintPaper doc={doc} signature={form.signature} />}
+        showPreview={false}
+        splitNavigation
+        requireStepCompletion
         onBack={onBack}
         onSave={() => {
           if (saveDraft(typeKey, form)) { setSavedAt(Date.now()); toast('작성 중인 소장을 저장했습니다') }
           else toast('저장에 실패했습니다. 브라우저 저장소를 확인해 주세요', 'error')
         }}
         savedLabel={saveFailed ? '⚠ 자동저장 실패 — 브라우저 저장공간을 확인하세요' : savedAt ? `${savedAgo(savedAt)} 저장됨` : ''}
-        onDone={onDone}
-        doneLabel="소장 완성하기"
-        onFull={() => setFull(true)}
+        onDone={() => setPhase('generating')}
+        doneLabel="완성된 소장 보기"
       />
-      {full && <FullView type={type} form={form} onClose={() => setFull(false)} onEdit={() => setFull(false)} />}
+      {(phase === 'generating' || phase === 'ready') && <GenerateNotice done={phase === 'ready'} />}
     </>
   )
 }
 
 /* ══════════════════════ 컨테이너 ══════════════════════ */
 
-export default function ComplaintWizard({ onExit, initialCase = null }) {
+export default function ComplaintWizard({ onExit, initialCase = null, deferCaseLink = !initialCase }) {
   const toast = useToast()
   const initialTypeKey = initialCase?.typeKey && findType(initialCase.typeKey) ? initialCase.typeKey : null
   const [phase, setPhase] = useState(initialTypeKey ? 'write' : 'type')
@@ -491,6 +698,17 @@ export default function ComplaintWizard({ onExit, initialCase = null }) {
     )
   }
 
+  if (phase === 'link' && typeKey) {
+    return (
+      <CaseLinkScreen
+        typeKey={typeKey}
+        form={form}
+        onBack={() => setPhase('write')}
+        onDone={() => { setPhase('submit'); toast('소장 제출 방법을 이어서 안내해 드릴게요', 'success') }}
+      />
+    )
+  }
+
   if (phase === 'write' && typeKey) {
     return (
       <Writer
@@ -498,8 +716,22 @@ export default function ComplaintWizard({ onExit, initialCase = null }) {
         form={form}
         setForm={setForm}
         caseId={initialCase?.id}
-        onBack={() => { setDraft(loadDraft()); setPhase('type'); setTypeKey(null) }}
-        onDone={() => { setPhase('submit'); toast('소장 초안이 완성되었습니다. 제출 방법을 안내해 드릴게요', 'success') }}
+        deferCaseLink={deferCaseLink}
+        onBack={() => {
+          // 사건에서 시작한 소장은 사건 유형이 이미 정해져 있다.
+          // 뒤로 갔을 때 다른 소장 유형을 다시 노출하지 않고 문서 홈으로 돌아간다.
+          if (initialTypeKey) { onExit(); return }
+          setDraft(loadDraft())
+          setPhase('type')
+          setTypeKey(null)
+        }}
+        onDone={() => {
+          if (deferCaseLink && !initialCase?.id) setPhase('link')
+          else {
+            setPhase('submit')
+            toast('소장 초안이 완성되었습니다. 제출 방법을 안내해 드릴게요', 'success')
+          }
+        }}
       />
     )
   }

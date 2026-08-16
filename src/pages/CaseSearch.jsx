@@ -15,7 +15,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { cx } from '../components/ui.jsx'
+import { cx, Dropdown } from '../components/ui.jsx'
 import Modal from '../components/Modal.jsx'
 import PrecedentPlanModal from '../components/PrecedentPlanModal.jsx'
 import { useWorkspace } from '../context/WorkspaceContext.jsx'
@@ -502,31 +502,20 @@ function SelectCaseCard({ cases, picked, onPick, onDone, free, onFree, onFreeAna
         </>
       ) : (
         <>
-          <div className="mt-3.5 flex flex-col gap-3.5">
-            {cases.map((c) => {
-              const on = picked === c.id
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => onPick(c.id)}
-                  className={cx(
-                    'flex w-full items-center gap-4 rounded-lg border px-4 py-3 text-left transition-colors',
-                    on ? 'border-brand-200 bg-brand-50' : 'border-ink-200 bg-white hover:border-ink-300',
-                  )}
-                >
-                  <Dot on={on} />
-                  <span className="min-w-0 flex-1">
-                    <span className={cx('block truncate text-[14px] font-semibold', on ? 'text-brand-500' : 'text-ink-700')}>
-                      {caseTitle(c)}
-                    </span>
-                    <span className={cx('block truncate text-[12px]', on ? 'text-brand-400' : 'text-ink-400')}>
-                      {c.caseNo || '사건번호 없음'} · 민사
-                    </span>
-                  </span>
-                </button>
-              )
-            })}
+          {/* 사건은 몇 건이 될지 모른다. 줄줄이 펴 두면 카드가 화면을 다 먹고
+              정작 그 아래 「분석에 사용할 정보」가 안 보인다 — 닫힌 한 줄로 고른다. */}
+          <div className="mt-3.5">
+            <Dropdown
+              ariaLabel="분석할 내 사건"
+              placeholder="분석할 사건을 선택하세요"
+              value={picked && picked !== 'free' ? picked : ''}
+              onChange={onPick}
+              options={cases.map((c) => ({
+                value: c.id,
+                label: caseTitle(c),
+                desc: `${c.caseNo || '사건번호 없음'} · 민사`,
+              }))}
+            />
           </div>
 
           <p className="mt-3.5 text-[12px] leading-tight tracking-[-0.3px] text-ink-400">

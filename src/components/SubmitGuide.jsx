@@ -166,13 +166,20 @@ function PartPaper({ heading, lines, caseName, plaintiff, defendant }) {
   )
 }
 
-export default function SubmitGuide({ type, form, onBack, onEditDoc }) {
+/**
+ * @param embedded  사건 관리 안에 끼워 넣을 때 — 페이지 제목·단계바·되돌아가기를 감춘다.
+ *                  소장을 막 끝낸 사람에게는 이 화면이 '다음 단계'지만,
+ *                  사건 관리에서 여는 사람에게는 사건 카드 하나이기 때문이다.
+ * @param caseItem  기준 사건. 안 주면 지금 보고 있는 사건을 쓴다.
+ */
+export default function SubmitGuide({ type, form, onBack, onEditDoc, embedded = false, caseItem = null }) {
   const toast = useToast()
   const doc = buildPreview(type, form)
   // 인쇄 대상 — null이면 소장 전체, 'claims'/'reasons'면 그 항목만 뽑는다.
   // 포털 「내용파일 첨부」·「청구취지별지 첨부하기」에 그대로 올릴 파일을 만들기 위한 것.
   const { activeRaw } = useWorkspace()
-  const registered = activeRaw ? caseEvidence(activeRaw) : []
+  const target = caseItem || activeRaw
+  const registered = target ? caseEvidence(target) : []
   const [printPart, setPrintPart] = useState(null)
   const printOnly = (part) => {
     setPrintPart(part)
@@ -191,21 +198,23 @@ export default function SubmitGuide({ type, form, onBack, onEditDoc }) {
           ? <PartPaper heading="청 구 취 지" lines={[...doc.claims, '라는 판결을 구합니다.']} caseName={doc.caseName} plaintiff={form.pName} defendant={form.dName} />
           : printPart === 'reasons'
             ? <PartPaper heading="청 구 원 인" lines={doc.reasons} caseName={doc.caseName} plaintiff={form.pName} defendant={form.dName} />
-            : <ComplaintPaper doc={doc} signature={form.signature} />}
+            : <ComplaintPaper doc={doc} />}
       </PrintSheet>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <button onClick={onBack} className="mb-2 flex items-center gap-1 text-sm font-medium text-ink-500 hover:text-ink-700">
-            <ArrowLeft size={16} /> 작성 화면으로 돌아가기
-          </button>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-bold text-ink-900">소장 제출하기</h1>
-            <Badge tone="blue">{type.title}</Badge>
+      {!embedded && (
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <button onClick={onBack} className="mb-2 flex items-center gap-1 text-sm font-medium text-ink-500 hover:text-ink-700">
+              <ArrowLeft size={16} /> 작성 화면으로 돌아가기
+            </button>
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-2xl font-bold text-ink-900">소장 제출하기</h1>
+              <Badge tone="blue">{type.title}</Badge>
+            </div>
+            <p className="mt-1 text-sm text-ink-500">완성한 소장을 어디에, 어떻게 내는지 안내해 드려요.</p>
           </div>
-          <p className="mt-1 text-sm text-ink-500">완성한 소장을 어디에, 어떻게 내는지 안내해 드려요.</p>
+          <StageBar stage={2} />
         </div>
-        <StageBar stage={2} />
-      </div>
+      )}
 
       {/* 완성하면 증거는 이미 증빙자료에 들어가 있다 — 다시 올릴 필요가 없다는 걸 알려준다 */}
       {registered.length > 0 && (
@@ -230,8 +239,9 @@ export default function SubmitGuide({ type, form, onBack, onEditDoc }) {
         </Card>
       )}
 
-      {/* 접수하고 돌아왔을 때 사건번호를 바로 적을 수 있게 — 제출 안내가 그 자리다 */}
-      {activeRaw && <Card className="p-5"><CaseStatus c={activeRaw} /></Card>}
+      {/* 접수하고 돌아왔을 때 사건번호를 바로 적을 수 있게 — 제출 안내가 그 자리다.
+          사건 관리에서도 이 카드가 접수 정보를 적는 유일한 자리다. */}
+      {target && <Card id="filing" className="p-5"><CaseStatus c={target} /></Card>}
 
       <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-5">
@@ -415,7 +425,7 @@ export default function SubmitGuide({ type, form, onBack, onEditDoc }) {
 
               <PortalStep no={8} title="전자서명 후 제출" note="작성완료 → 전자서명 → 인지대·송달료 결제 순으로 진행됩니다.">
                 <p className="py-2 text-[13px] leading-relaxed text-ink-600">
-                  공동인증서로 전자서명하면 서명·날인이 끝납니다. 여기서 만든 서명 이미지는 필요 없어요.
+                  공동인증서로 전자서명하면 서명·날인이 끝납니다. 종이에 하는 서명·간인은 필요 없어요.
                   결제까지 마치고 접수번호가 나오면 제출이 완료된 것입니다.
                 </p>
               </PortalStep>
@@ -430,10 +440,10 @@ export default function SubmitGuide({ type, form, onBack, onEditDoc }) {
             <div className="mt-3 space-y-3">
               {[
                 {
-                  ok: !!form.signature,
-                  title: '서명',
-                  yes: '서명 이미지가 등록돼 있어 PDF에 그대로 인쇄됩니다.',
-                  no: '6단계에서 서명 이미지를 올리거나, 출력본에 자필로 서명하세요.',
+                  // 서명은 우리가 확인할 수 없는 항목이다 — 종이는 출력본에, 전자소송은 제출 때 한다.
+                  ok: null,
+                  title: '기명날인 — 종이로 낼 때',
+                  no: '출력본 말미 「(인)」 자리에 서명하거나 도장을 찍고, 2장 이상이면 간인하세요. 전자소송은 제출할 때 공동인증서 전자서명으로 갈음합니다.',
                 },
                 {
                   ok: !!(form.pName && form.pAddr && form.dName && form.dAddr),
@@ -455,17 +465,19 @@ export default function SubmitGuide({ type, form, onBack, onEditDoc }) {
                 },
               ].map((c) => (
                 <div key={c.title} className="flex gap-2.5">
-                  <span className={cx('mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md text-white', c.ok ? 'bg-brand-300' : 'bg-red-300')}>
-                    {c.ok ? <Check size={13} /> : <span className="text-[11px] font-bold">!</span>}
+                  {/* ok === null 은 '우리가 확인할 수 없는 것' — 빠뜨린 게 아니라 기억할 것이라 붉게 칠하지 않는다 */}
+                  <span className={cx('mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md text-white',
+                    c.ok == null ? 'bg-ink-300' : c.ok ? 'bg-brand-300' : 'bg-red-300')}>
+                    {c.ok ? <Check size={13} /> : <span className="text-[11px] font-bold">{c.ok == null ? 'i' : '!'}</span>}
                   </span>
                   <div className="min-w-0">
                     <p className="text-[13px] font-semibold text-ink-900">{c.title}</p>
-                    <p className={cx('text-xs leading-relaxed', c.ok ? 'text-ink-500' : 'text-red-500')}>{c.ok ? c.yes : c.no}</p>
+                    <p className={cx('text-xs leading-relaxed', c.ok == null ? 'text-ink-500' : c.ok ? 'text-ink-500' : 'text-red-500')}>{c.ok ? c.yes : c.no}</p>
                   </div>
                 </div>
               ))}
             </div>
-            <Button variant="neutral" size="sm" className="mt-4 w-full" onClick={onEditDoc}>소장 내용 수정하기</Button>
+            {onEditDoc && <Button variant="neutral" size="sm" className="mt-4 w-full" onClick={onEditDoc}>소장 내용 수정하기</Button>}
           </Card>
 
           <Card className="p-5">

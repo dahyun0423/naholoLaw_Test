@@ -1,10 +1,11 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
 import { cases as demoCases, precedents, figmaWorkspaceCases } from '../data/mock.js'
+import { seedDemoDrafts } from '../data/demoDrafts.js'
 import {
   listCases, caseSummary, saveComplaintAsCase, setCaseStatus, removeCase,
   addTodo, toggleTodo, updateTodo, removeTodo,
   addUserEvent, removeEvent, linkPrecedent, unlinkPrecedent, attachDoc, setFiling,
-  setEvidenceStatus, updateEvidence, removeEvidence, setDocMeta, removeDoc,
+  setEvidenceStatus, updateEvidence, addEvidenceFiles, removeEvidence, setDocMeta, removeDoc,
   createCase, casePrecedentNos, seedCases, migrateLegacyDemoCases, setFlowStep, setEntryPoint,
 } from '../lib/casebook.js'
 
@@ -53,7 +54,11 @@ export function WorkspaceProvider({ children }) {
     // 미리보기 데이터도 사용자가 바꾼 상태를 유지한다. 매 새로고침마다 강제로 다시
     // 심으면 사건 상태·할 일·일정 변경이 모두 원래 더미값으로 되돌아간다.
     // 완성형 캡처 데이터를 처음부터 다시 만들 때만 ?figma=1&figmaReset=1을 쓴다.
-    if (keepDemoData) seedCases(figmaWorkspaceCases, { force: resetFigmaPreview })
+    if (keepDemoData) {
+      seedCases(figmaWorkspaceCases, { force: resetFigmaPreview })
+      // 준비서면·신청서는 사건이 아니라 각자 초안 저장소에 있다 — 같이 심어야 다 열린다
+      seedDemoDrafts()
+    }
     return listCases()
   })
   const [activeCaseId, setActiveCaseId] = useState(null)
@@ -72,8 +77,8 @@ export function WorkspaceProvider({ children }) {
   const refreshCases = useCallback(() => setMyCases(listCases()), [])
 
   /** 소장 작성 내용을 사건으로 저장하고, 저장된 사건 id를 돌려준다 */
-  const saveCase = useCallback((typeKey, form, id) => {
-    const saved = saveComplaintAsCase(typeKey, form, id)
+  const saveCase = useCallback((typeKey, form, id, title) => {
+    const saved = saveComplaintAsCase(typeKey, form, id, title)
     if (saved) {
       setMyCases(listCases())
       setActiveCaseId((cur) => cur || saved.id)
@@ -121,6 +126,7 @@ export function WorkspaceProvider({ children }) {
     saveFiling: mutate(setFiling),
     saveEvidenceStatus: mutate(setEvidenceStatus),
     saveEvidence: mutate(updateEvidence),
+    addEvidence: mutate(addEvidenceFiles),
     dropEvidence: mutate(removeEvidence),
     setFlowStep: mutate(setFlowStep),
     setEntryPoint: mutate(setEntryPoint),
@@ -177,6 +183,8 @@ export function WorkspaceProvider({ children }) {
     setMyCases(listCases())
   }, [activeCaseId])
 
+  // 공개 판례 API에서 담아 온 것이 먼저다. mock은 데모 사건용 예시일 뿐이라,
+  // 여기를 안 거치고 mock만 뒤지면 실제로 인용한 판례가 화면에서 사라진다.
   const byNo = (no) => precedentItems[no] || precedents.find((p) => p.no === no)
   const savedList = savedNos.map(byNo).filter(Boolean)
   const citedNos = activeRaw ? casePrecedentNos(activeRaw) : []
@@ -196,6 +204,7 @@ export function WorkspaceProvider({ children }) {
         savedNos, toggleSave, registerPrecedents,
         citedNos, addCitation, removeCitation,
         savedList, citedList,
+        precedentByNo: byNo,          // 활성 사건이 아닌 사건의 인용 판례도 풀어 쓸 수 있게
       }}
     >
       {children}

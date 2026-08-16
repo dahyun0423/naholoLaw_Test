@@ -21,14 +21,14 @@ import {
   ENTRY_POINTS, entryPoint,
 } from '../lib/casebook.js'
 import { findType, fmtDate, savedAgo, completeness } from '../lib/complaint.js'
-import { precedents } from '../data/mock.js'
 import { Card, Button, Badge, Progress, cx } from '../components/ui.jsx'
-import CaseStatus, { CASE_FLOW, LawyerNote } from '../components/CaseStatus.jsx'
+import { LawyerNote } from '../components/CaseStatus.jsx'
 import CaseStateControl from '../components/CaseStateControl.jsx'
+import SubmitGuide from '../components/SubmitGuide.jsx'
 import Modal from '../components/Modal.jsx'
 import Stepper from '../components/Stepper.jsx'
 import {
-  ArrowLeft, ArrowRight, FileText, Folder, Scale, Calendar, Check, CheckCircle,
+  ArrowLeft, ArrowRight, FileText, Folder, Scale, Calendar, Check,
   Plus, Trash, X, Sparkles, ChevronRight,
 } from '../components/icons.jsx'
 
@@ -62,9 +62,11 @@ export default function CaseDetail() {
       <ManagementOverview c={c} onOpenTodos={() => setSheet('todos')} />
       <Flow c={c} />
 
-      {/* 기능 카드 — 하나에 목적 하나 */}
+      {/* 기능 카드 — 하나에 목적 하나.
+          「소장에 필요한 것」은 뺐다. 남은 항목 수는 이미 사건 머리의 「접수까지 남은 작업」이,
+          작성률은 「문서」 카드가 말하고 있어서 같은 것을 세 번 세는 카드였다.
+          빠진 칸으로 바로 가는 길은 아래 제출 가이드의 「제출 전 확인」이 대신한다. */}
       <div data-guide="case-cards" className="grid gap-5 xl:grid-cols-3">
-        <TasksCard c={c} />
         <InsightCard c={c} />
         <ScheduleCard c={c} onOpen={() => setSheet('todos')} />
         <DocsCard c={c} />
@@ -72,8 +74,10 @@ export default function CaseDetail() {
         <PrecedentCard c={c} />
       </div>
 
-      {/* 접수 정보는 손대는 일이 드물다 — 필요할 때만 편다 */}
-      <FilingCard c={c} />
+      {/* 소장을 다 쓴 다음 사용자가 멈추는 자리는 "그래서 이걸 어디에 내지?"다.
+          그 답이 문서 생성 화면 안에만 있으면, 며칠 뒤 사건을 다시 열었을 때 찾지 못한다.
+          접수 정보를 적는 칸도 이 안에 있다 — 접수하고 돌아오는 곳이 곧 여기라서다. */}
+      <SubmitGuideCard c={c} />
 
       <LawyerNote className="px-1" />
 
@@ -476,39 +480,6 @@ const Go = ({ to, state, children }) => (
 
 const Blank = ({ children }) => <p className="grid h-full place-items-center text-[12.5px] text-ink-400">{children}</p>
 
-/** 미완성 항목을 '작업 단위'로 — 누르면 그 입력으로 간다 */
-function TasksCard({ c }) {
-  const tasks = caseTasks(c)
-  const done = tasks.filter((t) => t.done).length
-
-  return (
-    <Tile
-      icon={CheckCircle}
-      title="소장에 필요한 것"
-      right={<Count>{done}/{tasks.length}</Count>}
-      foot={<Go to="/app/documents" state={{ openDoc: 'complaint', caseId: c.id, from: 'case-tasks' }}>소장 이어서 쓰기</Go>}
-    >
-      <div className="grid grid-cols-2 gap-2">
-        {tasks.map((t) => (
-          <Link
-            key={t.key}
-            to={t.to === '/app/evidence' ? `/app/evidence?case=${c.id}` : t.to}
-            state={t.to === '/app/documents' ? { openDoc: 'complaint', caseId: c.id, from: 'case-task' } : undefined}
-            className={cx(
-              'flex items-center gap-2 rounded-xl border px-3 py-2.5 transition-colors',
-              t.done ? 'border-ink-200 bg-ink-50' : 'border-ink-200 bg-white hover:border-brand-300 hover:bg-brand-50',
-            )}
-          >
-            <span className={cx('grid h-5 w-5 shrink-0 place-items-center rounded-full', t.done ? 'bg-brand-300 text-white' : 'bg-ink-100 text-ink-500')}>
-              {t.done ? <Check size={11} /> : <span className="text-[10px] font-bold tabular-nums">{t.missing}</span>}
-            </span>
-            <span className={cx('min-w-0 flex-1 truncate text-[12.5px] font-semibold', t.done ? 'text-ink-500' : 'text-ink-800')}>{t.label}</span>
-          </Link>
-        ))}
-      </div>
-    </Tile>
-  )
-}
 
 /** AI — 길게 쓰지 않는다. 손댈 것 한 줄씩. */
 function InsightCard({ c }) {
@@ -597,6 +568,13 @@ function DocsCard({ c }) {
           ))}
         </ul>
       )}
+      {/* 서명은 우리가 대신 해 줄 수 없다. 문서를 실제로 낼 때 빠뜨리기 쉬워 여기서도 짚어 둔다. */}
+      {docs.length > 0 && (
+        <p className="mt-3 border-t border-ink-100 pt-2.5 text-[11.5px] leading-relaxed text-ink-400">
+          종이로 내신다면 출력본 말미 「(인)」 자리에 <b className="font-semibold text-ink-600">서명하거나 도장</b>을 찍고, 2장 이상이면 간인하세요.
+          전자소송은 제출할 때 공동인증서 전자서명으로 갈음합니다.
+        </p>
+      )}
     </Tile>
   )
 }
@@ -636,51 +614,115 @@ function EvidenceCard({ c }) {
   )
 }
 
+/**
+ * 이 사건에 **인용한** 판례.
+ *
+ * '관련 판례'라고 부르면 시스템이 골라 준 목록처럼 읽히지만, 여기 있는 것은
+ * 사용자가 판례 검색에서 [내 문서에 인용]으로 직접 담은 것뿐이다. 소장·준비서면의
+ * 청구원인에 실제로 들어가는 판례라, 무엇을 담았는지 사건에서 바로 보여야 한다.
+ *
+ * 풀어 쓸 때는 workspace의 판례 보관함을 거친다. mock만 뒤지면 공개 판례 API에서
+ * 담아 온 판례가 전부 걸러져 "0건"으로 보인다 — 실제로 인용해 둔 것이 있는데도.
+ */
 function PrecedentCard({ c }) {
-  const linked = casePrecedentNos(c).map((no) => precedents.find((p) => p.no === no)).filter(Boolean)
+  const { precedentByNo, removeCitation, activeCaseId } = useWorkspace()
+  const nos = casePrecedentNos(c)
+  const cited = nos.map((no) => precedentByNo(no) || { no, title: no }).filter(Boolean)
+  const canRemove = activeCaseId === c.id
   return (
-    <Tile icon={Scale} title="관련 판례" right={<Count>{linked.length}건</Count>} foot={<Go to="/app/search">판례 더 찾아보기</Go>}>
-      {linked.length === 0 ? <Blank>판례 검색에서 담아 오면 모여요</Blank> : (
-        <ul className="space-y-2">
-          {linked.slice(0, 3).map((p) => (
-            <li key={p.no} className="flex items-center gap-2 text-[12.5px]">
-              <span className="min-w-0 flex-1 truncate text-ink-700">{p.title}</span>
-              <Badge tone={p.result?.includes('승') ? 'blue' : 'gray'}>{p.result}</Badge>
+    <Tile icon={Scale} title="인용한 판례" right={<Count>{cited.length}건</Count>} foot={<Go to="/app/search">판례 검색에서 더 담기</Go>}>
+      {cited.length === 0 ? <Blank>판례 검색에서 [내 문서에 인용]으로 담으면 여기에 모여요</Blank> : (
+        <ul className="space-y-2.5">
+          {cited.slice(0, 3).map((p) => (
+            <li key={p.no} className="group flex items-start gap-2 text-[12.5px]">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-ink-700">{p.title}</span>
+                <span className="block truncate text-[11px] text-ink-400">
+                  {[p.court, p.no, p.date].filter(Boolean).join(' · ')}
+                </span>
+              </span>
+              {p.result && <Badge tone={p.result.includes('승') ? 'blue' : 'gray'}>{p.result}</Badge>}
+              {canRemove && (
+                <button
+                  type="button"
+                  onClick={() => removeCitation(p.no)}
+                  aria-label={`${p.title} 인용 빼기`}
+                  className="shrink-0 rounded-md p-1 text-ink-300 opacity-0 transition hover:bg-ink-100 hover:text-red-500 focus-visible:opacity-100 group-hover:opacity-100"
+                >
+                  <X size={13} />
+                </button>
+              )}
             </li>
           ))}
+          {cited.length > 3 && <li className="text-[11px] text-ink-400">외 {cited.length - 3}건</li>}
         </ul>
       )}
     </Tile>
   )
 }
 
-/* ══════════════════ 접수 정보 ══════════════════ */
-// 손대는 일이 드물다. 접수 전에는 한 줄로 접어 두고, 필요할 때만 편다.
+/* ══════════════════ 소장 제출 가이드 ══════════════════ */
+//
+// 전에는 이 자리가 「진행 표시 · 접수 정보」였다. 사건번호와 접수일은 이미 맨 위
+// 사건 머리에 적혀 있어서, 같은 값을 접힌 줄에 한 번 더 보여 주는 것뿐이었다.
+//
+// 정작 이 자리에 있어야 할 것은 **소장을 다 쓴 사람이 다음에 할 일**이다.
+// 어디에 내는지, 전자소송 화면에 무엇을 어떤 순서로 옮겨 적는지, 얼마를 내는지.
+// 그 안내는 문서 생성 화면 안에만 있어서 사건을 다시 열면 닿을 수 없었다.
+//
+// 접수 정보를 적는 칸(CaseStatus)은 없애지 않고 이 가이드 안으로 들어갔다.
+// 사건번호는 접수하고 돌아와서 적는 값이고, 접수하러 가는 문이 바로 이 화면이다.
 
-function FilingCard({ c }) {
-  const [open, setOpen] = useState(!c.caseNo && c.status === '접수함')
-  useEffect(() => {
-    if (!c.caseNo && CASE_FLOW.indexOf(c.status) >= CASE_FLOW.indexOf('접수함')) setOpen(true)
-  }, [c.caseNo, c.status])
+function SubmitGuideCard({ c }) {
+  const navigate = useNavigate()
+  const type = findType(c.typeKey)
+  const pct = type ? completeness(type, c.form || {}) : 0
+  const complaint = caseDocs(c).find((d) => d.kind === 'complaint')
+  // 다 썼거나, 파일이 나왔거나, 이미 접수했으면 '낼 수 있는 상태'로 본다
+  const ready = pct >= 100 || !!complaint?.versions?.length || !!c.caseNo
+  const [open, setOpen] = useState(ready)
+
+  // 상태를 「접수함」으로 바꾸면 사건번호를 적으라고 이 판을 열어 준다
   useEffect(() => {
     const openPanel = () => setOpen(true)
     window.addEventListener('naholo:open-filing', openPanel)
     return () => window.removeEventListener('naholo:open-filing', openPanel)
   }, [])
+  useEffect(() => { if (ready) setOpen(true) }, [ready])
+
+  const editDoc = () => navigate('/app/documents', { state: { openDoc: 'complaint', caseId: c.id, from: 'case-detail' } })
+
+  if (!type) return null
+
+  if (!ready) {
+    return (
+      <Card className="p-5">
+        <h3 className="text-[13px] font-bold text-ink-900">소장 제출 가이드</h3>
+        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-ink-50 p-4">
+          <FileText size={20} className="shrink-0 text-ink-300" />
+          <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-ink-600">
+            소장을 다 쓰면 <b className="text-ink-800">어디에 어떻게 내는지</b>를 여기에서 안내해 드려요.
+            전자소송 입력 순서, 인지대·송달료, 제출 전 확인까지 이 자리에 열립니다.
+          </p>
+          <span className="shrink-0 text-[13px] font-bold tabular-nums text-ink-500">{pct}%</span>
+          <Button size="sm" onClick={editDoc}>소장 이어서 쓰기 <ArrowRight size={14} /></Button>
+        </div>
+      </Card>
+    )
+  }
+
   return (
-    <Card id="filing" className="p-5">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 text-left"
-      >
-        <h3 className="text-[13px] font-bold text-ink-900">진행 표시 · 접수 정보</h3>
-        <span className="text-[12px] text-ink-500">
-          {c.caseNo ? `${c.caseNo}${c.filedAt ? ` · ${fmtDate(c.filedAt)} 접수` : ''}` : '사건번호는 접수해야 나옵니다'}
-        </span>
+    <Card id="submit-guide" className="p-5">
+      <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 text-left">
+        <h3 className="text-[13px] font-bold text-ink-900">소장 제출 가이드</h3>
+        <span className="text-[12px] text-ink-500">전자소송 입력 순서 · 인지대 · 접수 정보 기록</span>
         <ChevronRight size={15} className={cx('ml-auto shrink-0 text-ink-300 transition-transform', open && 'rotate-90')} />
       </button>
-      {open && <div className="mt-5 border-t border-ink-200 pt-5"><CaseStatus c={c} /></div>}
+      {open && (
+        <div className="mt-5 border-t border-ink-200 pt-5">
+          <SubmitGuide embedded type={type} form={c.form || {}} caseItem={c} onEditDoc={editDoc} />
+        </div>
+      )}
     </Card>
   )
 }

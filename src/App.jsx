@@ -21,6 +21,8 @@ import Schedule from './pages/Schedule.jsx'
 import Notifications from './pages/Notifications.jsx'
 import Guide from './pages/Guide.jsx'
 import MyPage from './pages/MyPage.jsx'
+import FigmaComplaintResult from './pages/FigmaComplaintResult.jsx'
+import FigmaComplaintInput from './pages/FigmaComplaintInput.jsx'
 
 function FigmaCaptureBridge() {
   useEffect(() => {
@@ -78,6 +80,7 @@ export default function App() {
 
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/figma/complaint-result/:caseId" element={<FigmaComplaintResult />} />
 
         <Route path="/app" element={<AppLayout />}>
           <Route index element={<Navigate to="/app/dashboard" replace />} />
@@ -87,6 +90,7 @@ export default function App() {
           <Route path="cases" element={<Cases />} />
           <Route path="cases/:id" element={<CaseDetail />} />
           <Route path="documents" element={<Documents />} />
+          <Route path="figma/complaint-input/:typeKey/:stepIndex" element={<FigmaComplaintInput />} />
           <Route path="evidence" element={<Evidence />} />
           <Route path="schedule" element={<Schedule />} />
           <Route path="notifications" element={<Notifications />} />

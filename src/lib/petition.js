@@ -1,28 +1,44 @@
 // 신청서 — 분기 축이 "청구원인"이 아니라 "소송 중 무엇을 하고 싶은지(절차적 목적)"다.
 // 나홀로소송에서 실제 사용 빈도가 높은 5종.
 
-import { stampFee, won, fmtDate } from './complaint.js'
+import { stampFee, won, fmtDate, attachLines } from './complaint.js'
 import { citationLines } from './citation.js'
 import {
-  text, money, date, num, area, select, radio, checks, note, files, signature, repeat,
-  partyPair, F, P, or, money$, date$, today, filled, partyLines, completenessOf, summaryOf,
+  text, money, date, num, area, select, radio, checks, note, files, repeat,
+  partyPair, partyOne, F, P, or, money$, date$, today, filled, legalNarrative, partyLines, completenessOf, summaryOf,
 } from './docschema.js'
 
 /* 채권자·채무자 / 신청인·피신청인 키 묶음 */
 const CRED = { tag: '채권자', desc: '돈을 받을 사람 · 나', name: 'aName', rrn: 'aRrn', addr: 'aAddr', tel: 'aTel', email: 'aEmail' }
 const DEBT = { tag: '채무자', desc: '돈을 갚아야 할 사람 · 상대방', name: 'bName', rrn: 'bRrn', addr: 'bAddr', tel: 'bTel' }
+const APPLICANT = { tag: '신청인', desc: '소송비용을 구조받으려는 사람 · 나', name: 'aName', rrn: 'aRrn', addr: 'aAddr', tel: 'aTel', email: 'aEmail' }
 const TENANT = { tag: '임차인', desc: '보증금을 돌려받을 사람 · 나', name: 'aName', rrn: 'aRrn', addr: 'aAddr', tel: 'aTel', email: 'aEmail' }
 const LANDLORD = { tag: '임대인', desc: '보증금을 돌려줘야 할 사람 · 상대방', name: 'bName', rrn: 'bRrn', addr: 'bAddr', tel: 'bTel' }
 
+// 소장 6단계와 같은 구조 — 체크 목록 위, 파일 올리기는 접히는 블록 안으로.
+// 흩어 놓으면 체크만으로 낼 수 있는 줄 알게 된다.
+const ATTACH_FOLD = '파일도 지금 올릴게요'
+
 const attachStep = (items, { citation = false } = {}) => ({
-  title: '첨부서류 · 서명',
+  title: '첨부서류',
+  tips: [
+    ['전자소송으로 내려면', '사건마다 「전자소송 동의」를 먼저 해야 해요. 소송 중에 내는 신청서는 그 동의를 이미 마쳤을 때만 전자로 낼 수 있습니다.'],
+    ['한 번 동의하면', '이후 서류는 전자로만 내고, 송달도 전자로 받아요.'],
+    ['전자송달은', '열람하지 않아도 통지받은 날부터 1주가 지나면 송달된 것으로 봅니다(그 날 0시 기준). 기한 계산에 주의하세요.'],
+  ],
   fields: [
-    checks('attachItems', '함께 낼 서류를 골라주세요', items, { required: true }),
+    checks('attachItems', '함께 낼 서류를 골라주세요', items, {
+      required: true,
+      hint: '신청서 말미 「첨부서류」란에 들어갑니다.',
+      info: '체크는 준비물 확인용이에요. 실제로 내려면 아래에 파일을 올려야 합니다. 목록에 없는 서류도 그냥 올리시면 첨부서류란에 함께 적힙니다.',
+    }),
     ...(citation ? [{ kind: 'citation', key: 'citations' }] : []),
-    files('attachFiles', '파일 업로드'),
-    note('warn', '전자소송으로 내려면 **사건마다 「전자소송 동의」를 먼저** 해야 해요. 소송 중에 내는 신청서는 그 소송에 대한 동의를 이미 마쳤을 때만 전자로 낼 수 있습니다. 한 번 동의하면 이후 서류는 전자로만 내고, 송달도 전자로 받아요.'),
-    note('info', '전자송달은 열람하지 않아도 통지받은 날부터 1주가 지나면 송달된 것으로 봅니다(그 날 0시 기준). 기한 계산에 주의하세요.'),
-    signature(),
+    files('attachFiles', '첨부서류 파일 올리기', {
+      fold: ATTACH_FOLD,
+      role: 'attachment',
+      info: '체크만 하면 첨부서류란에 이름만 적힙니다. 실제로 내려면 파일이 있어야 해요.',
+    }),
+    { kind: 'attachGap', listKey: 'attachItems', fold: ATTACH_FOLD },
   ],
 })
 
@@ -58,7 +74,17 @@ export const petitionTypes = [
           radio('interestSet', '이자·지연손해금을 청구할까요?', ['청구함', '청구 안 함'], { required: true }),
           num('interestRate', '연 이율', { half: true, unit: '%', when: (f) => f.interestSet === '청구함' }),
           note('info', '약정 이율이 없으면 상법상 연 6%(상행위) 또는 민법상 연 5%가 기준이고, 지급명령 송달 다음 날부터는 연 12%를 청구할 수 있어요.', { when: (f) => f.interestSet === '청구함' }),
-          area('claimStory', '청구 이유', { rows: 4, required: true, placeholder: '예) 채권자는 2023. 5. 10. 채무자에게 3,000만원을 대여하였으나 변제기가 지나도록 변제받지 못하였습니다.' }),
+          {
+            kind: 'aiPrompt', key: 'claimStory', required: true,
+            eyebrow: '평소 말로 답해주세요',
+            question: '무슨 돈이고, 왜 못 받고 있나요?',
+            why: '금액과 날짜는 위에서 받았어요. 여기에는 어떤 돈인지와 못 받게 된 경위만 적으면 AI가 청구 이유로 정리해요.',
+            placeholder: '예) 2023년 5월에 빌려준 돈인데 갚기로 한 날이 지나도 안 갚고 있어요.',
+            exampleGroups: [
+              { label: '돈의 성격 추가', items: ['빌려준 돈이에요.', '물건값이에요.', '일한 대금이에요.'] },
+              { label: '못 받은 사정 추가', items: ['갚기로 한 날이 지나도 안 갚아요.', '연락을 받지 않아요.', '조금만 기다려 달라고만 해요.'] },
+            ],
+          },
           note('warn', '채무자가 2주 안에 이의신청을 하면 정식 소송으로 전환돼요. 다툼이 예상되면 처음부터 소장을 내는 편이 빠를 수 있습니다.'),
         ],
       },
@@ -85,17 +111,16 @@ export const petitionTypes = [
             lines: [
               `1. 채권자는 ${date$(form.claimDate, '3단계에서 채권 발생일을 입력해 주세요')} 채무자에 대하여 ${or(kind, '청구 종류')} 채권 ${money$(form.amount, '청구금액')}을 가지고 있습니다.`,
               form.dueDate ? `2. 변제기는 ${date$(form.dueDate, '변제기')}였습니다.` : `2. ${P('변제기를 3단계에서 입력해 주세요')}`,
-              `3. ${or(form.claimStory, '3단계에서 청구 이유를 입력해 주세요')}`,
+              `3. ${or(legalNarrative(form.claimStory), '3단계에서 청구 이유를 입력해 주세요')}`,
               '4. 따라서 신청취지와 같은 지급명령을 구합니다.',
             ],
           },
         ],
-        attach: (form.attachItems || []).map((a) => `${a}　1통`),
+        attach: attachLines(form, 'attachItems').map((a) => `${a}　1통`),
         role: '위 채권자',
         court: form.court,
         name: form.aName,
         date: today(),
-        signature: form.signature,
       }
     },
   },
@@ -119,6 +144,9 @@ export const petitionTypes = [
           radio('stage', '지금 어느 단계인가요?', ['소 제기 전 (같이 낼 예정)', '이미 소송이 진행 중'], { required: true }),
           checks('aidScope', '어떤 비용을 구조받고 싶나요?', ['인지대', '송달료', '변호사 보수', '감정료·증인여비'], { required: true }),
           note('info', '소 제기 전에도 신청할 수 있어요. 이 경우 소장과 함께 내면 인지대를 내지 않고 접수됩니다.', { when: (f) => f.stage === '소 제기 전 (같이 낼 예정)' }),
+          // 신청인 표시는 서면의 필수 기재사항이다. 묻는 자리가 없으면
+          // 사건을 고르지 않고 쓰는 사람은 이름칸을 영영 채울 수 없다.
+          ...partyOne(APPLICANT),
         ],
       },
       {
@@ -131,7 +159,17 @@ export const petitionTypes = [
           money('assets', '보유 재산 (부동산·예금 등 합계)', { half: true }),
           money('debts', '채무 총액', { half: true }),
           radio('houseKind', '주거 형태', ['자가', '전세', '월세', '기타'], { required: true }),
-          area('aidReason', '왜 비용을 내기 어려운가요?', { rows: 4, required: true, placeholder: '예) 실직 후 소득이 없고, 부양가족 2명의 생계비로 매월 적자가 발생하고 있어 인지대 14만원을 마련하기 어렵습니다.' }),
+          {
+            kind: 'aiPrompt', key: 'aidReason', required: true,
+            eyebrow: '평소 말로 답해주세요',
+            question: '지금 형편이 어떤가요?',
+            why: '소득·재산·부양가족 상황을 사실대로 적으면 AI가 구조 사유로 정리해요. 꾸며 적으면 소명자료와 어긋나 오히려 불리해집니다.',
+            placeholder: '예) 실직해서 소득이 없고, 아이 둘을 키우느라 매달 적자예요.',
+            exampleGroups: [
+              { label: '소득 상황 추가', items: ['실직해서 소득이 없어요.', '아르바이트 수입만 있어요.', '기초생활수급자예요.'] },
+              { label: '부양·지출 추가', items: ['아이 둘을 키우고 있어요.', '병원비가 매달 나가요.', '매달 적자가 나요.'] },
+            ],
+          },
           note('warn', '소명자료가 없으면 기각될 수 있어요. 소득금액증명·건강보험료 납부확인서·통장 거래내역을 꼭 첨부하세요.'),
         ],
       },
@@ -145,9 +183,10 @@ export const petitionTypes = [
       return {
         docTitle: '소 송 구 조 신 청 서',
         header: [
-          `사　건　${or(form.caseNo, '사건번호')} ${form.caseName || ''}`,
-          `신청인　${or(form.aName, '2단계에서 이름을 입력해 주세요')}`,
-          `　　　　${or(form.aAddr, '주소')}`,
+          form.stage === '소 제기 전 (같이 낼 예정)' && !form.caseNo
+            ? `사　건　${form.caseName || ''} (소 제기 전 · 소장과 함께 제출)`
+            : `사　건　${or(form.caseNo, '사건번호')} ${form.caseName || ''}`,
+          ...partyLines(form, [APPLICANT], ['신청인']),
         ],
         sections: [
           {
@@ -161,7 +200,7 @@ export const petitionTypes = [
             lines: [
               `1. 신청인은 ${form.welfare && form.welfare !== '해당 없음' ? F(form.welfare) : '자금능력이 부족한 사람'}으로서, 월 소득이 ${money$(form.income, '2단계에서 월 소득을 입력해 주세요')}에 불과합니다.`,
               form.family ? `2. 부양가족 ${F(`${form.family}명`)}의 생계를 책임지고 있으며, 보유 재산은 ${money$(form.assets, '재산')}입니다.` : `2. ${P('부양가족·재산을 2단계에서 입력해 주세요')}`,
-              `3. ${or(form.aidReason, '2단계에서 사유를 입력해 주세요')}`,
+              `3. ${or(legalNarrative(form.aidReason), '2단계에서 사유를 입력해 주세요')}`,
               form.stage === '소 제기 전 (같이 낼 예정)'
                 ? '4. 신청인은 이 사건 소를 제기하면서 이 신청을 함께 제출합니다.'
                 : '4. 위 사건은 현재 소송 계속 중입니다.',
@@ -170,12 +209,11 @@ export const petitionTypes = [
             ],
           },
         ],
-        attach: (form.attachItems || []).map((a) => `${a}　1통`),
+        attach: attachLines(form, 'attachItems').map((a) => `${a}　1통`),
         role: '위 신청인',
         court: form.court,
         name: form.aName,
         date: today(),
-        signature: form.signature,
       }
     },
   },
@@ -215,7 +253,17 @@ export const petitionTypes = [
           date('endDate', '임대차 종료일', { required: true, half: true }),
           radio('stillLiving', '지금도 살고 계신가요?', ['아직 살고 있어요', '이미 이사했어요'], { required: true }),
           note('warn', '이사부터 하면 대항력을 잃습니다. 반드시 등기가 완료된 것을 확인한 뒤 이사하세요.', { when: (f) => f.stillLiving === '아직 살고 있어요' }),
-          area('reason', '보증금을 못 받은 사정', { rows: 3, required: true, placeholder: '예) 계약이 만료되어 반환을 요청했으나 임대인이 새 임차인이 구해지면 주겠다며 반환을 미루고 있습니다.' }),
+          {
+            kind: 'aiPrompt', key: 'reason', required: true,
+            eyebrow: '평소 말로 답해주세요',
+            question: '보증금을 왜 못 받고 있나요?',
+            why: '계약 정보와 날짜는 위에서 받았어요. 여기에는 임대인이 뭐라고 하며 미루고 있는지만 적으면 AI가 신청 이유로 정리해요.',
+            placeholder: '예) 계약이 끝나 돌려달라고 했는데 새 세입자가 들어와야 준다며 미루고 있어요.',
+            exampleGroups: [
+              { label: '미루는 이유 추가', items: ['새 세입자가 들어와야 준다고 해요.', '수리비를 빼겠다고 해요.', '돈이 없다고만 해요.'] },
+              { label: '지금 상황 추가', items: ['이사를 가야 하는데 못 가고 있어요.', '연락을 받지 않아요.', '날짜를 정해주지 않아요.'] },
+            ],
+          },
         ],
       },
       attachStep(['임대차계약서 사본', '주민등록등본', '건물 등기사항전부증명서', '내용증명 우편물', '건축물대장'], { citation: true }),
@@ -242,21 +290,20 @@ export const petitionTypes = [
             lines: [
               `1. 신청인은 ${date$(form.contractDate, '3단계에서 계약체결일을 입력해 주세요')} 피신청인과 별지 목록 기재 건물에 관하여 보증금 ${money$(form.deposit, '보증금액')}으로 하는 임대차계약을 체결하고 입주와 전입신고를 마쳤습니다.`,
               `2. 위 임대차는 ${date$(form.endDate, '임대차 종료일')} ${form.endWay ? F(form.endWay) : P('종료 사유')}로 종료되었습니다.`,
-              `3. ${or(form.reason, '3단계에서 사정을 입력해 주세요')}`,
+              `3. ${or(legalNarrative(form.reason), '3단계에서 사정을 입력해 주세요')}`,
               form.stillLiving === '아직 살고 있어요'
                 ? '4. 신청인은 현재까지 위 건물에 거주하고 있으나, 보증금을 반환받지 못한 상태에서 이사할 사정이 있어 대항력과 우선변제권을 유지하기 위하여 이 사건 신청에 이르렀습니다.'
                 : '4. 신청인은 보증금을 반환받지 못한 채 이미 위 건물에서 퇴거하였으므로, 대항력과 우선변제권을 유지하기 위하여 이 사건 신청에 이르렀습니다.',
             ],
           },
         ],
-        attach: (form.attachItems || []).map((a) => `${a}　1통`),
+        attach: attachLines(form, 'attachItems').map((a) => `${a}　1통`),
         // 별지 목록 — 등기 대상 부동산이 특정되어야 등기명령이 나온다
         appendix: { title: '부동산의 표시', body: form.propertyDesc || '' },
         role: '위 신청인(임차인)',
         court: form.court,
         name: form.aName,
         date: today(),
-        signature: form.signature,
       }
     },
   },
@@ -336,12 +383,11 @@ export const petitionTypes = [
             ],
           },
         ],
-        attach: (form.attachItems || []).map((a) => `${a}　1통`),
+        attach: attachLines(form, 'attachItems').map((a) => `${a}　1통`),
         role: '위 채권자',
         court: form.court,
         name: form.aName,
         date: today(),
-        signature: form.signature,
       }
     },
   },
@@ -385,7 +431,17 @@ export const petitionTypes = [
           checks('needReasons', '해당하는 사정을 골라주세요', [
             '재산을 처분하려는 정황이 있어요', '다른 채권자가 이미 집행에 들어갔어요', '연락이 두절됐어요', '변제 능력이 없어 보여요', '사업을 정리하고 있어요',
           ], { required: true }),
-          area('needDetail', '구체적인 사정', { rows: 3, required: true, placeholder: '예) 채무자가 소유 부동산을 급매로 내놓았다는 사실을 중개업소를 통해 확인했습니다.' }),
+          {
+            kind: 'aiPrompt', key: 'needDetail', required: true,
+            eyebrow: '평소 말로 답해주세요',
+            question: '지금 보전하지 않으면 왜 위험한가요?',
+            why: '재산을 빼돌리거나 처분하려는 낌새를 사실대로 적으면 AI가 보전의 필요성으로 정리해요. 들은 경로도 함께 적으면 좋아요.',
+            placeholder: '예) 채무자가 집을 급매로 내놨다고 근처 중개업소에서 들었어요.',
+            exampleGroups: [
+              { label: '처분 낌새 추가', items: ['집을 급매로 내놨다고 들었어요.', '차를 팔았다고 해요.', '가게를 정리하고 있어요.'] },
+              { label: '알게 된 경로 추가', items: ['중개업소에서 들었어요.', '주변 사람에게 들었어요.', '직접 확인했어요.'] },
+            ],
+          },
           radio('security', '담보는 어떻게 제공할까요?', ['공탁보증보험증권', '현금 공탁', '법원 결정에 따르겠음'], { required: true }),
           note('info', '가압류는 상대방에게 손해를 줄 수 있어 담보 제공이 원칙이에요. 보증보험증권을 쓰면 현금 부담이 크게 줄어듭니다.'),
           note('warn', '허위 사실로 가압류하면 나중에 손해배상 책임을 질 수 있어요. 근거 자료로 확인되는 사정만 적어주세요.'),
@@ -399,11 +455,17 @@ export const petitionTypes = [
 
           { kind: 'partyTag', tone: 'brand', tag: '1', desc: '피보전권리(청구채권)와 관련하여' },
           radio('stDebtorAdmits', '채무자가 청구채권을 인정하고 있나요?', ['인정하고 있어요', '다투고 있어요', '아직 모르겠어요'], { required: true }),
-          area('stDebtorClaim', '채무자의 주장 요지', {
-            rows: 2, required: true,
+          {
+            kind: 'aiPrompt', key: 'stDebtorClaim', required: true,
             when: (f) => f.stDebtorAdmits === '다투고 있어요',
-            placeholder: '예) 빌린 것이 아니라 투자금이었다고 주장합니다.',
-          }),
+            eyebrow: '들은 말 그대로 적어주세요',
+            question: '채무자는 뭐라고 하며 다투나요?',
+            why: '진술서는 사실대로 적지 않으면 고쳐 낼 기회 없이 기각될 수 있어요. 들은 말을 그대로 적으면 AI가 주장 요지로 정리해요.',
+            placeholder: '예) 빌린 게 아니라 투자금이었다고 해요.',
+            exampleGroups: [
+              { label: '다투는 내용 추가', items: ['빌린 게 아니라 투자금이라고 해요.', '이미 갚았다고 해요.', '금액이 다르다고 해요.'] },
+            ],
+          },
           text('stConfirmedHow', '채무자의 의사를 언제, 어떤 방법으로 확인했나요?', {
             required: true,
             placeholder: '예) 2026. 5. 3. 내용증명 발송 후 전화 통화',
@@ -415,11 +477,9 @@ export const petitionTypes = [
           }),
 
           { kind: 'partyTag', tone: 'brand', tag: '2', desc: '보전의 필요성과 관련하여' },
-          area('stWhyNeeded', '지금 가압류하지 않으면 왜 집행이 어려워지나요?', {
-            rows: 3, required: true,
-            placeholder: '예) 채무자가 유일한 재산인 아파트를 부동산에 내놓았다는 사실을 이웃에게 들었습니다.',
-            hint: '4단계에서 고른 사정을 구체적인 사실로 풀어 적으세요. 막연한 우려만으로는 부족합니다.',
-          }),
+          // 「왜 지금 묶어야 하나」는 4단계에서 이미 받았다. 진술서 2-가는 같은 사실을
+          // 적는 칸이라 다시 묻지 않고 그 답을 그대로 옮긴다.
+          note('info', '진술서 2-가 항목에는 4단계에서 적으신 사정이 그대로 들어갑니다.'),
           radio('stAmountProper', '신청 금액이 본안에서 승소할 수 있는 금액으로 적정하게 산출된 것인가요?', ['예', '아니오'], { required: true }),
           note('warn', '과다한 금액으로 가압류하면 나중에 손해배상 책임을 질 수 있어요. 실제로 받을 수 있는 범위로 적으세요.', { when: (f) => f.stAmountProper === '아니오' }),
           radio('stDebtorBiz', '채무자가 법인이라면, 지금 영업활동을 하고 있나요?', ['채무자가 법인이 아니에요', '영업 중이에요', '영업하지 않는 것 같아요'], { required: true }),
@@ -478,7 +538,7 @@ export const petitionTypes = [
             lines: [
               `1. 채권자는 ${date$(form.claimDate, '채권 발생일')} 채무자에 대하여 ${money$(form.amount, '금액')}의 ${or(form.claimKind, '청구채권 종류')} 채권을 취득하였습니다.`,
               `2. ${(form.needReasons || []).length ? F(form.needReasons.join(', ')) : P('4단계에서 보전의 필요성을 골라 주세요')}`,
-              `3. ${or(form.needDetail, '4단계에서 구체적 사정을 입력해 주세요')}`,
+              `3. ${or(legalNarrative(form.needDetail), '4단계에서 구체적 사정을 입력해 주세요')}`,
               `4. 따라서 지금 가압류해 두지 않으면 나중에 승소하더라도 집행이 불가능하거나 매우 곤란해질 우려가 있습니다.`,
               form.suitStage === '이미 냈어요'
                 ? `5. 본안 소송은 ${or(form.suitCaseNo, '본안 사건번호')}로 계속 중입니다.`
@@ -487,12 +547,11 @@ export const petitionTypes = [
             ],
           },
         ],
-        attach: (form.attachItems || []).map((a) => `${a}　1통`),
+        attach: attachLines(form, 'attachItems').map((a) => `${a}　1통`),
         role: '위 채권자',
         court: form.court,
         name: form.aName,
         date: today(),
-        signature: form.signature,
         // 가압류는 신청서만으로 부족하다 — 진술서를 별개 서면으로 함께 낸다
         extraDoc: statementDoc(form),
       }
@@ -531,7 +590,7 @@ function statementDoc(form) {
         heading: '2. 보전의 필요성과 관련하여',
         lines: [
           ...q('가', '가압류하지 않으면 향후 강제집행이 불가능하거나 매우 곤란해질 사유는 무엇입니까?',
-            `　　${or(form.stWhyNeeded, '구체적인 사유')}`),
+            `　　${or(legalNarrative(form.needDetail), '4단계에서 구체적 사정을 입력해 주세요')}`),
           ...q('나', '신청서에 기재한 청구금액은 본안소송에서 승소할 수 있는 금액으로 적정하게 산출된 것입니까?',
             `　　${yn(form.stAmountProper, '예')} 예　${yn(form.stAmountProper, '아니오')} 아니오`),
           ...q('다', '(채무자가 법인인 경우) 채무자 법인이 영업활동을 하고 있습니까?',
@@ -563,7 +622,6 @@ function statementDoc(form) {
     court: form.court,
     name: form.aName,
     date: today(),
-    signature: form.signature,
   }
 }
 
@@ -597,5 +655,4 @@ export const emptyPetition = {
   court: '', amount: '',
   aName: '', aRrn: '', aAddr: '', aTel: '', aEmail: '',
   bName: '', bRrn: '', bAddr: '', bTel: '',
-  signature: '',
 }

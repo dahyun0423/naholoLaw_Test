@@ -18,6 +18,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
+import { Check, ChevronDown } from './icons.jsx'
 
 export function cx(...c) {
   return c.filter(Boolean).join(' ')
@@ -267,7 +268,7 @@ export function SearchInput({ icon, className, ...rest }) {
 }
 
 /** Figma 「리스트」 — 드롭다운 안의 한 줄 */
-export function ListRow({ active, onClick, className, children }) {
+export function ListRow({ active, onClick, className, children, ...rest }) {
   return (
     <button
       type="button"
@@ -277,9 +278,108 @@ export function ListRow({ active, onClick, className, children }) {
         active ? 'bg-brand-50 font-medium text-brand-500' : 'text-ink-700 hover:bg-ink-50',
         className,
       )}
+      {...rest}
     >
       {children}
     </button>
+  )
+}
+
+/**
+ * Figma 「드롭다운 과 검색바」 — 값 하나를 고르는 드롭다운.
+ *
+ * 고를 것이 서너 개일 때는 라디오 목록이 낫다. 하지만 목록이 사용자 데이터라
+ * 몇 개가 될지 모르는 자리(내 사건 등)에서는 목록이 화면을 밀어내 버린다.
+ * 그럴 때 쓴다 — 닫혀 있을 때 차지하는 높이가 항상 한 줄이다.
+ *
+ * options: { value, label, desc, disabled }[]
+ */
+export function Dropdown({
+  value, onChange, options = [], placeholder = '선택하세요',
+  disabled, ariaLabel, className, panelClassName,
+}) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef(null)
+  const listId = useId()
+  const selected = options.find((o) => o.value === value) || null
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onDown = (e) => { if (!rootRef.current?.contains(e.target)) setOpen(false) }
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return
+      setOpen(false)
+      rootRef.current?.querySelector('[aria-haspopup="listbox"]')?.focus()
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <div ref={rootRef} className={cx('relative', className)}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        aria-label={ariaLabel}
+        className={cx(
+          'flex w-full items-center gap-3 rounded-lg border bg-white px-4 py-3 text-left transition-colors disabled:opacity-50',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300',
+          open ? 'border-brand-300' : 'border-ink-200 hover:border-ink-300',
+        )}
+      >
+        <span className="min-w-0 flex-1">
+          {selected ? (
+            <>
+              <span className="block truncate text-[14px] font-semibold text-ink-700">{selected.label}</span>
+              {selected.desc && <span className="block truncate text-[12px] text-ink-400">{selected.desc}</span>}
+            </>
+          ) : (
+            <span className="block truncate text-[14px] text-ink-300">{placeholder}</span>
+          )}
+        </span>
+        <ChevronDown size={18} className={cx('shrink-0 text-ink-400 transition-transform', open && 'rotate-180')} />
+      </button>
+
+      {open && (
+        <div
+          id={listId}
+          role="listbox"
+          className={cx(
+            'absolute inset-x-0 top-[calc(100%+6px)] z-30 max-h-[264px] overflow-y-auto rounded-xl border border-ink-200 bg-white py-1.5 shadow-xl',
+            panelClassName,
+          )}
+        >
+          {options.map((o) => {
+            const on = o.value === value
+            return (
+              <ListRow
+                key={o.value}
+                role="option"
+                aria-selected={on}
+                disabled={o.disabled}
+                active={on}
+                onClick={() => { onChange?.(o.value); setOpen(false) }}
+                className="gap-3 py-2.5"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className={cx('block truncate text-[14px] font-semibold', on ? 'text-brand-500' : 'text-ink-700')}>{o.label}</span>
+                  {o.desc && <span className={cx('block truncate text-[12px]', on ? 'text-brand-400' : 'text-ink-400')}>{o.desc}</span>}
+                </span>
+                {on && <Check size={16} className="shrink-0 text-brand-400" />}
+              </ListRow>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }
 

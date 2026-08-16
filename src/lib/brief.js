@@ -4,10 +4,10 @@
 // 이어야 맞다. 소장처럼 "유형 선택 → 필드 입력"이 아니다.
 
 import { citationLines } from './citation.js'
-import { fmtDate } from './complaint.js'
+import { fmtDate, spaceName } from './complaint.js'
 import {
-  text, money, date, area, select, radio, checks, note, files, signature, repeat,
-  F, P, or, date$, today, filled, completenessOf, summaryOf,
+  text, money, date, area, select, radio, checks, note, files, repeat,
+  F, P, or, date$, today, filled, legalNarrative, completenessOf, summaryOf,
 } from './docschema.js'
 
 /* 소송 진행 단계 — 이게 준비서면의 성격을 정한다 */
@@ -79,9 +79,18 @@ export const briefSteps = [
   {
     title: '어떤 사건의 준비서면인가요?',
     hint: '이미 작성한 소장이 있으면 불러와서 당사자·사건 정보를 그대로 씁니다.',
+    tips: [
+      ['상대방이 기일에 안 나오면', '준비서면에 적어 두지 않은 내용은 그날 말할 수 없어요 (민사소송법 제276조).'],
+      ['하고 싶은 말은', '미리 다 적어 두세요.'],
+    ],
     fields: [
       { kind: 'caseLoader' },
       { kind: 'court', key: 'court', label: '법원', required: true },
+      // 준비서면은 이미 재판부가 정해진 사건에 낸다. 법원 서식도 「○○지방법원 제12민사단독 귀중」까지 적는다.
+      text('courtDept', '재판부 (있으면)', {
+        half: true, placeholder: '예: 제12민사단독 / 제3민사부',
+        hint: '법원에서 받은 기일통지서나 전자소송 사건 화면에 적혀 있어요. 모르면 비워두셔도 됩니다.',
+      }),
       text('caseNo', '사건번호', { required: true, half: true, placeholder: '2026가단123456' }),
       text('caseName', '사건명', { half: true, placeholder: '대여금' }),
       text('plaintiff', '원고', { required: true, half: true, placeholder: '홍길동' }),
@@ -93,13 +102,16 @@ export const briefSteps = [
         info: '적시제출주의(민사소송법 제146조·제147조) — 재판장이 정한 기간을 넘기면 정당한 사유가 없는 한 주장을 더 내거나 증거를 신청할 수 없어요.',
       }),
       { kind: 'stageAdvice' },
-      note('warn', '상대방이 변론기일에 나오지 않으면, **준비서면에 적어 두지 않은 내용은 그날 말할 수 없어요.** 하고 싶은 말은 미리 다 적어 두세요. (민사소송법 제276조)'),
       text('round', '준비서면 회차', { half: true, placeholder: '예: 준비서면(1)' }),
       date('dueDate', '제출 기한 / 다음 변론기일', { half: true }),
     ],
   },
   {
     title: '상대방은 뭐라고 했나요?',
+    tips: [
+      ['포털에서 내려받아', '여기 올리고 본문을 붙여넣으면 항변을 찾아 드려요.'],
+      ['상대방이 인정한 것', '까지 적어 두면 쟁점이 줄어 재판이 빨라집니다.'],
+    ],
     hint: '전자소송이면 서류가 올라올 때 이메일·문자로 알려 줍니다. 포털에서 내려받아 여기 올리고, 본문을 붙여넣으면 항변을 찾아 드려요.',
     fields: [
       select('opponentDoc', '상대방이 낸 서면', ['답변서', '준비서면(1)', '준비서면(2)', '증거설명서', '기타'], {
@@ -111,47 +123,95 @@ export const briefSteps = [
         info: '전자송달은 **포털에서 열어 본 때** 송달된 것으로 봅니다. 다만 등재 통지일부터 **1주 안에 열지 않으면 1주가 지난 날 송달된 것으로 처리**돼요(전자문서법 제11조 제4항). 기한은 이 날짜부터 셉니다.',
       }),
       files('opponentFiles', '받은 서면 파일', {
+        role: 'reference',
         info: '포털에서 내려받은 PDF를 올려 두면 사건에 함께 보관됩니다. 파일 자체를 읽어 분석하지는 않아요 — 분석은 아래에 본문을 붙여넣으면 됩니다.',
       }),
       { kind: 'opponentAnalyzer' },
-      area('opponentClaim', '상대방 주장 요약', {
-        rows: 4, required: true,
-        placeholder: '예) 피고는 원고로부터 돈을 빌린 사실이 없고, 받은 돈은 투자금이었다고 주장합니다.',
-      }),
+      {
+        // 상대방 서면을 읽고 옮겨 적는 자리다. 요약을 법률 문장으로 쓰라고 하면
+        // 대부분 서면을 그대로 복사해 붙이고, 그러면 반박할 쟁점이 드러나지 않는다.
+        kind: 'aiPrompt', key: 'opponentClaim', required: true,
+        eyebrow: '읽은 대로 평소 말로 적어주세요',
+        question: '상대방이 뭐라고 주장하던가요?',
+        why: '항변 종류는 아래에서 골라요. 여기에는 상대방 서면에 적힌 말을 읽은 대로만 적으면 AI가 주장 요지로 정리해요.',
+        placeholder: '예) 돈을 빌린 적이 없고 받은 건 투자금이었다고 해요.',
+        exampleGroups: [
+          { label: '부인 추가', items: ['빌린 적이 없다고 해요.', '그런 계약을 한 적이 없다고 해요.', '자기가 한 일이 아니라고 해요.'] },
+          { label: '다른 주장 추가', items: ['받은 돈은 투자금이었다고 해요.', '이미 다 갚았다고 해요.', '금액이 그만큼은 아니라고 해요.'] },
+        ],
+      },
       checks('defenses', '상대방이 든 항변을 골라주세요', Object.keys(defenses), { required: true }),
       { kind: 'defenseAdvice' },
-      area('admitted', '상대방이 인정한 부분', { rows: 2, placeholder: '다툼 없는 사실을 적어두면 쟁점이 줄어듭니다. 예) 3,000만원을 이체받은 사실은 인정' }),
+      {
+        kind: 'aiPrompt', key: 'admitted',
+        eyebrow: '인정한 부분이 있으면 적어주세요 (선택)',
+        question: '상대방이 맞다고 인정한 부분이 있나요?',
+        why: '다툼 없는 사실을 먼저 갈라내면 재판부가 볼 쟁점이 줄어들어요. 없으면 비워두셔도 됩니다.',
+        placeholder: '예) 3,000만원을 받은 사실은 맞다고 해요.',
+        exampleGroups: [
+          { label: '인정 내용 추가', items: ['돈을 받은 사실은 맞다고 해요.', '계약서에 서명한 건 맞다고 해요.', '날짜와 금액은 다투지 않아요.'] },
+        ],
+      },
+    ],
+  },
+  {
+    title: '증거 · 판례 첨부',
+    tips: [
+      ['판례는 파일이 아니라', '본문 「관련 법리」에 사건번호와 요지만 적습니다.'],
+      ['준비서면 본문은', '우리가 만들어 드려요. 전자소송에 한글·PDF로 첨부해 내면 됩니다 (전자문서규칙 제11조 제1항).'],
+      ['낼 때 돈은', '따로 들지 않아요 — 소장 낼 때 넣어 둔 송달료에서 나갑니다.'],
+    ],
+    fields: [
+      // 소장과 같은 업로드 양식이다 — 올린 파일의 이름이 곧 서증명이 되고,
+      // 이어서 매길 호증 번호는 목록 바로 위에서 보여 주고 거기서 고친다.
+      files('newEvidence', '이번에 함께 낼 증거', {
+        startFrom: 'evidenceStart',
+        info: '올린 순서대로 호증 번호가 붙고, 파일 이름이 그대로 입증방법란의 서증명이 됩니다.',
+      }),
+      { kind: 'citation', key: 'citations' },
     ],
   },
   {
     title: '어떤 부분을 반박하나요?',
     hint: '쟁점 하나당 한 묶음으로 적으면 그대로 준비서면의 항목이 됩니다.',
+    tips: [
+      ['쟁점마다', '상대방 주장 → 나의 반박 → 근거 한 세트로 적으면 그대로 항목이 됩니다.'],
+      ['문장은 평소 말로', '적으셔도 돼요 — AI가 서면 문장으로 정리합니다.'],
+    ],
     fields: [
       repeat('rebuttals', '반박 포인트', [
-        { key: 'claim', label: '상대방 주장', kind: 'area', rows: 2, placeholder: '예) 받은 돈은 투자금이었다' },
-        { key: 'answer', label: '나의 반박', kind: 'area', rows: 3, placeholder: '예) 이체 당시 “빌려준다”는 문자를 보냈고, 원리금 상환 계획까지 주고받았습니다.' },
-        { key: 'evidence', label: '근거 증거', placeholder: '예: 갑 제3호증 문자메시지 사본' },
-        { key: 'citation', label: '인용 판례 (선택)', placeholder: '예: 대법원 2020다112233 — 4단계에서 고르면 사건번호가 보입니다' },
+        { key: 'claim', label: '상대방은 뭐라고 하나요?', kind: 'area', rows: 2, placeholder: '예) 받은 돈은 투자금이었다고 해요.' },
+        { key: 'answer', label: '어디가 사실과 다른가요?', kind: 'area', rows: 3, placeholder: '예) 보낼 때 빌려준다고 문자로 말했고, 언제까지 갚을지도 정했어요.' },
+        {
+          key: 'evidence', label: '무엇으로 보여줄 수 있나요?', kind: 'pick',
+          placeholder: '증거를 고르세요',
+          empty: '앞 단계에서 증거 파일을 올리면 여기에서 고를 수 있어요.',
+          options: (f) => {
+            const start = Math.max(1, Number(f.evidenceStart) || 1)
+            const mark = f.side === '피고' ? '을' : '갑'
+            return (f.newEvidence || []).filter((e) => e.name).map((e, i) => `${mark} 제${start + i}호증 ${e.name}`)
+          },
+        },
+        {
+          key: 'citation', label: '인용 판례 (선택)', kind: 'pick',
+          placeholder: '판례를 고르세요',
+          empty: '앞 단계에서 판례를 고르면 여기에서 선택할 수 있어요. 판례 검색에서 「내 문서에 인용」으로 담아 두면 목록에 나옵니다.',
+          options: (f) => (f.citations || []).map((c) => (typeof c === 'string' ? c : `${c.no}${c.title ? ` ${c.title}` : ''}`)),
+        },
       ], {
         required: true, itemLabel: '쟁점', addLabel: '반박 포인트 추가', empty: '반박할 쟁점을 하나씩 추가해 주세요.',
-        info: '“상대방 주장 → 반박 → 근거”를 한 세트로 쓰면 재판부가 읽기 쉬워요. 감정적인 표현은 빼고 사실과 법리만 적으세요.',
+        info: '감정적인 표현은 빼고 있었던 일과 자료만 적으세요. 재판부가 읽는 것은 사실과 근거입니다.',
       }),
-      area('conclusion', '결론', { rows: 2, placeholder: '비워두면 “원고의 청구는 이유 있으므로 인용되어야 합니다.”로 들어갑니다.' }),
-    ],
-  },
-  {
-    title: '증거 · 판례 첨부',
-    fields: [
-      repeat('newEvidence', '추가로 낼 증거', [
-        { key: 'name', label: '서증명', placeholder: '예: 문자메시지 사본' },
-        { key: 'purpose', label: '입증취지', placeholder: '예: 대여 사실을 입증' },
-      ], { itemLabel: '증거', addLabel: '증거 추가', empty: '이번 준비서면과 함께 낼 증거가 있으면 추가하세요.' }),
-      text('evidenceStart', '이어서 매길 호증 번호', { half: true, placeholder: '예: 4 (갑 제4호증부터)' }),
-      { kind: 'citation', key: 'citations' },
-      files('briefFiles', '파일 업로드', {
-        info: '판례는 파일로 올리지 않아요 — 증거도 첨부서류도 아니라서 본문 「관련 법리」에 사건번호와 요지만 적으면 됩니다.\n준비서면 자체는 전자소송에서 한글·PDF로 첨부해 낼 수 있어요. (전자문서규칙 제11조 제1항)\n제출할 때 돈은 따로 들지 않습니다 — 소장 낼 때 넣어 둔 송달료에서 나가요.',
-      }),
-      { ...signature(), info: '준비서면에는 기명날인 또는 서명이 필요해요(민사소송법 제274조 제1항). 전자소송은 제출할 때 공동인증서 전자서명으로 갈음합니다.' },
+      {
+        kind: 'aiPrompt', key: 'conclusion',
+        eyebrow: '마무리로 하고 싶은 말이 있으면 적어주세요 (선택)',
+        question: '재판부에 마지막으로 강조하고 싶은 것이 있나요?',
+        why: '비워두면 “원고의 청구는 이유 있으므로 인용되어야 합니다.”로 들어갑니다.',
+        placeholder: '예) 상대방 주장은 어느 것도 자료로 뒷받침되지 않았어요.',
+        exampleGroups: [
+          { label: '마무리 추가', items: ['상대방 주장은 자료로 뒷받침되지 않았어요.', '제출한 증거로 사실이 충분히 확인돼요.', '조속한 판단을 구하고 싶어요.'] },
+        ],
+      },
     ],
   },
 ]
@@ -171,11 +231,13 @@ export function buildBrief(form) {
     const when = form.opponentDate ? `${fmtDate(form.opponentDate)}자 ` : ''
     lines.push(`　　${other}는 ${F(when + form.opponentDoc)}에서 다음과 같이 주장합니다.`)
   }
-  lines.push(`　　${or(form.opponentClaim, '2단계에서 상대방 주장을 입력해 주세요')}`)
+  lines.push(`　　${or(legalNarrative(form.opponentClaim), '2단계에서 상대방 주장을 입력해 주세요')}`)
   if ((form.defenses || []).length) {
     lines.push(`　　이는 ${F(form.defenses.join(', '))}에 해당합니다.`)
   }
-  if (form.admitted) lines.push(`　　다만 ${F(form.admitted)}는 점은 당사자 사이에 다툼이 없습니다.`)
+  // 사용자가 적는 것은 완결된 문장이다. 「~는 점은」으로 이으면 「맞다고 합니다는 점은」이
+  // 되므로 문장을 끊고 이어 받는다.
+  if (form.admitted) lines.push(`　　다만 ${F(legalNarrative(form.admitted))} 이 점은 당사자 사이에 다툼이 없습니다.`)
 
   lines.push('')
   lines.push(`2. ${side}의 반박`)
@@ -183,8 +245,8 @@ export function buildBrief(form) {
     lines.push(`　　${P('3단계에서 반박 포인트를 추가해 주세요')}`)
   } else {
     rebuttals.forEach((r, i) => {
-      lines.push(`　가. 쟁점 ${i + 1} — ${or(r.claim, '상대방 주장')}`)
-      lines.push(`　　　${or(r.answer, '반박 내용')}`)
+      lines.push(`　가. 쟁점 ${i + 1} — ${or(legalNarrative(r.claim), '상대방 주장')}`)
+      lines.push(`　　　${or(legalNarrative(r.answer), '반박 내용')}`)
       if (r.evidence) lines.push(`　　　(근거 : ${F(r.evidence)})`)
       if (r.citation) lines.push(`　　　(참조 : ${F(r.citation)})`)
     })
@@ -204,14 +266,14 @@ export function buildBrief(form) {
 
   lines.push('')
   lines.push(`${cites.length ? '4' : '3'}. 결론`)
-  lines.push(`　　${form.conclusion ? F(form.conclusion) : `그러므로 ${side}의 주장은 이유 있으므로 받아들여져야 합니다.`}`)
+  lines.push(`　　${form.conclusion ? F(legalNarrative(form.conclusion)) : `그러므로 ${side}의 주장은 이유 있으므로 받아들여져야 합니다.`}`)
 
   return {
     docTitle: form.round ? `준 비 서 면 ${form.round.replace(/^준비서면/, '').trim() || ''}`.trim() : '준 비 서 면',
     header: [
       `사　건　${or(form.caseNo, '1단계에서 사건번호를 입력해 주세요')} ${form.caseName || ''}`,
-      `원　고　${or(form.plaintiff, '원고')}`,
-      `피　고　${or(form.defendant, '피고')}`,
+      `원　고　${or(spaceName(form.plaintiff), '원고')}`,
+      `피　고　${or(spaceName(form.defendant), '피고')}`,
       // 민사소송법 제274조 제1항 제2호 — 대리인의 성명과 주소
       ...(form.agent ? [`${side} 대리인　${F(form.agent)}`] : []),
     ],
@@ -225,12 +287,12 @@ export function buildBrief(form) {
           : ['필요한 경우 변론기일에 추가 증거를 제출하겠습니다.'],
       },
     ],
-    attach: ['준비서면 부본　1통', ...(evidences.length ? ['위 입증방법　각 1통'] : [])],
+    // 법원 서식은 「위 입증방법」을 먼저 적고 부본을 뒤에 둔다 (소장도 같은 순서)
+    attach: [...(evidences.length ? ['위 입증방법　각 1통'] : []), '준비서면 부본　1통'],
     role: `위 ${side}`,
-    court: form.court,
-    name: side === '원고' ? form.plaintiff : form.defendant,
+    court: [form.court, form.courtDept].filter(Boolean).join(' '),
+    name: spaceName(side === '원고' ? form.plaintiff : form.defendant),
     date: today(),
-    signature: form.signature,
   }
 }
 
@@ -240,8 +302,8 @@ export const briefSummary = (i, form) => summaryOf(briefSteps[i], form)
 export const emptyBrief = {
   opponentText: '', opponentFiles: [],
   court: '', caseNo: '', caseName: '', plaintiff: '', defendant: '',
-  side: '원고', stage: '', round: '', dueDate: '',
+  side: '원고', stage: '', round: '', dueDate: '', courtDept: '',
   opponentDoc: '', opponentDate: '', opponentClaim: '', defenses: [], admitted: '',
   rebuttals: [], conclusion: '',
-  newEvidence: [], evidenceStart: '', citations: [], signature: '',
+  newEvidence: [], evidenceStart: '', citations: [],
 }

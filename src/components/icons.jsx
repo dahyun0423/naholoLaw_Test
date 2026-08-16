@@ -64,6 +64,20 @@ export const Book = make(<><path d="M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2V5Z"
 export const FileText = make(<><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" /><path d="M14 3v5h5" /><path d="M9 13h6M9 17h6" /></>)
 export const Printer = make(<><path d="M6 9V3h12v6" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><path d="M6 14h12v7H6z" /></>)
 export const Folder = make(<><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" /></>)
+/**
+ * Figma 「최근 생성 문서」 줄머리 폴더 — 면 blue100 · 선 blue200. 26×18 그대로.
+ * 도형이 26×18을 꽉 채우므로 viewBox를 0.5씩 넓힌다 — 안 그러면 테두리 절반이 잘려 선이 사라진다.
+ */
+export const DocFolder = ({ className = '', ...rest }) => (
+  <svg width="26" height="18" viewBox="-0.5 -0.5 27 19" fill="none" className={className} aria-hidden {...rest}>
+    <path
+      d="M8.93457 0C9.97905 8.80081e-05 10.9976 0.327196 11.8467 0.935547C12.4823 1.3915 13.2449 1.63672 14.0272 1.63672H21C23.7614 1.63672 26 3.8753 26 6.63672V13C26 15.7614 23.7614 18 21 18H5C2.23858 18 0 15.7614 0 13V1.87633C0 1.744 0.107278 1.63672 0.239611 1.63672C0.327287 1.63672 0.407336 1.58842 0.452776 1.51343C1.00245 0.606397 1.9987 0 3.13672 0H8.93457Z"
+      className="fill-brand-100 stroke-brand-200"
+      strokeWidth="1"
+    />
+  </svg>
+)
+
 export const Bell = make(<><path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z" /><path d="M10 19a2 2 0 0 0 4 0" /></>)
 export const Calendar = make(<><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 9h18M8 3v4M16 3v4" /></>)
 export const Search = make(<><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></>)

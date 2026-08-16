@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useToast } from '../context/ToastContext.jsx'
 import { Card, Badge, cx } from './ui.jsx'
-import { GenericPaper, PickList, WizardShell, CitationPicker, Note } from './docform.jsx'
+import { GenericPaper, DocumentDoneView, GenerateNotice, SaveDecision, TipCard, fileTipsFor, josa, PickList, WizardShell, CitationPicker, Note } from './docform.jsx'
 import { Lightbulb } from './icons.jsx'
 import { useWorkspace } from '../context/WorkspaceContext.jsx'
 import { won, savedAgo } from '../lib/complaint.js'
@@ -11,6 +11,37 @@ import {
   petitionTypes, findPetition, petitionCompleteness, petitionSummary,
   paymentOrderCost, emptyPetition, buildPetition,
 } from '../lib/petition.js'
+
+const addressFrom = (form, key) => [form?.[key], form?.[`${key}Detail`]].filter(Boolean).join(' ')
+
+const petitionDefaultsFromCase = (caseItem) => {
+  const source = caseItem?.form || {}
+  if (!caseItem) return emptyPetition
+  return {
+    ...emptyPetition,
+    court: source.court || '',
+    caseNo: caseItem.caseNo || '',
+    caseName: caseItem.title || '',
+    amount: source.amount || '',
+    aName: source.pName || '',
+    aRrn: source.pRrn || '',
+    aAddr: addressFrom(source, 'pAddr'),
+    aTel: source.pTel || '',
+    aEmail: source.pEmail || '',
+    bName: source.dName || '',
+    bRrn: source.dRrn || '',
+    bAddr: addressFrom(source, 'dAddr'),
+    bTel: source.dTel || '',
+    propertyDesc: addressFrom(source, 'propertyAddr'),
+    deposit: source.depositAmount || '',
+    rent: source.rent || source.monthlyRent || '',
+    contractDate: source.contractDate || '',
+    moveIn: source.leaseStart || '',
+    endDate: source.leaseEnd || '',
+    endWay: source.endWay || '',
+    reason: source.refuseDetail || '',
+  }
+}
 
 function makePetitionExtras(typeKey, cited) {
   return function petitionExtras(f, form, setField) {
@@ -84,21 +115,48 @@ function makePetitionExtras(typeKey, cited) {
   }
 }
 
-function Writer({ typeKey, onBack }) {
+/** 완성 뒤에 할 일 — 신청서는 접수처와 비용이 문서마다 다르다 */
+const PETITION_NEXT = [
+  ['전자소송포털에서', '「민사 → 신청서」로 접수합니다. 그 사건에 전자소송 동의를 이미 했어야 해요.'],
+  ['첨부서류는', '체크한 목록 그대로 함께 올립니다. 빠지면 보정명령이 옵니다.'],
+  ['종이로 낼 때는', '출력본 말미 「(인)」 자리에 서명하거나 도장을 찍고, 2장 이상이면 간인하세요.'],
+]
+
+function Writer({ typeKey, onBack, onExit }) {
   const toast = useToast()
-  const { citedList, activeCaseId, attachDoc } = useWorkspace()
+  const { citedList, activeCaseId, activeRaw, attachDoc } = useWorkspace()
   const type = findPetition(typeKey)
+  const draftKey = `petition_${typeKey}_${activeCaseId || 'unlinked'}`
   // 신청서도 종류별로 초안을 남긴다
-  const [form, setForm] = useState(() => loadFormDraft(`petition_${typeKey}`)?.form || emptyPetition)
+  const [form, setForm] = useState(() => loadFormDraft(draftKey)?.form || petitionDefaultsFromCase(activeRaw))
   const [open, setOpen] = useState(0)
-  const [savedAt, setSavedAt] = useState(loadFormDraft(`petition_${typeKey}`)?.savedAt || null)
+  const [savedAt, setSavedAt] = useState(loadFormDraft(draftKey)?.savedAt || null)
   const [saveFailed, setSaveFailed] = useState(false)
+  // 소장·준비서면·증거목록과 같은 마무리
+  const [phase, setPhase] = useState(null)
+  useEffect(() => {
+    if (phase !== 'generating' && phase !== 'ready') return undefined
+    const next = phase === 'generating' ? 'ready' : 'full'
+    const id = setTimeout(() => setPhase(next), phase === 'generating' ? 1600 : 1100)
+    return () => clearTimeout(id)
+  }, [phase])
+
+  /** 사건에 저장한다 — 이때만 새 버전을 남긴다 */
+  const savePetition = () => {
+    if (!activeCaseId) return false
+    attachDoc(activeCaseId, {
+      kind: 'petition', docId: `petition_${typeKey}`,
+      title: type.title, progress: petitionCompleteness(type, form),
+      newVersion: true,
+    })
+    return true
+  }
   const first = useRef(true)
 
   useEffect(() => {
     if (first.current) { first.current = false; return }
     const t = setTimeout(() => {
-      if (saveFormDraft(`petition_${typeKey}`, form)) { setSavedAt(Date.now()); setSaveFailed(false) }
+      if (saveFormDraft(draftKey, form, { caseId: activeCaseId })) { setSavedAt(Date.now()); setSaveFailed(false) }
       else setSaveFailed(true)
       // 사건관리에서 "이 사건의 문서"로 보이도록 붙여 둔다
       if (activeCaseId) {
@@ -109,26 +167,59 @@ function Writer({ typeKey, onBack }) {
       }
     }, 600)
     return () => clearTimeout(t)
-  }, [form, typeKey, type, activeCaseId, attachDoc])
+  }, [form, typeKey, type, activeCaseId, attachDoc, draftKey])
 
   const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }))
   const percent = useMemo(() => petitionCompleteness(type, form), [type, form])
   const doc = useMemo(() => buildPetition(type, form), [type, form])
   const extras = useMemo(() => makePetitionExtras(typeKey, citedList), [typeKey, citedList])
+  const stepsWithAi = useMemo(() => type.steps.map((step, index) => ({
+    ...step,
+    guided: false,
+    badge: index === 0 ? '사건 정보 자동 채움' : 'AI가 문서화',
+    aiAssist: index > 0,
+  })), [type])
+
+  // 다 만들면 작성 화면 대신 완성 화면을 그린다 — 모달로 덮지 않는다
+  if (phase === 'full') {
+    return (
+      <DocumentDoneView
+        title={`AI가 정리한 ${type.title}`}
+        badge={type.title}
+        sub="답한 사실을 이 신청서의 신청취지·신청이유와 법원 제출 양식으로 정리했습니다."
+        onEdit={() => setPhase(null)}
+        onExit={onExit}
+        aside={(
+          <>
+            <SaveDecision
+              docName={type.title}
+              caseTitle={activeRaw?.title}
+              caseId={activeCaseId}
+              onSave={savePetition}
+            />
+            <TipCard title="이제 이렇게 하시면 돼요" items={PETITION_NEXT} />
+          </>
+        )}
+      >
+        <GenericPaper doc={doc} />
+      </DocumentDoneView>
+    )
+  }
 
   return (
+    <>
     <WizardShell
       onSave={() => {
-        if (saveFormDraft(`petition_${typeKey}`, form)) { setSavedAt(Date.now()); toast('작성 중인 내용을 저장했습니다') }
+        if (saveFormDraft(draftKey, form, { caseId: activeCaseId })) { setSavedAt(Date.now()); toast('작성 중인 내용을 저장했습니다') }
         else toast('저장에 실패했습니다. 브라우저 저장공간을 확인해 주세요', 'error')
       }}
       savedLabel={saveFailed ? '⚠ 자동저장 실패 — 브라우저 저장공간을 확인하세요' : savedAt ? `${savedAgo(savedAt)} 저장됨` : ''}
       title="신청서 작성"
       badge={type.title}
-      sub="왼쪽에 입력하는 내용이 오른쪽 신청서에 바로 반영됩니다."
+      sub={activeRaw ? `「${activeRaw.title || '선택한 사건'}」의 법원·당사자 정보를 불러왔어요. 남은 사실만 평소 말로 답하면 AI가 신청서 형식으로 정리합니다.` : '필요한 사실만 평소 말로 답하면 AI가 신청서 형식으로 정리합니다.'}
       stage={1}
       stageLabels={['신청 목적 선택', '정보 입력', '검토·생성']}
-      steps={type.steps}
+      steps={stepsWithAi}
       open={open}
       setOpen={setOpen}
       form={form}
@@ -136,26 +227,37 @@ function Writer({ typeKey, onBack }) {
       renderExtra={extras}
       stepSummary={(i) => petitionSummary(type, i, form)}
       percent={percent}
+      showPreview={false}
+      splitNavigation
       previewTitle="신청서 미리보기"
       preview={<GenericPaper doc={doc} />}
       printable={<GenericPaper doc={doc} />}
       onBack={onBack}
-      onDone={() => toast(`${type.title} 초안이 완성되었습니다`, 'success')}
+      onDone={() => setPhase('generating')}
       doneLabel="신청서 완성하기"
-      extraPanel={
-        <Card className="flex gap-2.5 p-4">
-          <Lightbulb size={16} className="mt-0.5 shrink-0 text-brand-400" />
-          <p className="text-[13px] leading-relaxed text-ink-600">{type.intro}</p>
-        </Card>
-      }
+      sideNote={(
+        <>
+          <TipCard title={`${type.title}${josa(type.title, '은', '는')} 이런 문서예요`} items={[['', type.intro]]} />
+          <TipCard title={`${type.steps[open]?.title || '이 단계'}에서 알아둘 것`} items={type.steps[open]?.tips} />
+          <TipCard title="파일에 대해" items={fileTipsFor(type.steps[open])} />
+        </>
+      )}
     />
+    {(phase === 'generating' || phase === 'ready') && (
+      <GenerateNotice
+        done={phase === 'ready'}
+        doc={type.title}
+        workingSub="답한 사실을 신청취지·신청이유로 정리하고 있어요"
+      />
+    )}
+    </>
   )
 }
 
 export default function PetitionWizard({ onExit }) {
   const [typeKey, setTypeKey] = useState(null)
 
-  if (typeKey) return <Writer typeKey={typeKey} onBack={() => setTypeKey(null)} />
+  if (typeKey) return <Writer typeKey={typeKey} onBack={() => setTypeKey(null)} onExit={onExit} />
 
   return (
     <PickList
