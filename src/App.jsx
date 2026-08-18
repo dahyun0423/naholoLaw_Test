@@ -23,6 +23,7 @@ import Guide from './pages/Guide.jsx'
 import MyPage from './pages/MyPage.jsx'
 import FigmaComplaintResult from './pages/FigmaComplaintResult.jsx'
 import FigmaComplaintInput from './pages/FigmaComplaintInput.jsx'
+import FigmaDocResult, { FigmaDocIndex } from './pages/FigmaDocResult.jsx'
 
 function FigmaCaptureBridge() {
   useEffect(() => {
@@ -81,6 +82,10 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/figma/complaint-result/:caseId" element={<FigmaComplaintResult />} />
+        {/* 준비서면·증거목록·신청서 완성 화면 — 사건별 한 장씩 (목록은 /figma/docs) */}
+        <Route path="/figma/docs" element={<FigmaDocIndex />} />
+        <Route path="/figma/doc/:kind/:caseId" element={<FigmaDocResult />} />
+        <Route path="/figma/doc/:kind/:caseId/:variant" element={<FigmaDocResult />} />
 
         <Route path="/app" element={<AppLayout />}>
           <Route index element={<Navigate to="/app/dashboard" replace />} />

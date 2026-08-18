@@ -185,7 +185,7 @@ const readAlertIds = () => {
 function Topbar({ onMenu }) {
   const { user } = useAuth()
   const { rawCases } = useWorkspace()
-  const displayUser = user || { name: '김지민', email: 'example@gmail.com' }
+  const displayUser = user || { name: '홍길동', email: 'example@gmail.com' }
   const [open, setOpen] = useState(false)
   // 알림은 따로 저장하지 않는다 — 사건에 적힌 기일·기한에서 그때그때 만든다.
   // 알림 관리 화면과 같은 함수를 쓰므로 종 배지와 목록이 어긋나지 않는다.

@@ -17,7 +17,7 @@ const baseForm = (typeKey) => ({
   claimKind: '재산권상 청구',
   sueValueKind: typeKey === 'evict' ? '토지 등의 평가액' : '금액',
   amount: amounts[typeKey] || '10000000',
-  pName: '김지민',
+  pName: '홍길동',
   pRrn: '900101-2345678',
   pAddr: '서울특별시 강남구 테헤란로 123',
   pAddrDetail: '101동 1001호',

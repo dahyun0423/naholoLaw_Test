@@ -11,14 +11,17 @@ import { dayOffset } from './mock.js'
 
 /* ─────────────────── 준비서면 ─────────────────── */
 
-const briefs = {
+export const demoBriefs = {
   // 임대차 — 상대방이 원상회복비 공제와 동시이행을 들고 나왔다
   'demo-lease-case': {
     court: '서울중앙지방법원', courtDept: '제12민사단독',
     caseNo: '2024가단123456', caseName: '임대차보증금',
-    plaintiff: '김지민', defendant: '이현우', side: '원고',
+    plaintiff: '홍길동', defendant: '김철수', side: '원고',
     stage: '상대방 준비서면을 또 받았어요', round: '준비서면(2)', dueDate: dayOffset(4),
     opponentDoc: '준비서면(1)', opponentDate: dayOffset(-11),
+    opponentFiles: [
+      { id: 'lease-op-1', name: '피고 준비서면(1)', fileName: '피고_준비서면1_원상회복.pdf', size: 486_000, type: 'application/pdf' },
+    ],
     opponentClaim: '피고는 제가 나갈 때 도배랑 장판을 다 망가뜨려 놨다고 합니다. 그래서 120만원을 빼고 주는 게 맞다고 해요. 그리고 보증금은 원래 이사 나간 다음에 천천히 줘도 되는 거라고 합니다.',
     defenses: ['공제 주장 (원상회복비 등)', '동시이행 항변'],
     admitted: '보증금 1,000만원을 받은 사실과 계약이 2026년 1월 1일에 끝난 건 피고도 맞다고 인정합니다.',
@@ -49,9 +52,12 @@ const briefs = {
   'demo-crash-case': {
     court: '서울북부지방법원', courtDept: '제3민사단독',
     caseNo: '2025가단334455', caseName: '손해배상(자)',
-    plaintiff: '한지우', defendant: '오세훈', side: '원고',
+    plaintiff: '홍길동', defendant: '김철수', side: '원고',
     stage: '상대방 답변서를 받았어요', round: '준비서면(1)', dueDate: dayOffset(-6),
     opponentDoc: '답변서', opponentDate: dayOffset(-21),
+    opponentFiles: [
+      { id: 'crash-op-1', name: '피고 답변서', fileName: '피고_답변서_과실비율.pdf', size: 512_000, type: 'application/pdf' },
+    ],
     opponentClaim: '피고는 제가 과속을 해서 사고가 커졌다고 합니다. 과실이 3대 7이라고 하면서 배상액을 깎아야 한다고 해요. 치료비도 너무 많이 나왔다고 합니다.',
     defenses: ['과실상계 주장'],
     admitted: '사고가 난 날짜와 장소, 피고가 중앙선을 넘은 사실은 피고도 다투지 않습니다.',
@@ -75,9 +81,12 @@ const briefs = {
   'demo-loan-case': {
     court: '서울동부지방법원', courtDept: '제5민사단독',
     caseNo: '2024가소445566', caseName: '대여금',
-    plaintiff: '최도윤', defendant: '정민수', side: '원고',
+    plaintiff: '홍길동', defendant: '김철수', side: '원고',
     stage: '상대방 답변서를 받았어요', round: '준비서면(1)', dueDate: dayOffset(-26),
     opponentDoc: '답변서', opponentDate: dayOffset(-30),
+    opponentFiles: [
+      { id: 'loan-op-1', name: '피고 답변서', fileName: '피고_답변서_대여금부인.pdf', size: 344_000, type: 'application/pdf' },
+    ],
     opponentClaim: '피고는 그 돈이 빌린 게 아니라 동아리 후배한테 그냥 준 거라고 합니다. 그리고 이미 100만원을 갚았으니 남은 것도 다 정리된 걸로 알고 있다고 해요.',
     defenses: ['전부 부인 (그런 사실 없다)', '변제 항변 (이미 갚았다)'],
     admitted: '2023년 8월 10일에 500만원을 계좌로 받은 사실은 피고도 인정합니다.',
@@ -91,40 +100,112 @@ const briefs = {
       {
         claim: '변제 항변 (이미 갚았다)',
         answer: '100만원 받은 건 맞지만 그건 일부만 갚은 거예요. 그때 카톡으로도 나머지는 다음 달에 준다고 했습니다.',
-        evidence: '갑 제5호증 일부변제 당시 카톡 대화',
+        evidence: '갑 제5호증 일부변제 당시 카카오톡 대화',
         citation: '',
       },
     ],
     conclusion: '일부 갚은 100만원을 뺀 400만원과 갚기로 한 날부터의 지연손해금을 지급하게 해주세요.',
     newEvidence: [
       { id: 'loan-brief-ev-1', name: '차용증 원본 대조본', fileName: '차용증_원본대조.pdf', size: 720_000, type: 'application/pdf' },
-      { id: 'loan-brief-ev-2', name: '일부변제 당시 카톡 대화', fileName: '카톡_일부변제.png', size: 1_320_000, type: 'image/png' },
+      { id: 'loan-brief-ev-2', name: '일부변제 당시 카카오톡 대화', fileName: '카카오톡_일부변제.png', size: 1_320_000, type: 'image/png' },
     ],
     evidenceStart: '4',
     citations: ['2025다213495'],
+  },
+
+  // 임금체불 — 사용자가 「프리랜서였다」며 근로자성을 다툰다
+  'demo-labor-case': {
+    court: '서울남부지방법원', courtDept: '제7민사단독',
+    caseNo: '2026가단221457', caseName: '임금',
+    plaintiff: '홍길동', defendant: '김철수', side: '원고',
+    stage: '상대방 답변서를 받았어요', round: '준비서면(1)', dueDate: dayOffset(18),
+    opponentDoc: '답변서', opponentDate: dayOffset(-9),
+    opponentFiles: [
+      { id: 'labor-op-1', name: '피고 답변서', fileName: '피고_답변서_도급계약주장.pdf', size: 428_000, type: 'application/pdf' },
+    ],
+    opponentClaim: '피고는 제가 직원이 아니라 프리랜서라서 임금이 아니라고 합니다. 계약서도 도급계약이라고 하고요. 그리고 연장근로는 제가 알아서 한 거라 수당을 줄 이유가 없다고 해요.',
+    defenses: ['전부 부인 (그런 사실 없다)'],
+    admitted: '2023년 3월부터 2026년 6월까지 일한 사실과 매달 310만원을 받은 사실은 피고도 인정합니다.',
+    rebuttals: [
+      {
+        claim: '전부 부인 (그런 사실 없다)',
+        answer: '매일 아침 피고가 배차표를 짜서 알려주면 그대로 처리했어요. 출퇴근도 지문으로 찍었고 4대보험도 회사에서 들어줬습니다. 제가 일정을 정한 적이 없어요.',
+        evidence: '갑 제4호증 사내메신저 업무지시 내역',
+        citation: '2023두54914',
+      },
+      {
+        claim: '연장근로수당 부인',
+        answer: '주 6일 근무는 팀장이 배차표에 넣어서 정한 거예요. 제가 원해서 나간 게 아니라 그날 배차가 있으면 나가야 했습니다.',
+        evidence: '갑 제5호증 근태기록 (2026. 5.~6.)',
+        citation: '',
+      },
+    ],
+    conclusion: '근로기준법상 근로자가 맞으니 못 받은 임금 620만원과 연장근로수당 120만원을 지급하도록 하여 주시기 바랍니다.',
+    newEvidence: [
+      { id: 'labor-brief-ev-1', name: '사내메신저 업무지시 내역', fileName: '사내메신저_지시내용.pdf', size: 1_180_000, type: 'application/pdf' },
+      { id: 'labor-brief-ev-2', name: '근태기록 (2026. 5.~6.)', fileName: '근태기록_2026상반기.pdf', size: 640_000, type: 'application/pdf' },
+    ],
+    evidenceStart: '4',
+    citations: ['2023두54914'],
+  },
+
+  // 건물명도 — 임차인이 시설 하자를 이유로 차임 지급을 거절한다
+  'demo-evict-case': {
+    court: '수원지방법원', courtDept: '제2민사부',
+    caseNo: '2025가단776655', caseName: '건물명도',
+    plaintiff: '홍길동', defendant: '김철수', side: '원고',
+    stage: '첫 변론기일을 앞두고 있어요', round: '준비서면(1)', dueDate: dayOffset(9),
+    opponentDoc: '답변서', opponentDate: dayOffset(-7),
+    opponentFiles: [
+      { id: 'evict-op-1', name: '피고 답변서', fileName: '피고_답변서_누수항변.pdf', size: 396_000, type: 'application/pdf' },
+    ],
+    opponentClaim: '피고는 가게 누수를 제가 안 고쳐줘서 장사를 못 했으니 그만큼 차임을 낼 수 없다고 합니다. 그래서 계약 해지도 무효라고 해요.',
+    defenses: ['동시이행 항변', '공제 주장 (원상회복비 등)'],
+    admitted: '2023년 4월 1일에 상가 임대차계약을 맺은 사실과 월 차임이 200만원인 사실은 피고도 인정합니다.',
+    rebuttals: [
+      {
+        claim: '동시이행 항변',
+        answer: '누수는 2025년 5월에 신고받고 그달에 바로 고쳤어요. 수리비 영수증도 있습니다. 그런데 차임은 2025년 4월부터 안 들어왔으니 수리와는 상관이 없어요.',
+        evidence: '갑 제5호증 누수 수리 내역 및 영수증',
+        citation: '',
+      },
+      {
+        claim: '공제 주장 (원상회복비 등)',
+        answer: '영업을 못 했다는 기간에도 카드매출이 계속 찍혔어요. 매출자료를 보면 장사를 계속하고 있었습니다.',
+        evidence: '갑 제6호증 카드매출 내역 (2025. 4.~10.)',
+        citation: '',
+      },
+    ],
+    conclusion: '7개월분 차임 1,400만원이 밀려 계약이 적법하게 해지되었으니 건물을 인도하도록 하여 주시기 바랍니다.',
+    newEvidence: [
+      { id: 'evict-brief-ev-1', name: '누수 수리 내역 및 영수증', fileName: '누수수리_영수증.pdf', size: 520_000, type: 'application/pdf' },
+      { id: 'evict-brief-ev-2', name: '카드매출 내역 (2025. 4.~10.)', fileName: '카드매출내역_2025.pdf', size: 880_000, type: 'application/pdf' },
+    ],
+    evidenceStart: '5',
+    citations: [],
   },
 }
 
 /* ─────────────────── 신청서 ─────────────────── */
 // 사건마다 그 상황에서 실제로 낼 만한 신청서를 하나씩 붙인다.
 
-const petitions = {
+export const demoPetitions = {
   // 임금체불 — 다툼이 적으니 지급명령부터
   'demo-labor-case': {
     typeKey: 'payment',
     form: {
       court: '서울남부지방법원', amount: '7400000',
-      aName: '박서연', aRrn: '950811-2******', aAddr: '서울특별시 영등포구 선유로 82', aAddrDetail: '1201호', aTel: '010-3951-4280', aEmail: 'seoyeon.park@example.com',
-      bName: '주식회사 한빛물류', bAddr: '서울특별시 구로구 디지털로 32길 30', bAddrDetail: '7층', bTel: '02-2637-8800',
+      aName: '홍길동', aRrn: '880417-1******', aAddr: '서울특별시 동작구 상도로 200', aAddrDetail: '1102호', aTel: '010-2841-7306', aEmail: 'gildong.hong@example.com',
+      bName: '김철수', bRrn: '761208-1******', bAddr: '서울특별시 강남구 테헤란로 152', bAddrDetail: '1204호', bTel: '010-9274-1185',
       claimKind: '기타', claimKindEtc: '임금·연장근로수당',
       claimDate: '2026-06-30', dueDate: '2026-07-14',
       interestSet: '청구함', interestRate: '20',
-      claimStory: '한빛물류에서 배차 담당으로 일하다 2026년 6월 말에 그만뒀는데, 5월하고 6월 월급 620만원이랑 그 두 달 연장근로수당 120만원을 못 받았어요. 노동청에 진정 넣어서 체불금품확인원도 받아뒀습니다.',
-      attachItems: ['차용증·계약서', '계좌이체 내역', '내용증명 우편물', '법인등기부등본'],
+      claimStory: '피고가 운영하는 물류센터에서 배차 담당으로 일하다 2026년 6월 말에 그만뒀는데, 5월하고 6월 월급 620만원이랑 그 두 달 연장근로수당 120만원을 못 받았어요. 노동청에 진정 넣어서 체불금품확인원도 받아뒀습니다.',
+      attachItems: ['차용증·계약서', '계좌이체 내역', '내용증명 우편물'],
       attachFiles: [
         { id: 'labor-pt-1', name: '근로계약서', fileName: '근로계약서.pdf', size: 480_000, type: 'application/pdf' },
         { id: 'labor-pt-2', name: '체불금품확인원', fileName: '체불금품확인원_2026.pdf', size: 210_000, type: 'application/pdf' },
-        { id: 'labor-pt-3', name: '법인등기부등본', fileName: '법인등기부등본_한빛물류.pdf', size: 236_000, type: 'application/pdf' },
+        { id: 'labor-pt-3', name: '주민등록초본', fileName: '주민등록초본_홍길동.pdf', size: 121_000, type: 'application/pdf' },
       ],
     },
   },
@@ -134,9 +215,9 @@ const petitions = {
     caseId: 'demo-labor-case',
     typeKey: 'aid',
     form: {
-      court: '서울남부지방법원', caseNo: '', caseName: '임금',
-      stage: '소 제기 전 (같이 낼 예정)',
-      aName: '박서연', aRrn: '950811-2******', aAddr: '서울특별시 영등포구 선유로 82', aAddrDetail: '1201호', aTel: '010-3951-4280',
+      court: '서울남부지방법원', caseNo: '2026가단221457', caseName: '임금',
+      stage: '이미 소송이 진행 중',
+      aName: '홍길동', aRrn: '880417-1******', aAddr: '서울특별시 동작구 상도로 200', aAddrDetail: '1102호', aTel: '010-2841-7306',
       aidScope: ['인지대', '송달료'],
       welfare: '해당 없음',
       income: '0', family: '2', assets: '3200000', debts: '18000000',
@@ -160,15 +241,15 @@ const petitions = {
       leaseKind: '주택',
       propertyDesc: '서울특별시 관악구 남부순환로 1820\n철근콘크리트조 15층 아파트 제5층 제503호 59.8㎡',
       leasePart: '전부', deposit: '10000000', rent: '450000',
-      aName: '김지민', aRrn: '920315-2******', aAddr: '서울특별시 관악구 남부순환로 1820', aAddrDetail: '503호', aTel: '010-2841-7306', aEmail: 'jimin.kim@example.com',
-      bName: '이현우', bRrn: '761208-1******', bAddr: '서울특별시 강남구 테헤란로 152', bAddrDetail: '1204호', bTel: '010-9274-1185',
+      aName: '홍길동', aRrn: '880417-1******', aAddr: '서울특별시 동작구 상도로 200', aAddrDetail: '1102호', aTel: '010-2841-7306', aEmail: 'gildong.hong@example.com',
+      bName: '김철수', bRrn: '761208-1******', bAddr: '서울특별시 강남구 테헤란로 152', bAddrDetail: '1204호', bTel: '010-9274-1185',
       contractDate: '2024-01-01', moveIn: '2024-01-01', residentDate: '2024-01-02', fixedDate: '2024-01-02',
       endWay: '기간 만료', endDate: '2026-01-01', stillLiving: '이미 이사했어요',
       reason: '계약이 끝나서 2026년 1월 3일에 짐 다 빼고 열쇠도 넘겼는데 보증금을 안 돌려줘요. 회사 때문에 다른 데로 옮겨야 해서 전입신고를 빼야 하는데, 그러면 대항력이 없어진다고 해서 등기를 먼저 해두려고 합니다.',
       attachItems: ['임대차계약서 사본', '주민등록등본', '건물 등기사항전부증명서', '내용증명 우편물'],
       attachFiles: [
         { id: 'lease-pt-1', name: '임대차계약서 사본', fileName: '임대차계약서.pdf', size: 2_411_725, type: 'application/pdf' },
-        { id: 'lease-pt-2', name: '주민등록등본', fileName: '주민등록등본_김지민.pdf', size: 132_000, type: 'application/pdf' },
+        { id: 'lease-pt-2', name: '주민등록등본', fileName: '주민등록등본_홍길동.pdf', size: 132_000, type: 'application/pdf' },
         { id: 'lease-pt-3', name: '건물 등기사항전부증명서', fileName: '등기사항전부증명서_관악구.pdf', size: 412_000, type: 'application/pdf' },
       ],
       citations: ['2025다220329'],
@@ -182,8 +263,8 @@ const petitions = {
       court: '수원지방법원',
       claimKind: '임대차보증금', amount: '14860000', claimDate: '2025-04-01',
       suitStage: '이미 냈어요', suitCaseNo: '2025가단776655',
-      aName: '윤가은', aRrn: '780509-2******', aAddr: '경기도 수원시 팔달구 인계로 123', aAddrDetail: '1105호', aTel: '010-6612-9034', aEmail: 'gaeun.yoon@example.com',
-      bName: '주식회사 미담푸드', bAddr: '경기도 수원시 권선구 세화로 44', bAddrDetail: '102호', bTel: '031-234-7710',
+      aName: '홍길동', aRrn: '880417-1******', aAddr: '서울특별시 동작구 상도로 200', aAddrDetail: '1102호', aTel: '010-2841-7306', aEmail: 'gildong.hong@example.com',
+      bName: '김철수', bRrn: '761208-1******', bAddr: '서울특별시 강남구 테헤란로 152', bAddrDetail: '1204호', bTel: '010-9274-1185',
       targetKind: '채권 (예금·급여·임대차보증금)',
       targetDesc: '채무자가 제3채무자에 대하여 가지는 카드매출채권 중 청구금액에 이르기까지의 금액',
       thirdParty: '주식회사 케이지이니시스',
@@ -199,12 +280,12 @@ const petitions = {
       stSuitFiled: '냈어요', stSuitDetail: '수원지방법원 2025가단776655 건물명도',
       stPast5y: '없어요', stPast5yDetail: '해당 없음',
       stDup: '없어요', stDupDetail: '해당 없음',
-      attachItems: ['가압류신청 진술서 (필수)', '차용증·계약서', '부동산 등기사항전부증명서', '내용증명 우편물', '공탁보증보험증권', '법인등기부등본'],
+      attachItems: ['가압류신청 진술서 (필수)', '차용증·계약서', '부동산 등기사항전부증명서', '내용증명 우편물', '공탁보증보험증권'],
       attachFiles: [
         { id: 'evict-pt-1', name: '상가임대차계약서', fileName: '상가임대차계약서.pdf', size: 2_100_000, type: 'application/pdf' },
         { id: 'evict-pt-2', name: '부동산 등기사항전부증명서', fileName: '등기사항전부증명서_세화로44.pdf', size: 388_000, type: 'application/pdf' },
         { id: 'evict-pt-3', name: '계약해지 내용증명', fileName: '계약해지_내용증명.pdf', size: 640_000, type: 'application/pdf' },
-        { id: 'evict-pt-4', name: '법인등기부등본', fileName: '법인등기부등본_미담푸드.pdf', size: 241_000, type: 'application/pdf' },
+        { id: 'evict-pt-4', name: '주민등록초본', fileName: '주민등록초본_홍길동.pdf', size: 121_000, type: 'application/pdf' },
       ],
     },
   },
@@ -215,8 +296,8 @@ const petitions = {
     form: {
       titleKind: '확정판결', court: '서울동부지방법원', caseNo: '2024가소445566',
       finalDate: dayOffset(-3), hasClause: '받았어요', amount: '4000000',
-      aName: '최도윤', aRrn: '890201-1******', aAddr: '서울특별시 성동구 왕십리로 115', aAddrDetail: '302호', aTel: '010-7723-6015', aEmail: 'doyun.choi@example.com',
-      bName: '정민수', bRrn: '910704-1******', bAddr: '서울특별시 광진구 아차산로 272', bAddrDetail: '901호', bTel: '010-5518-2049',
+      aName: '홍길동', aRrn: '880417-1******', aAddr: '서울특별시 동작구 상도로 200', aAddrDetail: '1102호', aTel: '010-2841-7306', aEmail: 'gildong.hong@example.com',
+      bName: '김철수', bRrn: '761208-1******', bAddr: '서울특별시 강남구 테헤란로 152', bAddrDetail: '1204호', bTel: '010-9274-1185',
       method: '채권 압류 및 추심',
       targetDesc: '채무자가 제3채무자에 대하여 가지는 예금채권 중 청구금액에 이르기까지의 금액',
       thirdParty: '주식회사 국민은행',
@@ -238,8 +319,8 @@ const petitions = {
       court: '서울북부지방법원',
       claimKind: '손해배상', amount: '18600000', claimDate: '2025-09-12',
       suitStage: '이미 냈어요', suitCaseNo: '2025가단334455',
-      aName: '한지우', aRrn: '870624-1******', aAddr: '서울특별시 노원구 동일로 1414', aAddrDetail: '1802호', aTel: '010-4408-2276', aEmail: 'jiwoo.han@example.com',
-      bName: '오세훈', bRrn: '840119-1******', bAddr: '서울특별시 도봉구 방학로 88', bAddrDetail: '401호', bTel: '010-2276-3390',
+      aName: '홍길동', aRrn: '880417-1******', aAddr: '서울특별시 동작구 상도로 200', aAddrDetail: '1102호', aTel: '010-2841-7306', aEmail: 'gildong.hong@example.com',
+      bName: '김철수', bRrn: '761208-1******', bAddr: '서울특별시 강남구 테헤란로 152', bAddrDetail: '1204호', bTel: '010-9274-1185',
       targetKind: '부동산',
       targetDesc: '서울특별시 도봉구 방학로 88\n철근콘크리트조 12층 아파트 제4층 제401호 84.9㎡',
       needReasons: ['재산을 처분하려는 정황이 있어요', '변제 능력이 없어 보여요'],
@@ -263,6 +344,17 @@ const petitions = {
   },
 }
 
+/** 사건 하나의 준비서면 초안 */
+export const demoBriefFor = (caseId) => demoBriefs[caseId] || null
+
+/**
+ * 사건 하나에 달린 신청서 초안들.
+ * 한 사건에 신청서가 둘 이상일 수 있어서(임금체불 = 지급명령 + 소송구조) 배열로 돌려준다.
+ */
+export const demoPetitionsFor = (caseId) => Object.entries(demoPetitions)
+  .filter(([key, entry]) => (entry.caseId || key) === caseId)
+  .map(([key, entry]) => ({ key, typeKey: entry.typeKey, form: entry.form }))
+
 const key = (kind) => `naholo_draft_${kind}`
 
 /**
@@ -277,7 +369,7 @@ export function seedDemoDrafts() {
       localStorage.setItem(id, JSON.stringify({ form, meta: { demo: true }, savedAt: Date.now() }))
     } catch { /* 저장소가 꽉 찼으면 데모 초안은 포기한다 */ }
   }
-  Object.entries(briefs).forEach(([caseId, form]) => put(`brief_${caseId}`, form))
+  Object.entries(demoBriefs).forEach(([caseId, form]) => put(`brief_${caseId}`, form))
   // 한 사건에 신청서가 둘 이상일 수 있어서, 표의 키와 사건 id를 따로 둔다
-  Object.entries(petitions).forEach(([key, { typeKey, form, caseId }]) => put(`petition_${typeKey}_${caseId || key}`, form))
+  Object.entries(demoPetitions).forEach(([key, { typeKey, form, caseId }]) => put(`petition_${typeKey}_${caseId || key}`, form))
 }

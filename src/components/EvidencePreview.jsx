@@ -44,9 +44,9 @@ function documentBody(name, item) {
   if (/입금|이체|송금|납부/.test(name)) {
     return {
       heading: '거래내역 확인서',
-      intro: '조회 계좌 110-***-928451 · 예금주 김지민',
+      intro: '조회 계좌 110-***-928451 · 예금주 홍길동',
       fields: [
-        ['2024. 01. 01.', '이현우 · 10,000,000원'],
+        ['2024. 01. 01.', '김철수 · 10,000,000원'],
         ['2024. 02. 25.', '월세 · 650,000원'],
         ['2024. 03. 25.', '월세 · 650,000원'],
         ['2024. 04. 25.', '월세 · 650,000원'],
@@ -59,7 +59,7 @@ function documentBody(name, item) {
     return {
       heading: item.title?.includes('갑 제') ? '서증' : '소장',
       intro: `${item.caseTitle || '임대차 보증금 반환 청구'} · ${item.court || '서울중앙지방법원'}`,
-      fields: [['원고', '김지민'], ['피고', '이현우'], ['청구금액', '금 10,000,000원'], ['사건', item.caseNo || '2024가단123456']],
+      fields: [['원고', '홍길동'], ['피고', '김철수'], ['청구금액', '금 10,000,000원'], ['사건', item.caseNo || '2024가단123456']],
       section: '청구취지',
       paragraphs: ['피고는 원고에게 금 10,000,000원 및 이에 대한 지연손해금을 지급하라.', '소송비용은 피고의 부담으로 한다는 판결을 구합니다.'],
     }
@@ -67,7 +67,7 @@ function documentBody(name, item) {
   return {
     heading: name.replace(/\.[^.]+$/, '').replaceAll('_', ' '),
     intro: `${item.caseTitle || '임대차 보증금 반환 청구'} 관련 제출 자료`,
-    fields: [['작성자', '김지민'], ['확인일', '2026. 8. 9.'], ['사건번호', item.caseNo || '2024가단123456'], ['관할', item.court || '서울중앙지방법원']],
+    fields: [['작성자', '홍길동'], ['확인일', '2026. 8. 9.'], ['사건번호', item.caseNo || '2024가단123456'], ['관할', item.court || '서울중앙지방법원']],
     section: '주요 내용',
     paragraphs: [purposeFallback(name), '원본과 대조하여 누락된 페이지와 가려진 개인정보가 없는지 확인했습니다.'],
   }
@@ -122,7 +122,7 @@ function PaperPreview({ item, model }) {
       </div>
       <div className="mt-14 text-center text-[11px] leading-7 text-ink-600">
         <p>2026년 8월 9일</p>
-        <p className="font-semibold text-ink-800">작성자 김 지 민 (서명)</p>
+        <p className="font-semibold text-ink-800">작성자 홍 길 동 (서명)</p>
         <p className="mt-7 text-[15px] font-bold tracking-[0.2em]">서울중앙지방법원 귀중</p>
       </div>
       <p className="mt-12 text-center text-[10px] tabular-nums text-ink-400">- {model.currentPage} -</p>
@@ -198,7 +198,7 @@ export default function EvidencePreview({ item, onDownload }) {
               <Meta label="마지막 수정" value={formatMoment(changedAt, '2026. 8. 11. 18:05')} />
               <Meta label="파일 크기" value={item.size || '1.2 MB'} />
               <Meta label="등록 경로" value={item.source || '사용자 직접 업로드'} />
-              <Meta label="등록자" value={item.uploadedBy || '김지민'} />
+              <Meta label="등록자" value={item.uploadedBy || '홍길동'} />
               <Meta label="개인정보 확인" value={item.privacyReview || '개인정보 확인 완료'} />
               <Meta label="제출 정보" value={item.submissionLabel || (item.submittedAt ? `${item.submittedAt} 제출 완료` : '아직 제출하지 않음')} />
               <Meta label="문서 식별값" value={item.checksum || `NH-${String(seed).padStart(6, '0').slice(-6)}`} />

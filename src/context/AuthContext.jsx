@@ -6,7 +6,7 @@ const STORAGE_KEY = 'naholo_auth_user'
 const ACCOUNT_KEY = 'naholo_auth_account'
 
 const DEMO_USER = {
-  name: '김지민',
+  name: '홍길동',
   email: 'example@gmail.com',
   username: 'abcd1234',
 }

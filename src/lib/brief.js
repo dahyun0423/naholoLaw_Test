@@ -96,7 +96,11 @@ export const briefSteps = [
       text('plaintiff', '원고', { required: true, half: true, placeholder: '홍길동' }),
       text('defendant', '피고', { required: true, half: true, placeholder: '김철수' }),
       radio('side', '나는 어느 쪽인가요?', ['원고', '피고'], { required: true }),
-      text('agent', '대리인 (있으면)', { half: true, placeholder: '변호사 ○○○', hint: '준비서면 기재사항이에요. 본인이 직접 하면 비워두세요.' }),
+      text('agent', '대리인', {
+        half: true, placeholder: '변호사 ○○○',
+        fold: '대리인을 선임했나요?',
+        hint: '준비서면 기재사항이에요. 본인이 직접 하시면 펼치지 않아도 됩니다.',
+      }),
       radio('stage', '지금 소송이 어느 단계인가요?', stages.map((s) => s.label), {
         required: true,
         info: '적시제출주의(민사소송법 제146조·제147조) — 재판장이 정한 기간을 넘기면 정당한 사유가 없는 한 주장을 더 내거나 증거를 신청할 수 없어요.',
@@ -216,6 +220,9 @@ export const briefSteps = [
   },
 ]
 
+// 법원 서면의 항목 번호는 1. 아래에 가. 나. 다. 로 갈린다 — 쟁점이 여럿이면 순서가 이어져야 한다
+const HANGUL_ORDER = ['가', '나', '다', '라', '마', '바', '사', '아', '자', '차', '카', '타', '파', '하']
+
 export function buildBrief(form) {
   const side = form.side || '원고'
   const other = side === '원고' ? '피고' : '원고'
@@ -245,7 +252,7 @@ export function buildBrief(form) {
     lines.push(`　　${P('3단계에서 반박 포인트를 추가해 주세요')}`)
   } else {
     rebuttals.forEach((r, i) => {
-      lines.push(`　가. 쟁점 ${i + 1} — ${or(legalNarrative(r.claim), '상대방 주장')}`)
+      lines.push(`　${HANGUL_ORDER[i] || i + 1}. 쟁점 ${i + 1} — ${or(legalNarrative(r.claim), '상대방 주장')}`)
       lines.push(`　　　${or(legalNarrative(r.answer), '반박 내용')}`)
       if (r.evidence) lines.push(`　　　(근거 : ${F(r.evidence)})`)
       if (r.citation) lines.push(`　　　(참조 : ${F(r.citation)})`)

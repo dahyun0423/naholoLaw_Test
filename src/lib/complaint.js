@@ -2134,7 +2134,9 @@ export function requiredChecklist(type, form) {
     { no: '⑥', label: '입증방법·첨부서류', ok: evidenceCount > 0, detail: evidenceCount > 0 ? `갑 제1~${evidenceCount}호증 · 첨부 3종` : '6단계에서 증거를 골라 주세요' },
     { no: '⑦', label: '작성 연월일', ok: true, detail: fmtDate(new Date().toISOString().slice(0, 10)) },
     { no: '⑧', label: '법원의 표시', ok: filled(form.court), detail: form.court || '1단계에서 법원을 선택해 주세요' },
-    { no: '⑨', label: '기명날인 및 간인', ok: false, warn: true, detail: '출력 후 직접 서명하세요' },
+    // 서명은 화면에서 확인할 수 없는 항목이다 — 종이는 출력본에, 전자소송은 제출할 때 한다.
+    // 빨간 미완료로 두면 무엇을 해도 사라지지 않는 경고가 된다.
+    { no: '⑨', label: '기명날인 및 간인', ok: null, detail: '종이로 낼 때만 — 출력본 「(인)」 자리에 직접' },
   ]
 }
 

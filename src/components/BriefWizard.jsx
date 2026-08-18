@@ -173,6 +173,39 @@ function makeBriefExtras(cited) {
   }
 }
 
+/**
+ * 준비서면 완성 화면 — 마법사와 캡처용 화면(FigmaDocResult)이 같은 화면을 쓴다.
+ * 사건 저장은 마법사에서만 일어나므로 onSave가 없으면 저장 카드도 그리지 않는다.
+ */
+export function BriefDoneView({ form, caseTitle, caseId, onSave, onEdit, onExit }) {
+  const doc = useMemo(() => buildBrief(form), [form])
+  return (
+    <DocumentDoneView
+      title="AI가 정리한 준비서면"
+      badge={form.round || '준비서면'}
+      sub="평소 말로 답한 내용을 주장·반박·근거 순서의 준비서면 문장으로 정리했습니다."
+      onEdit={onEdit}
+      onExit={onExit}
+      aside={(
+        <>
+          {onSave && (
+            <SaveDecision
+              docName="준비서면"
+              caseTitle={caseTitle}
+              caseId={caseId}
+              onSave={onSave}
+              note="사건관리의 문서 목록에 남고, 여기서 매긴 마지막 호증 번호가 기록돼 다음 서면이 이어서 매깁니다."
+            />
+          )}
+          <TipCard title="이제 이렇게 하시면 돼요" items={BRIEF_NEXT} />
+        </>
+      )}
+    >
+      <GenericPaper doc={doc} />
+    </DocumentDoneView>
+  )
+}
+
 export default function BriefWizard({ onExit }) {
   const toast = useToast()
   const { citedList, activeCaseId, activeRaw, attachDoc } = useWorkspace()
@@ -242,27 +275,14 @@ export default function BriefWizard({ onExit }) {
   // 다 만들면 작성 화면 대신 완성 화면을 그린다 — 모달로 덮지 않는다
   if (phase === 'full') {
     return (
-      <DocumentDoneView
-        title="AI가 정리한 준비서면"
-        badge={form.round || '준비서면'}
-        sub="평소 말로 답한 내용을 주장·반박·근거 순서의 준비서면 문장으로 정리했습니다."
+      <BriefDoneView
+        form={form}
+        caseTitle={activeRaw?.title}
+        caseId={activeCaseId}
+        onSave={saveBrief}
         onEdit={() => setPhase(null)}
         onExit={onExit}
-        aside={(
-          <>
-            <SaveDecision
-              docName="준비서면"
-              caseTitle={activeRaw?.title}
-              caseId={activeCaseId}
-              onSave={saveBrief}
-              note="사건관리의 문서 목록에 남고, 여기서 매긴 마지막 호증 번호가 기록돼 다음 서면이 이어서 매깁니다."
-            />
-            <TipCard title="이제 이렇게 하시면 돼요" items={BRIEF_NEXT} />
-          </>
-        )}
-      >
-        <GenericPaper doc={doc} />
-      </DocumentDoneView>
+      />
     )
   }
 

@@ -122,6 +122,38 @@ const PETITION_NEXT = [
   ['종이로 낼 때는', '출력본 말미 「(인)」 자리에 서명하거나 도장을 찍고, 2장 이상이면 간인하세요.'],
 ]
 
+/**
+ * 신청서 완성 화면 — 마법사와 캡처용 화면(FigmaDocResult)이 같은 화면을 쓴다.
+ * 사건 저장은 마법사에서만 일어나므로 onSave가 없으면 저장 카드도 그리지 않는다.
+ */
+export function PetitionDoneView({ type, form, caseTitle, caseId, onSave, onEdit, onExit }) {
+  const doc = useMemo(() => buildPetition(type, form), [type, form])
+  return (
+    <DocumentDoneView
+      title={`AI가 정리한 ${type.title}`}
+      badge={type.title}
+      sub="답한 사실을 이 신청서의 신청취지·신청이유와 법원 제출 양식으로 정리했습니다."
+      onEdit={onEdit}
+      onExit={onExit}
+      aside={(
+        <>
+          {onSave && (
+            <SaveDecision
+              docName={type.title}
+              caseTitle={caseTitle}
+              caseId={caseId}
+              onSave={onSave}
+            />
+          )}
+          <TipCard title="이제 이렇게 하시면 돼요" items={PETITION_NEXT} />
+        </>
+      )}
+    >
+      <GenericPaper doc={doc} />
+    </DocumentDoneView>
+  )
+}
+
 function Writer({ typeKey, onBack, onExit }) {
   const toast = useToast()
   const { citedList, activeCaseId, activeRaw, attachDoc } = useWorkspace()
@@ -183,26 +215,15 @@ function Writer({ typeKey, onBack, onExit }) {
   // 다 만들면 작성 화면 대신 완성 화면을 그린다 — 모달로 덮지 않는다
   if (phase === 'full') {
     return (
-      <DocumentDoneView
-        title={`AI가 정리한 ${type.title}`}
-        badge={type.title}
-        sub="답한 사실을 이 신청서의 신청취지·신청이유와 법원 제출 양식으로 정리했습니다."
+      <PetitionDoneView
+        type={type}
+        form={form}
+        caseTitle={activeRaw?.title}
+        caseId={activeCaseId}
+        onSave={savePetition}
         onEdit={() => setPhase(null)}
         onExit={onExit}
-        aside={(
-          <>
-            <SaveDecision
-              docName={type.title}
-              caseTitle={activeRaw?.title}
-              caseId={activeCaseId}
-              onSave={savePetition}
-            />
-            <TipCard title="이제 이렇게 하시면 돼요" items={PETITION_NEXT} />
-          </>
-        )}
-      >
-        <GenericPaper doc={doc} />
-      </DocumentDoneView>
+      />
     )
   }
 

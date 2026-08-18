@@ -57,7 +57,7 @@ function rowsFromDraft(draft) {
   return rows.length ? rows : null
 }
 
-function rowsFromCase(caseItem) {
+export function evidenceRowsFromCase(caseItem) {
   if (!caseItem) return null
   const form = caseItem.form || {}
   const uploaded = (form.evidenceFiles || []).map((item) => ({
@@ -78,12 +78,88 @@ function rowsFromCase(caseItem) {
 }
 
 /**
+ * 증거목록 본문 — 화면 미리보기와 인쇄본이 같은 조판을 쓰도록 한 곳에서 만든다.
+ * 캡처용 화면(FigmaDocResult)도 이 컴포넌트를 그대로 쓴다.
+ */
+export function EvidencePaper({ code, party, header, rows, startNo }) {
+  return (
+    <div className="font-serif text-[13px] leading-loose text-ink-800">
+      {/* 표제 — 번들 서식: 「증  거  목  록  (원고)」 */}
+      <p className="print-lg text-center text-xl font-bold tracking-[0.3em] text-ink-900">
+        증 거 목 록 <span className="tracking-normal">({party})</span>
+      </p>
+
+      {/* 당사자 표시 — 서식은 「사 건 / 원 고 / 피 고」 순서다 */}
+      <div className="mt-6 space-y-0.5">
+        <p>사　　　건　{header.caseNo ? <b className="font-semibold text-brand-500">{header.caseNo}</b> : <span className="text-ink-400">[ 사건번호 ]</span>}{header.caseName ? `  ${header.caseName}` : ''}</p>
+        <p>원　　　고　{header.plaintiff ? <b className="font-semibold text-brand-500">{spaceName(header.plaintiff)}</b> : <span className="text-ink-400">[ 원고 ]</span>}</p>
+        <p>피　　　고　{header.defendant ? <b className="font-semibold text-brand-500">{spaceName(header.defendant)}</b> : <span className="text-ink-400">[ 피고 ]</span>}</p>
+      </div>
+
+      {/* 열 순서는 서식 그대로: 번호 · 서증명 · 입증취지 · 원본 · 작성자 · 작성일.
+          제출 상태는 우리가 관리하는 값이라 제출본에는 넣지 않는다. */}
+      <div className="mt-5 overflow-x-auto">
+        <table className="w-full border-collapse text-[12px]">
+          <thead>
+            <tr className="bg-ink-100 text-ink-700">
+              <th className="border border-ink-300 px-2 py-2 font-semibold whitespace-nowrap">번호</th>
+              <th className="border border-ink-300 px-2 py-2 font-semibold">서 증 명</th>
+              <th className="border border-ink-300 px-2 py-2 font-semibold">입 증 취 지</th>
+              <th className="border border-ink-300 px-2 py-2 font-semibold whitespace-nowrap">원본</th>
+              <th className="border border-ink-300 px-2 py-2 font-semibold whitespace-nowrap">작성자</th>
+              <th className="border border-ink-300 px-2 py-2 font-semibold whitespace-nowrap">작 성 일</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 && (
+              <tr><td colSpan={6} className="border border-ink-300 px-2 py-6 text-center text-ink-400">증거를 추가하면 여기에 표로 정리됩니다</td></tr>
+            )}
+            {rows.map((r, i) => (
+              <tr key={i}>
+                <td className="border border-ink-300 px-2 py-2 text-center whitespace-nowrap">{evidenceShort(code, i, r.branch, startNo)}</td>
+                <td className="border border-ink-300 px-2 py-2">
+                  {r.name ? <b className="font-semibold text-brand-500">{r.name}</b> : <span className="text-ink-400">[ 서증명 ]</span>}
+                </td>
+                <td className="border border-ink-300 px-2 py-2">
+                  {r.purpose || <span className="text-ink-400">[ 입증취지를 채워 주세요 ]</span>}
+                </td>
+                <td className="border border-ink-300 px-2 py-2 text-center whitespace-nowrap">{r.copyKind || '사본'}</td>
+                <td className="border border-ink-300 px-2 py-2 text-center whitespace-nowrap">
+                  {r.author || <span className="text-ink-300">[ 작성자 ]</span>}
+                </td>
+                <td className="border border-ink-300 px-2 py-2 text-center whitespace-nowrap">{r.date ? fmtDate(r.date) : '-'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* 비고 — 서식에서는 가림 처리 같은 특이사항을 ※로 덧붙인다. 없으면 인쇄하지 않는다. */}
+      {rows.some((r) => r.remark) && (
+        <div className="mt-4 space-y-1">
+          {rows.map((r, i) => (r.remark ? (
+            <p key={i}>※ {evidenceNo(code, i, r.branch, startNo)}에는 {r.remark}</p>
+          ) : null))}
+        </div>
+      )}
+
+      <DocSignature
+        date={fmtDate(new Date().toISOString().slice(0, 10))}
+        role={`위 ${party}`}
+        name={spaceName(header.plaintiff)}
+        court={[header.court, header.courtDept].filter(Boolean).join(' ')}
+      />
+    </div>
+  )
+}
+
+/**
  * 완성 화면.
  *
  * 문서를 만들었다고 끝이 아니다 — 저장할지 정하고, 실제로 내는 데까지 이어져야 한다.
  * 그래서 (1) 저장 여부를 먼저 묻고, (2) 저장한 뒤에 갈 곳을 준다.
  */
-function EvidenceDoneView({ paper, code, startNo, rows, header, percent, caseId, caseTitle, onSave, onEdit, onExit }) {
+export function EvidenceDoneView({ paper, code, startNo, rows, header, percent, caseId, caseTitle, onSave, onEdit, onExit }) {
   const lastNo = startNo + rows.length - 1
   const noPurpose = rows.filter((r) => !r.purpose).length
 
@@ -96,14 +172,17 @@ function EvidenceDoneView({ paper, code, startNo, rows, header, percent, caseId,
       onExit={onExit}
       aside={(
         <>
-          <SaveDecision
-            docName="증거목록"
-            caseTitle={caseTitle}
-            caseId={caseId}
-            onSave={onSave}
-            note={`여기서 매긴 ${code} 제${lastNo}호증까지가 기록돼, 다음에 쓸 준비서면이 제${lastNo + 1}호증부터 이어서 매깁니다.`}
-            warn={noPurpose > 0 ? `입증취지가 빈 증거가 ${noPurpose}건 있어요. 그대로 저장해도 되지만 나중에 채워야 합니다.` : ''}
-          />
+          {/* 저장은 마법사에서만 일어난다 — 캡처용 화면은 onSave 없이 부른다 */}
+          {onSave && (
+            <SaveDecision
+              docName="증거목록"
+              caseTitle={caseTitle}
+              caseId={caseId}
+              onSave={onSave}
+              note={`여기서 매긴 ${code} 제${lastNo}호증까지가 기록돼, 다음에 쓸 준비서면이 제${lastNo + 1}호증부터 이어서 매깁니다.`}
+              warn={noPurpose > 0 ? `입증취지가 빈 증거가 ${noPurpose}건 있어요. 그대로 저장해도 되지만 나중에 채워야 합니다.` : ''}
+            />
+          )}
           <TipCard
             title="이제 이렇게 하시면 돼요"
             items={[
@@ -148,7 +227,7 @@ export default function EvidenceListBuilder({ onExit }) {
   const { activeCaseId, activeRaw, attachDoc, addEvidence, myCases, activeCase } = useWorkspace()
   const draft = useMemo(() => loadDraft(), [])
   const draftRows = useMemo(() => rowsFromDraft(draft), [draft])
-  const caseRows = useMemo(() => rowsFromCase(activeRaw), [activeRaw])
+  const caseRows = useMemo(() => evidenceRowsFromCase(activeRaw), [activeRaw])
   const sourceRows = caseRows || draftRows
   const draftType = activeRaw ? findType(activeRaw.typeKey) : draft ? findType(draft.typeKey) : null
   const sourceForm = activeRaw?.form || draft?.form || {}
@@ -292,75 +371,7 @@ export default function EvidenceListBuilder({ onExit }) {
   }
 
   // 화면 미리보기와 인쇄본이 같은 조판을 쓰도록 한 곳에서 만든다
-  const paper = (
-                <div className="font-serif text-[13px] leading-loose text-ink-800">
-                  {/* 표제 — 번들 서식: 「증  거  목  록  (원고)」 */}
-                  <p className="print-lg text-center text-xl font-bold tracking-[0.3em] text-ink-900">
-                    증 거 목 록 <span className="tracking-normal">({party})</span>
-                  </p>
-
-                  {/* 당사자 표시 — 서식은 「사 건 / 원 고 / 피 고」 순서다 */}
-                  <div className="mt-6 space-y-0.5">
-                    <p>사　　　건　{header.caseNo ? <b className="font-semibold text-brand-500">{header.caseNo}</b> : <span className="text-ink-400">[ 사건번호 ]</span>}{header.caseName ? `  ${header.caseName}` : ''}</p>
-                    <p>원　　　고　{header.plaintiff ? <b className="font-semibold text-brand-500">{spaceName(header.plaintiff)}</b> : <span className="text-ink-400">[ 원고 ]</span>}</p>
-                    <p>피　　　고　{header.defendant ? <b className="font-semibold text-brand-500">{spaceName(header.defendant)}</b> : <span className="text-ink-400">[ 피고 ]</span>}</p>
-                  </div>
-
-                  {/* 열 순서는 서식 그대로: 번호 · 서증명 · 입증취지 · 원본 · 작성자 · 작성일.
-                      제출 상태는 우리가 관리하는 값이라 제출본에는 넣지 않는다. */}
-                  <div className="mt-5 overflow-x-auto">
-                    <table className="w-full border-collapse text-[12px]">
-                      <thead>
-                        <tr className="bg-ink-100 text-ink-700">
-                          <th className="border border-ink-300 px-2 py-2 font-semibold whitespace-nowrap">번호</th>
-                          <th className="border border-ink-300 px-2 py-2 font-semibold">서 증 명</th>
-                          <th className="border border-ink-300 px-2 py-2 font-semibold">입 증 취 지</th>
-                          <th className="border border-ink-300 px-2 py-2 font-semibold whitespace-nowrap">원본</th>
-                          <th className="border border-ink-300 px-2 py-2 font-semibold whitespace-nowrap">작성자</th>
-                          <th className="border border-ink-300 px-2 py-2 font-semibold whitespace-nowrap">작 성 일</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rows.length === 0 && (
-                          <tr><td colSpan={6} className="border border-ink-300 px-2 py-6 text-center text-ink-400">증거를 추가하면 여기에 표로 정리됩니다</td></tr>
-                        )}
-                        {rows.map((r, i) => (
-                          <tr key={i}>
-                            <td className="border border-ink-300 px-2 py-2 text-center whitespace-nowrap">{evidenceShort(code, i, r.branch, startNo)}</td>
-                            <td className="border border-ink-300 px-2 py-2">
-                              {r.name ? <b className="font-semibold text-brand-500">{r.name}</b> : <span className="text-ink-400">[ 서증명 ]</span>}
-                            </td>
-                            <td className="border border-ink-300 px-2 py-2">
-                              {r.purpose || <span className="text-ink-400">[ 입증취지를 채워 주세요 ]</span>}
-                            </td>
-                            <td className="border border-ink-300 px-2 py-2 text-center whitespace-nowrap">{r.copyKind || '사본'}</td>
-                            <td className="border border-ink-300 px-2 py-2 text-center whitespace-nowrap">
-                              {r.author || <span className="text-ink-300">[ 작성자 ]</span>}
-                            </td>
-                            <td className="border border-ink-300 px-2 py-2 text-center whitespace-nowrap">{r.date ? fmtDate(r.date) : '-'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* 비고 — 서식에서는 가림 처리 같은 특이사항을 ※로 덧붙인다. 없으면 인쇄하지 않는다. */}
-                  {rows.some((r) => r.remark) && (
-                    <div className="mt-4 space-y-1">
-                      {rows.map((r, i) => (r.remark ? (
-                        <p key={i}>※ {evidenceNo(code, i, r.branch, startNo)}에는 {r.remark}</p>
-                      ) : null))}
-                    </div>
-                  )}
-
-                  <DocSignature
-                    date={fmtDate(new Date().toISOString().slice(0, 10))}
-                    role={`위 ${party}`}
-                    name={spaceName(header.plaintiff)}
-                    court={[header.court, header.courtDept].filter(Boolean).join(' ')}
-                  />
-                </div>
-  )
+  const paper = <EvidencePaper code={code} party={party} header={header} rows={rows} startNo={startNo} />
 
   if (phase === 'full') {
     return (

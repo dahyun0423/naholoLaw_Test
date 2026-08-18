@@ -50,7 +50,7 @@ export default function Signup() {
 
           <div className="mt-5 space-y-4">
             <Field label="이름" required error={touched ? errs.name : ''}>
-              <input className={inputCls} placeholder="김지민" value={form.name} onChange={onChange('name')} />
+              <input className={inputCls} placeholder="홍길동" value={form.name} onChange={onChange('name')} />
             </Field>
             <Field label="이메일" required error={touched ? errs.email : ''}>
               <input className={inputCls} placeholder="example@gmail.com" value={form.email} onChange={onChange('email')} />
