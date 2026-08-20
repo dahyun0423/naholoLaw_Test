@@ -182,7 +182,7 @@ export const demoBriefs = {
       { id: 'evict-brief-ev-2', name: '카드매출 내역 (2025. 4.~10.)', fileName: '카드매출내역_2025.pdf', size: 880_000, type: 'application/pdf' },
     ],
     evidenceStart: '5',
-    citations: [],
+    citations: ['2024다256116'],
   },
 }
 
@@ -280,6 +280,7 @@ export const demoPetitions = {
       stSuitFiled: '냈어요', stSuitDetail: '수원지방법원 2025가단776655 건물명도',
       stPast5y: '없어요', stPast5yDetail: '해당 없음',
       stDup: '없어요', stDupDetail: '해당 없음',
+      citations: ['2021마7088'],
       attachItems: ['가압류신청 진술서 (필수)', '차용증·계약서', '부동산 등기사항전부증명서', '내용증명 우편물', '공탁보증보험증권'],
       attachFiles: [
         { id: 'evict-pt-1', name: '상가임대차계약서', fileName: '상가임대차계약서.pdf', size: 2_100_000, type: 'application/pdf' },
@@ -335,6 +336,7 @@ export const demoPetitions = {
       stSuitFiled: '냈어요', stSuitDetail: '서울북부지방법원 2025가단334455 손해배상(자)',
       stPast5y: '없어요', stPast5yDetail: '해당 없음',
       stDup: '없어요', stDupDetail: '해당 없음',
+      citations: ['2021마7088'],
       attachItems: ['가압류신청 진술서 (필수)', '부동산 등기사항전부증명서', '공탁보증보험증권'],
       attachFiles: [
         { id: 'crash-pt-1', name: '부동산 등기사항전부증명서', fileName: '등기사항전부증명서_방학로88.pdf', size: 402_000, type: 'application/pdf' },

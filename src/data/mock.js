@@ -439,15 +439,24 @@ export const demoBoardRows = [
   demoDoc('lease', { key: 'd-b1', group: 'brief', kind: 'brief', docId: 'brief1', title: '준비서면(1) — 공제 주장 반박', round: 1, progress: 100, status: '제출완료', submittedAt: dayOffset(-40) }),
   demoDoc('lease', { key: 'd-b2', group: 'brief', kind: 'brief', docId: 'brief2', title: '준비서면(2) — 원상복구 범위', round: 2, progress: 45, status: '작성 중', due: BRIEF_DUE }),
   demoDoc('loan', { key: 'd-b3', group: 'brief', kind: 'brief', docId: 'brief1', title: '준비서면(1) — 변제 항변에 대한 반박', round: 1, progress: 80, status: '제출예정', due: dayOffset(9) }),
+  demoDoc('labor', { key: 'd-b5', group: 'brief', kind: 'brief', docId: 'brief1', title: '준비서면(1) — 근로자성 반박', round: 1, progress: 100, status: '작성 중', due: dayOffset(18) }),
+  demoDoc('evict', { key: 'd-b6', group: 'brief', kind: 'brief', docId: 'brief1', title: '준비서면(1) — 누수 항변에 대한 반박', round: 1, progress: 100, status: '작성 중', due: dayOffset(9) }),
 
   /* ── 증거목록 ── */
   demoDoc('lease', { key: 'd-l1', group: 'evidencelist', kind: 'evidence', docId: 'evidence', title: '증거목록 (갑 제1~6호증)', count: 6, progress: 70, status: '제출예정', due: EVID_DUE }),
   demoDoc('loan', { key: 'd-l2', group: 'evidencelist', kind: 'evidence', docId: 'evidence', title: '증거목록 (갑 제1~3호증)', count: 3, progress: 100, status: '제출완료', submittedAt: dayOffset(-31) }),
+  demoDoc('labor', { key: 'd-l4', group: 'evidencelist', kind: 'evidence', docId: 'evidence', title: '증거목록 (갑 제1~3호증)', count: 3, progress: 100, status: '제출완료', submittedAt: dayOffset(-23) }),
+  demoDoc('evict', { key: 'd-l5', group: 'evidencelist', kind: 'evidence', docId: 'evidence', title: '증거목록 (갑 제1~4호증)', count: 4, progress: 100, status: '제출완료', submittedAt: dayOffset(-19) }),
 
   /* ── 신청서·답변서 ── */
   demoDoc('lease', { key: 'd-p1', group: 'petition', kind: 'petition', docId: 'petition1', title: '기일변경신청서', progress: 100, status: '제출완료', submittedAt: dayOffset(-12) }),
   demoDoc('labor', { key: 'd-p2', group: 'petition', kind: 'answer', docId: 'answer1', title: '답변서 (피고 주장에 대한 답변)', progress: 20, status: '작성 중', due: dayOffset(15) }),
   demoDoc('loan', { key: 'd-p3', group: 'petition', kind: 'petition', docId: 'petition2', title: '보정명령 이행서', progress: 0, status: '보완필요', due: dayOffset(2) }),
+  demoDoc('crash', { key: 'd-p5', group: 'petition', kind: 'petition', docId: 'petition_provisional', title: '가압류신청서', progress: 100, status: '제출완료', submittedAt: dayOffset(-56) }),
+  demoDoc('lease', { key: 'd-p6', group: 'petition', kind: 'petition', docId: 'petition_leasereg', title: '임차권등기명령신청서', progress: 100, status: '제출완료', submittedAt: dayOffset(-90) }),
+  demoDoc('labor', { key: 'd-p7', group: 'petition', kind: 'petition', docId: 'petition_aid', title: '소송구조신청서', progress: 100, status: '제출완료', submittedAt: dayOffset(-25) }),
+  demoDoc('loan', { key: 'd-p8', group: 'petition', kind: 'petition', docId: 'petition_execution', title: '강제집행신청서', progress: 100, status: '제출예정', due: dayOffset(7) }),
+  demoDoc('evict', { key: 'd-p9', group: 'petition', kind: 'petition', docId: 'petition_provisional', title: '가압류신청서', progress: 100, status: '제출예정', due: dayOffset(5) }),
 
   /* ── 교통사고 손해배상 ── */
   demoDoc('crash', {
@@ -519,9 +528,8 @@ export const figmaWorkspaceCases = [
     entryPoint: 'filed', flowDone: {},
     form: {
       court: '서울중앙지방법원', claimKind: '재산권상 청구', sueValueKind: '금액', amount: '10000000', courtDept: '제12민사단독',
-      pName: '홍길동', pRrn: '880417-1******', pAddr: '서울특별시 동작구 상도로 200', pAddrDetail: '1102호', pTel: '010-2841-7306', pEmail: 'gildong.hong@example.com',
-      pService: '위 주소와 같음',
-      dName: '김철수', dAddr: '서울특별시 강남구 테헤란로 152', dAddrDetail: '1204호', dTel: '010-9274-1185', dRrn: '761208-1******',
+      pName: '홍길동', pRrn: '880417-1******', pAddr: '서울특별시 동작구 상도로 200', pAddrDetail: '1102호', pTel: '010-2841-7306', pEmail: 'gildong.hong@example.com', pService: '위 주소와 같음', pFax: '02-6952-1408', pEntity: '개인 (자연인)', pLegalRep: '해당 없음', pForeignName: 'HONG GILDONG',
+      dName: '김철수', dAddr: '서울특별시 강남구 테헤란로 152', dAddrDetail: '1204호', dTel: '010-9274-1185', dRrn: '761208-1******', dCount: '한 명', dEntity: '개인 (자연인)', dLegalRep: '해당 없음',
       leaseKind: '주택', propertyAddr: '서울특별시 관악구 남부순환로 1820', propertyAddrDetail: '503호', contractDate: '2024-01-01', depositAmount: '10000000', leaseStart: '2024-01-01', depositPaidDate: '2024-01-01', leaseEnd: '2026-01-01', endWay: '기간 만료', handover: '비워줬어요', handoverDate: '2026-01-03', leaseReg: '신청·완료', deductClaim: '1200000',
       refuseReasons: ['원상회복 비용을 공제하겠다', '이유 없이 미루기만 한다'], refuseDetail: '도배·장판 교체비 120만원을 공제한 뒤 돌려주겠다는 문자만 반복했습니다.',
       demandWay: '내용증명을 보냈어요', demandDate: dayOffset(-104),
@@ -550,11 +558,13 @@ export const figmaWorkspaceCases = [
       { id: 'brief1', kind: 'brief', title: '준비서면(1) — 공제 주장 반박', progress: 100, createdAt: Date.now() - 86400000 * 45, updatedAt: Date.now() - 86400000 * 40, versions: [{ version: 1, createdAt: demoMoment(-45), submittedAt: dayOffset(-40), note: '법원 제출본' }] },
       { id: 'brief2', kind: 'brief', title: '준비서면(2) — 원상복구 범위', progress: 65, createdAt: Date.now() - 86400000 * 8, updatedAt: Date.now() - 86400000, versions: [{ version: 1, createdAt: demoMoment(-8), note: '쟁점 정리 초안' }, { version: 2, createdAt: demoMoment(-1), note: '사진 증거 반영본' }] },
       { id: 'evidence', kind: 'evidence', title: '증거목록 (갑 제1~6호증)', progress: 82, createdAt: Date.now() - 86400000 * 18, updatedAt: Date.now() - 86400000 * 2, versions: [{ version: 1, createdAt: demoMoment(-18), note: '최초 생성본' }, { version: 2, createdAt: demoMoment(-2), note: '입증취지 보완본' }] },
+      { id: 'petition_leasereg', kind: 'petition', title: '임차권등기명령신청서', progress: 100, createdAt: Date.now() - 86400000 * 92, updatedAt: Date.now() - 86400000 * 90, versions: [{ version: 1, createdAt: demoMoment(-92), submittedAt: dayOffset(-90), note: '법원 제출본' }] },
     ],
     docMeta: {
       brief1: { status: '제출완료', due: dayOffset(-40), submittedAt: dayOffset(-40) },
       brief2: { status: '작성 중', due: BRIEF_DUE, submittedAt: '' },
       evidence: { status: '제출예정', due: EVID_DUE, submittedAt: '' },
+      petition_leasereg: { status: '제출완료', due: dayOffset(-90), submittedAt: dayOffset(-90) },
     },
     docVersions: { complaint: demoBoardRows.find((row) => row.key === 'd-c1')?.versions || [] },
     createdAt: Date.now() - 86400000 * 120,
@@ -566,8 +576,8 @@ export const figmaWorkspaceCases = [
     entryPoint: 'filed', flowDone: {},
     form: {
       court: '서울남부지방법원', claimKind: '재산권상 청구', sueValueKind: '금액', amount: '7400000', courtDept: '제7민사단독',
-      pName: '홍길동', pRrn: '880417-1******', pAddr: '서울특별시 동작구 상도로 200', pAddrDetail: '1102호', pTel: '010-2841-7306', pEmail: 'gildong.hong@example.com',
-      dName: '김철수', dAddr: '서울특별시 강남구 테헤란로 152', dAddrDetail: '1204호', dTel: '010-9274-1185', dRrn: '761208-1******',
+      pName: '홍길동', pRrn: '880417-1******', pAddr: '서울특별시 동작구 상도로 200', pAddrDetail: '1102호', pTel: '010-2841-7306', pEmail: 'gildong.hong@example.com', pService: '위 주소와 같음', pFax: '02-6952-1408', pEntity: '개인 (자연인)', pLegalRep: '해당 없음', pForeignName: 'HONG GILDONG',
+      dName: '김철수', dAddr: '서울특별시 강남구 테헤란로 152', dAddrDetail: '1204호', dTel: '010-9274-1185', dRrn: '761208-1******', dCount: '한 명', dEntity: '개인 (자연인)', dLegalRep: '해당 없음',
       workStory: '피고가 운영하는 구로 물류센터에서 배차 담당으로 일했어요. 피고가 매일 아침 배차표를 짜서 알려주면 그대로 처리했고, 출퇴근도 지문으로 찍었습니다. 4대보험도 피고가 들어줬어요.',
       employmentStatus: '퇴사했어요', hireDate: '2023-03-06', leaveDate: '2026-06-30', jobTitle: '배차 담당 사무직',
       payKind: '월급', payAmount: '3100000', payDay: '매월 25일', workerCount: '5인 이상',
@@ -598,8 +608,15 @@ export const figmaWorkspaceCases = [
     docs: [
       { id: 'evidence', kind: 'evidence', title: '증거목록 (갑 제1~3호증)', progress: 100, createdAt: Date.now() - 86400000 * 25, updatedAt: Date.now() - 86400000 * 23 },
       { id: 'petition_payment', kind: 'petition', title: '지급명령신청서', progress: 100, createdAt: Date.now() - 86400000 * 30, updatedAt: Date.now() - 86400000 * 29 },
+      { id: 'brief1', kind: 'brief', title: '준비서면(1) — 근로자성 반박', progress: 100, createdAt: Date.now() - 86400000 * 8, updatedAt: Date.now() - 86400000 * 2, versions: [{ version: 1, createdAt: demoMoment(-8, '14:10'), note: '쟁점 정리 초안' }, { version: 2, createdAt: demoMoment(-2, '11:05'), note: '근태기록 반영본' }] },
+      { id: 'petition_aid', kind: 'petition', title: '소송구조신청서', progress: 100, createdAt: Date.now() - 86400000 * 26, updatedAt: Date.now() - 86400000 * 25, versions: [{ version: 1, createdAt: demoMoment(-26), submittedAt: dayOffset(-25), note: '법원 제출본' }] },
     ],
-    docMeta: { evidence: { status: '제출완료', due: dayOffset(-23), submittedAt: dayOffset(-23) } },
+    docMeta: {
+      evidence: { status: '제출완료', due: dayOffset(-23), submittedAt: dayOffset(-23) },
+      brief1: { status: '작성 중', due: dayOffset(18), submittedAt: '' },
+      petition_payment: { status: '제출완료', due: dayOffset(-29), submittedAt: dayOffset(-29) },
+      petition_aid: { status: '제출완료', due: dayOffset(-25), submittedAt: dayOffset(-25) },
+    },
     createdAt: Date.now() - 86400000 * 28, updatedAt: Date.now() - 86400000,
   },
   {
@@ -608,8 +625,8 @@ export const figmaWorkspaceCases = [
     entryPoint: 'filed', flowDone: {},
     form: {
       court: '서울동부지방법원', claimKind: '재산권상 청구', sueValueKind: '금액', amount: '4000000', courtDept: '제5민사단독',
-      pName: '홍길동', pRrn: '880417-1******', pAddr: '서울특별시 동작구 상도로 200', pAddrDetail: '1102호', pTel: '010-2841-7306', pEmail: 'gildong.hong@example.com',
-      dName: '김철수', dAddr: '서울특별시 강남구 테헤란로 152', dAddrDetail: '1204호', dTel: '010-9274-1185', dRrn: '761208-1******',
+      pName: '홍길동', pRrn: '880417-1******', pAddr: '서울특별시 동작구 상도로 200', pAddrDetail: '1102호', pTel: '010-2841-7306', pEmail: 'gildong.hong@example.com', pService: '위 주소와 같음', pFax: '02-6952-1408', pEntity: '개인 (자연인)', pLegalRep: '해당 없음', pForeignName: 'HONG GILDONG',
+      dName: '김철수', dAddr: '서울특별시 강남구 테헤란로 152', dAddrDetail: '1204호', dTel: '010-9274-1185', dRrn: '761208-1******', dCount: '한 명', dEntity: '개인 (자연인)', dLegalRep: '해당 없음',
       aiRelationshipDetail: '피고는 대학 동아리 후배예요. 2023년 8월에 가게 보증금이 급하게 모자란다고 해서 빌려줬습니다. 석 달 뒤에 꼭 갚겠다고 해서 차용증을 쓰고 계좌로 보냈어요.',
       loanDate: '2023-08-10', loanAmount: '5000000', payDateSame: '약속한 날 바로', loanMethod: '계좌이체',
       loanTimes: '한 번에 전부', dueSet: '날짜를 정했어요', dueDate: '2023-11-10', interestSet: '정하지 않았어요',
@@ -635,15 +652,23 @@ export const figmaWorkspaceCases = [
       { id: 'demo-loan-event-4', kind: 'status', title: '항소기간 도과로 판결 확정', desc: '판결정본 송달일부터 2주 (민사소송법 제396조)', at: Date.now() - 86400000 * 3, source: 'user' },
     ],
     precedentNos: ['2025다213495'],
-    docs: [{ id: 'evidence', kind: 'evidence', title: '증거목록 (갑 제1~3호증)', progress: 100, createdAt: Date.now() - 86400000 * 34, updatedAt: Date.now() - 86400000 * 31 }],
-    docMeta: { evidence: { status: '제출완료', due: dayOffset(-31), submittedAt: dayOffset(-31) } },
+    docs: [
+      { id: 'evidence', kind: 'evidence', title: '증거목록 (갑 제1~3호증)', progress: 100, createdAt: Date.now() - 86400000 * 34, updatedAt: Date.now() - 86400000 * 31 },
+      { id: 'brief1', kind: 'brief', title: '준비서면(1) — 변제 항변에 대한 반박', progress: 100, createdAt: Date.now() - 86400000 * 29, updatedAt: Date.now() - 86400000 * 26, versions: [{ version: 1, createdAt: demoMoment(-29, '10:40'), submittedAt: dayOffset(-26), note: '법원 제출본' }] },
+      { id: 'petition_execution', kind: 'petition', title: '강제집행신청서', progress: 100, createdAt: Date.now() - 86400000 * 2, updatedAt: Date.now() - 86400000, versions: [{ version: 1, createdAt: demoMoment(-2, '09:15'), note: '판결 확정 후 작성' }] },
+    ],
+    docMeta: {
+      evidence: { status: '제출완료', due: dayOffset(-31), submittedAt: dayOffset(-31) },
+      brief1: { status: '제출완료', due: dayOffset(-26), submittedAt: dayOffset(-26) },
+      petition_execution: { status: '제출예정', due: dayOffset(7), submittedAt: '' },
+    },
     createdAt: Date.now() - 86400000 * 52, updatedAt: Date.now() - 86400000 * 3,
   },
   {
     // 손해배상 · 판결 — 변론이 종결되고 선고를 기다린다
     id: 'demo-crash-case', kind: 'complaint', typeKey: 'tort', title: '교통사고 손해배상', caseNo: '2025가단334455', filedAt: dayOffset(-54), filedVia: '전자소송', status: '진행 중',
     entryPoint: 'filed', flowDone: { trial: true },
-    form: { court: '서울북부지방법원', claimKind: '재산권상 청구', sueValueKind: '금액', amount: '18600000', courtDept: '제3민사단독', pName: '홍길동', pRrn: '880417-1******', pAddr: '서울특별시 동작구 상도로 200', pAddrDetail: '1102호', pTel: '010-2841-7306', pEmail: 'gildong.hong@example.com', dName: '김철수', dAddr: '서울특별시 강남구 테헤란로 152', dAddrDetail: '1204호', dTel: '010-9274-1185', dRrn: '761208-1******', hasContract: '없음 (사고·불법행위)', tortKind: '교통사고 (자)', incidentDate: '2025-09-12', claimAmount: '18600000', incidentStory: '피고는 2025. 9. 12. 14:20경 서울특별시 노원구 상계동 교차로에서 승용차를 운전하던 중 중앙선을 침범하여 반대편에서 정상 진행하던 원고 운전 차량의 좌측면을 충격하였습니다.', damageKinds: ['치료비·수리비 (적극손해)', '일하지 못한 손해 (일실수입)', '위자료'], dmgDirect: '4120000', dmgIncome: '9480000', dmgSolace: '5000000', ownFault: '없음', calcBasis: '치료비는 영수증 합계, 일실수입은 사고 전 3개월 평균임금 기준 휴업 12주로 산정하였습니다. 위자료는 상해 정도와 치료 기간을 고려한 금액입니다.', calcDocs: ['진단서·소견서', '치료비 영수증', '급여명세서·소득금액증명', '사고사실확인원'], demandWay: '내용증명을 보냈어요', demandDate: dayOffset(-62),
+    form: { court: '서울북부지방법원', claimKind: '재산권상 청구', sueValueKind: '금액', amount: '18600000', courtDept: '제3민사단독', pName: '홍길동', pRrn: '880417-1******', pAddr: '서울특별시 동작구 상도로 200', pAddrDetail: '1102호', pTel: '010-2841-7306', pEmail: 'gildong.hong@example.com', pService: '위 주소와 같음', pFax: '02-6952-1408', pEntity: '개인 (자연인)', pLegalRep: '해당 없음', pForeignName: 'HONG GILDONG', dName: '김철수', dAddr: '서울특별시 강남구 테헤란로 152', dAddrDetail: '1204호', dTel: '010-9274-1185', dRrn: '761208-1******', dCount: '한 명', dEntity: '개인 (자연인)', dLegalRep: '해당 없음', hasContract: '없음 (사고·불법행위)', tortKind: '교통사고 (자)', incidentDate: '2025-09-12', claimAmount: '18600000', incidentStory: '피고는 2025. 9. 12. 14:20경 서울특별시 노원구 상계동 교차로에서 승용차를 운전하던 중 중앙선을 침범하여 반대편에서 정상 진행하던 원고 운전 차량의 좌측면을 충격하였습니다.', damageKinds: ['치료비·수리비 (적극손해)', '일하지 못한 손해 (일실수입)', '위자료'], dmgDirect: '4120000', dmgIncome: '9480000', dmgSolace: '5000000', ownFault: '없음', calcBasis: '치료비는 영수증 합계, 일실수입은 사고 전 3개월 평균임금 기준 휴업 12주로 산정하였습니다. 위자료는 상해 정도와 치료 기간을 고려한 금액입니다.', calcDocs: ['진단서·소견서', '치료비 영수증', '급여명세서·소득금액증명', '사고사실확인원'], demandWay: '내용증명을 보냈어요', demandDate: dayOffset(-62),
       demandResult: '피고 보험사에서 과실이 3대 7이라며 합의금을 절반만 주겠다고 했어요. 중앙선을 넘은 건 피고인데 제가 속도를 냈다고 우깁니다.',
       evidenceItems: ['사고 관련 자료(사진·영상)', '진단서·소견서', '치료비·수리비 영수증', '급여명세서·소득자료', '사고사실확인원'],
       attachExtra: ['주민등록초본'],
@@ -666,8 +691,13 @@ export const figmaWorkspaceCases = [
     docs: [
       { id: 'brief1', kind: 'brief', title: '준비서면(1) — 과실비율에 대한 반박', progress: 100, createdAt: Date.now() - 86400000 * 14, updatedAt: Date.now() - 86400000 * 6, versions: [{ version: 1, createdAt: demoMoment(-14, '15:20'), submittedAt: dayOffset(-6), note: '법원 제출본' }] },
       { id: 'evidence', kind: 'evidence', title: '증거목록 (갑 제1~5호증)', progress: 100, createdAt: Date.now() - 86400000 * 57, updatedAt: Date.now() - 86400000 * 54 },
+      { id: 'petition_provisional', kind: 'petition', title: '가압류신청서', progress: 100, createdAt: Date.now() - 86400000 * 58, updatedAt: Date.now() - 86400000 * 56, versions: [{ version: 1, createdAt: demoMoment(-58, '16:30'), submittedAt: dayOffset(-56), note: '법원 제출본' }] },
     ],
-    docMeta: { brief1: { status: '제출완료', due: dayOffset(-6), submittedAt: dayOffset(-6) }, evidence: { status: '제출완료', due: dayOffset(-54), submittedAt: dayOffset(-54) } },
+    docMeta: {
+      brief1: { status: '제출완료', due: dayOffset(-6), submittedAt: dayOffset(-6) },
+      evidence: { status: '제출완료', due: dayOffset(-54), submittedAt: dayOffset(-54) },
+      petition_provisional: { status: '제출완료', due: dayOffset(-56), submittedAt: dayOffset(-56) },
+    },
     createdAt: Date.now() - 86400000 * 70, updatedAt: Date.now() - 3600000 * 20,
   },
   {
@@ -676,8 +706,8 @@ export const figmaWorkspaceCases = [
     entryPoint: 'filed', flowDone: {},
     form: {
       court: '수원지방법원', claimKind: '재산권상 청구', sueValueKind: '금액', amount: '42000000', courtDept: '제2민사부',
-      pName: '홍길동', pRrn: '880417-1******', pAddr: '서울특별시 동작구 상도로 200', pAddrDetail: '1102호', pTel: '010-2841-7306', pEmail: 'gildong.hong@example.com',
-      dName: '김철수', dAddr: '서울특별시 강남구 테헤란로 152', dAddrDetail: '1204호', dTel: '010-9274-1185', dRrn: '761208-1******',
+      pName: '홍길동', pRrn: '880417-1******', pAddr: '서울특별시 동작구 상도로 200', pAddrDetail: '1102호', pTel: '010-2841-7306', pEmail: 'gildong.hong@example.com', pService: '위 주소와 같음', pFax: '02-6952-1408', pEntity: '개인 (자연인)', pLegalRep: '해당 없음', pForeignName: 'HONG GILDONG',
+      dName: '김철수', dAddr: '서울특별시 강남구 테헤란로 152', dAddrDetail: '1204호', dTel: '010-9274-1185', dRrn: '761208-1******', dCount: '한 명', dEntity: '개인 (자연인)', dLegalRep: '해당 없음',
       propertyDesc: '경기도 수원시 권선구 세화로 44\n철근콘크리트조 4층 근린생활시설 제1층 제102호 84.3㎡',
       ownership: '원고 소유', ownDate: '2019-05-20', occupancy: '영업 중', evictReason: '월세를 밀렸어요',
       leaseKind: '상가', contractDate: '2023-04-01', leaseEnd: '2026-03-31', rent: '2000000',
@@ -706,8 +736,18 @@ export const figmaWorkspaceCases = [
       { id: 'demo-evict-event-2', kind: 'status', title: '법원 접수 — 사건번호 2025가단776655', desc: '전자소송', at: Date.now() - 86400000 * 19, source: 'user' },
     ],
     precedentNos: [],
-    docs: [{ id: 'petition1', kind: 'petition', title: '점유이전금지가처분 신청서', progress: 100, createdAt: Date.now() - 86400000 * 27, updatedAt: Date.now() - 86400000 * 24 }],
-    docMeta: { petition1: { status: '제출완료', due: dayOffset(-24), submittedAt: dayOffset(-24) } },
+    docs: [
+      { id: 'petition1', kind: 'petition', title: '점유이전금지가처분 신청서', progress: 100, createdAt: Date.now() - 86400000 * 27, updatedAt: Date.now() - 86400000 * 24 },
+      { id: 'brief1', kind: 'brief', title: '준비서면(1) — 누수 항변에 대한 반박', progress: 100, createdAt: Date.now() - 86400000 * 6, updatedAt: Date.now() - 86400000 * 2, versions: [{ version: 1, createdAt: demoMoment(-6, '13:50'), note: '쟁점 정리 초안' }, { version: 2, createdAt: demoMoment(-2, '17:20'), note: '카드매출 자료 반영본' }] },
+      { id: 'evidence', kind: 'evidence', title: '증거목록 (갑 제1~4호증)', progress: 100, createdAt: Date.now() - 86400000 * 21, updatedAt: Date.now() - 86400000 * 19, versions: [{ version: 1, createdAt: demoMoment(-21), submittedAt: dayOffset(-19), note: '소장과 함께 제출' }] },
+      { id: 'petition_provisional', kind: 'petition', title: '가압류신청서', progress: 100, createdAt: Date.now() - 86400000 * 4, updatedAt: Date.now() - 86400000 * 3, versions: [{ version: 1, createdAt: demoMoment(-4, '11:35'), note: '카드매출채권 가압류' }] },
+    ],
+    docMeta: {
+      petition1: { status: '제출완료', due: dayOffset(-24), submittedAt: dayOffset(-24) },
+      brief1: { status: '작성 중', due: dayOffset(9), submittedAt: '' },
+      evidence: { status: '제출완료', due: dayOffset(-19), submittedAt: dayOffset(-19) },
+      petition_provisional: { status: '제출예정', due: dayOffset(5), submittedAt: '' },
+    },
     createdAt: Date.now() - 86400000 * 40, updatedAt: Date.now() - 86400000 * 2,
   },
 ]

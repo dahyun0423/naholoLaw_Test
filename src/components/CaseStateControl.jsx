@@ -7,7 +7,7 @@ import { completeness, findType } from '../lib/complaint.js'
 import Modal from './Modal.jsx'
 import { CASE_FLOW } from './CaseStatus.jsx'
 import { Button, cx } from './ui.jsx'
-import { ArrowRight, CheckCircle, Shield } from './icons.jsx'
+import { ArrowRight, CheckCircle } from './icons.jsx'
 
 const NEXT_STATUS = {
   '작성 중': '제출 준비',
@@ -94,31 +94,29 @@ export default function CaseStateControl({ c }) {
 
   return (
     <>
-      <div className="min-w-[230px] rounded-xl border border-brand-100 bg-brand-50 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Shield size={16} className="shrink-0 text-brand-400" />
-          <span className="text-[11px] font-semibold text-ink-500">현재 사건 상태</span>
-          <span className="ml-auto rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-brand-600">{c.status}</span>
-        </div>
-        <p className="mt-1.5 text-[12px] font-medium leading-relaxed text-ink-700">{copy.label}</p>
-        <div className="mt-3 flex items-center gap-2">
+      {/* 사건 머리 오른쪽에 붙는 조작부.
+          전에는 파란 상자 안에 상태 배지를 한 번 더 찍었는데, 상태는 이미 제목 옆에 있다.
+          여기 남길 것은 「지금 무슨 차례인가」 한 줄과 그 다음 행동 버튼뿐이다. */}
+      <div className="flex shrink-0 flex-col items-end gap-2">
+        <p className="text-[12px] text-ink-500">{copy.label}</p>
+        <div className="flex items-center gap-1.5">
           {nextStatus ? (
             <button
               type="button"
               onClick={startNext}
-              className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg bg-brand-300 px-3 text-[12px] font-bold text-white transition-colors hover:bg-brand-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 active:scale-[0.97]"
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-brand-300 px-4 text-[13px] font-bold text-white transition-colors hover:bg-brand-400 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-100 active:scale-[0.97]"
             >
               {copy.action} <ArrowRight size={14} />
             </button>
           ) : (
-            <span className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg bg-white px-3 text-[12px] font-bold text-brand-600">
+            <span className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-ink-100 px-4 text-[13px] font-bold text-ink-600">
               <CheckCircle size={15} /> 진행 완료
             </span>
           )}
           <button
             type="button"
             onClick={() => { setCorrection(c.status); setReason(''); setCorrectOpen(true) }}
-            className="min-h-11 rounded-lg px-2.5 text-[11px] font-semibold text-ink-500 hover:bg-white hover:text-ink-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
+            className="h-10 rounded-xl px-3 text-[12px] font-semibold text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-100"
           >
             상태 정정
           </button>
@@ -185,8 +183,8 @@ export default function CaseStateControl({ c }) {
             />
           </label>
           {correctionBlocked && (
-            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-[12px] font-medium text-red-500">
-              접수 이후 상태로 정정하려면 먼저 법원에서 받은 사건번호를 등록해야 합니다.
+            <p className="rounded-lg bg-ink-50 px-3 py-2.5 text-[12px] leading-relaxed text-ink-600">
+              접수 이후 상태로 정정하려면 <b className="font-semibold text-ink-900">법원에서 받은 사건번호</b>를 먼저 등록해야 합니다.
             </p>
           )}
           <p className={cx('text-[11px]', reason.trim().length > 0 && reason.trim().length < 5 ? 'text-red-500' : 'text-ink-400')}>
