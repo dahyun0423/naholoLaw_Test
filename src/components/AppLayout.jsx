@@ -90,7 +90,7 @@ const itemCls = (isActive, small, collapsed) => cx(
   'flex w-full items-center rounded-[10px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300',
   collapsed
     ? 'justify-center px-0 py-3'
-    : small ? 'gap-[7px] px-6 py-3 text-[14px] tracking-[-0.28px]' : 'gap-2.5 px-4 py-3 text-[16px] tracking-[-0.32px]',
+    : small ? 'gap-3 px-4 py-2.5 text-[14px] tracking-[-0.28px]' : 'gap-3 px-4 py-3 text-[16px] tracking-[-0.32px]',
   isActive ? 'bg-brand-300 font-semibold text-ink-50' : 'font-medium text-ink-500 hover:bg-ink-100',
 )
 
@@ -131,7 +131,7 @@ function Sidebar({ onNavigate, onStartGuide, collapsed = false, onToggle }) {
       <nav
         data-tour="main-nav"
         aria-label="앱 주요 메뉴"
-        className={cx('flex flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden pt-4', collapsed ? 'px-3' : 'px-5')}
+        className={cx('flex flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden pt-4', collapsed ? 'px-2' : 'px-4')}
       >
         {menuGroups.map((group, groupIndex) => (
           <div
@@ -200,7 +200,7 @@ function Topbar({ onMenu }) {
   const markAllRead = () => persist(new Set(notificationList.map((item) => item.id)))
   const markRead = (id) => persist(new Set([...read, id]))
   return (
-    <header data-tour="topbar" className="sticky top-0 z-30 flex h-[98px] items-center justify-between gap-[26px] bg-white px-4 sm:pl-7 sm:pr-0">
+    <header data-tour="topbar" className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 bg-white px-4 sm:px-6">
       <button onClick={onMenu} className="lg:hidden p-2 -ml-2 text-ink-700" aria-label="메뉴 열기">
         <Menu />
       </button>
@@ -209,7 +209,7 @@ function Topbar({ onMenu }) {
         <button
           onClick={() => setOpen((v) => !v)}
           data-tour="notifications"
-          className="relative grid h-12 w-12 place-items-center rounded-full text-ink-600 hover:bg-ink-100"
+          className="relative grid h-9 w-9 place-items-center rounded-full bg-ink-100 text-ink-900 hover:bg-ink-200"
           aria-label="알림"
         >
           <Bell />
@@ -265,13 +265,13 @@ function Topbar({ onMenu }) {
         )}
       </div>
 
-      <Link data-tour="profile" to="/app/my" className="flex h-20 w-[217px] items-center gap-2 rounded-full hover:bg-ink-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300">
-        <span className="grid h-[45px] w-[45px] shrink-0 place-items-center rounded-full bg-brand-50 text-[19px] font-bold text-brand-500">
+      <Link data-tour="profile" to="/app/my" className="flex items-center gap-3 rounded-full py-1 pl-1 pr-2 hover:bg-ink-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-50 text-[18px] font-semibold text-brand-500">
           {displayUser.name?.[0] || '나'}
         </span>
-        <span className="hidden sm:block leading-tight text-left">
-          <span className="block text-[20px] font-semibold leading-[1.4] text-ink-900">{displayUser.name}</span>
-          <span className="block text-[14px] font-medium leading-[1.4] text-ink-500">{displayUser.email}</span>
+        <span className="hidden sm:flex flex-col text-left">
+          <span className="text-base font-semibold leading-6 text-ink-900">{displayUser.name}</span>
+          <span className="text-xs leading-4 text-ink-500">{displayUser.email}</span>
         </span>
       </Link>
     </header>
@@ -313,7 +313,7 @@ export default function AppLayout() {
   return (
     <div className="min-h-screen bg-ink-50">
       {/* desktop sidebar — 로고를 눌러 접고 편다 */}
-      <aside className={cx('fixed inset-y-0 left-0 z-40 hidden border-r border-ink-100 bg-white transition-[width] duration-200 lg:block', collapsed ? 'w-[84px]' : 'w-[285px]')}>
+      <aside className={cx('fixed inset-y-0 left-0 z-40 hidden border-r border-ink-100 bg-white transition-[width] duration-200 lg:block', collapsed ? 'w-20' : 'w-64')}>
         <Sidebar onStartGuide={startCurrentGuide} collapsed={collapsed} onToggle={toggleCollapsed} />
       </aside>
 
@@ -321,7 +321,7 @@ export default function AppLayout() {
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/40" onClick={() => setMobileOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 w-[285px] bg-white shadow-xl">
+          <aside className="absolute inset-y-0 left-0 w-64 bg-white shadow-xl">
             <button onClick={() => setMobileOpen(false)} className="absolute right-3 top-6 p-1 text-ink-500"><X /></button>
             {/* 서랍은 항상 펼친 모습으로 — 좁은 화면에서 아이콘만 남길 이유가 없다 */}
             <Sidebar onNavigate={() => setMobileOpen(false)} onStartGuide={startCurrentGuide} onToggle={() => setMobileOpen(false)} />
@@ -329,9 +329,10 @@ export default function AppLayout() {
         </div>
       )}
 
-      <div className={cx('transition-[padding] duration-200', collapsed ? 'lg:pl-[84px]' : 'lg:pl-[285px]')}>
+      {/* 본문은 폭을 묶지 않는다 — 실서비스처럼 남는 자리를 내용이 채운다 */}
+      <div className={cx('transition-[padding] duration-200', collapsed ? 'lg:pl-20' : 'lg:pl-64')}>
         <Topbar onMenu={() => setMobileOpen(true)} />
-        <main data-app-route={tourKeyForPath(location.pathname)} className="mx-auto max-w-7xl px-4 py-7 sm:px-7">
+        <main data-app-route={tourKeyForPath(location.pathname)} className="px-4 pb-6 pt-6 sm:px-6">
           <Outlet />
         </main>
       </div>

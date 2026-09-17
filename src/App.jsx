@@ -10,7 +10,7 @@ import About from './pages/About.jsx'
 import Login from './pages/Login.jsx'
 import Signup from './pages/Signup.jsx'
 
-import Dashboard from './pages/Dashboard.jsx'
+import Dashboard from './pages/dashboard/index.jsx'
 import CaseSearch from './pages/CaseSearch.jsx'
 import Procedure from './pages/Procedure.jsx'
 import Cases from './pages/Cases.jsx'

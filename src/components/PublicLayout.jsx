@@ -1,63 +1,93 @@
-import { useState } from 'react'
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
-import { Button, cx } from './ui.jsx'
+import { cx } from './ui.jsx'
 import { BrandLogo, Menu, X } from './icons.jsx'
 
+// 실서비스와 같은 네 칸이다. 모두 랜딩 한 장 안의 자리로 내려간다.
 const nav = [
-  { to: '/', label: '홈', end: true },
-  { to: '/about', label: '서비스 소개' },
-  { to: '/#process', label: '이용 절차' },
-  { to: '/#faq', label: '자주 묻는 질문' },
+  { id: 'home', label: '홈' },
+  { id: 'service', label: '서비스 소개' },
+  { id: 'guide', label: '이용 절차' },
+  { id: 'faq', label: '자주 묻는 질문' },
 ]
+
+/** 지금 보고 있는 자리에 밑줄이 붙는다 — 스크롤 위치로만 판단한다. */
+function useActiveSection(enabled) {
+  const [active, setActive] = useState('home')
+  useEffect(() => {
+    if (!enabled) return undefined
+    const read = () => {
+      const line = window.scrollY + 120
+      const hit = nav.filter((n) => {
+        const el = document.getElementById(n.id)
+        return el && el.offsetTop <= line
+      })
+      setActive(hit.length ? hit[hit.length - 1].id : 'home')
+    }
+    read()
+    window.addEventListener('scroll', read, { passive: true })
+    return () => window.removeEventListener('scroll', read)
+  }, [enabled])
+  return enabled ? active : null
+}
 
 function Header() {
   const { isAuthed } = useAuth()
   const [open, setOpen] = useState(false)
-  const { pathname, hash } = useLocation()
+  const { pathname } = useLocation()
+  const onLanding = pathname === '/'
+  const active = useActiveSection(onLanding)
+
   return (
-    <header className="relative z-40 border-b border-ink-100 bg-white">
-      <div className="mx-auto flex h-[78px] max-w-[1380px] items-center justify-between px-5 sm:px-[30px]">
-        <Link to="/" aria-label="나홀로법에 홈">
-          <BrandLogo />
+    <header className="fixed inset-x-0 top-0 z-50 border-b border-ink-100 bg-white">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+        <Link to="/" aria-label="나홀로법에 홈" className="flex items-center gap-2">
+          <BrandLogo markSize={32} wordmarkSize={20} gap={8} />
         </Link>
 
-        <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-[42px] md:flex">
+        <nav className="hidden items-center gap-8 sm:flex">
           {nav.map((n) => {
-            const active = n.to === '/' ? pathname === '/' && !hash : (n.to.startsWith('/#') ? hash === n.to.slice(1) : pathname.startsWith(n.to))
-            return n.to.startsWith('/#') ? (
-              <a key={n.to} href={n.to} className={cx('py-2 text-[14px] font-medium transition-colors', active ? 'text-brand-500' : 'text-ink-700 hover:text-brand-500')}>{n.label}</a>
-            ) : (
-              <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => cx('py-2 text-[14px] font-medium transition-colors', isActive ? 'text-brand-500' : 'text-ink-700 hover:text-brand-500')}>{n.label}</NavLink>
+            const on = active === n.id
+            return (
+              <a
+                key={n.id}
+                href={onLanding ? `#${n.id}` : `/#${n.id}`}
+                className={cx('relative pb-1 text-[15px] transition-colors', on ? 'text-brand-300' : 'text-ink-400 hover:text-ink-900')}
+              >
+                {n.label}
+                {on && <span className="absolute -bottom-[5px] left-0 right-0 h-px rounded-full bg-brand-300" />}
+              </a>
             )
           })}
         </nav>
 
-        <div className="hidden items-center gap-2 md:flex">
-          {isAuthed ? (
-            <Button to="/app/dashboard" variant="outline" size="sm" className="h-10 rounded-[15px] px-5">대시보드로 이동</Button>
-          ) : (
-            <Button to="/signup" variant="outline" size="sm" className="h-10 rounded-[15px] px-6">시작하기</Button>
-          )}
-        </div>
+        <Link
+          to={isAuthed ? '/app/dashboard' : '/signup'}
+          className="hidden rounded-[10px] border border-brand-300 px-4 py-2 text-[15px] text-brand-300 transition-colors hover:bg-brand-50 sm:inline-flex"
+        >
+          {isAuthed ? '대시보드로 이동' : '시작하기'}
+        </Link>
 
-        <button className="md:hidden p-2 -mr-2 text-ink-700" onClick={() => setOpen(true)} aria-label="메뉴"><Menu /></button>
+        <button className="sm:hidden p-2 -mr-2 text-ink-700" onClick={() => setOpen(true)} aria-label="메뉴"><Menu /></button>
       </div>
 
       {open && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-50 sm:hidden">
           <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-0 h-full w-72 bg-white p-5 shadow-xl">
             <button onClick={() => setOpen(false)} className="absolute right-4 top-5 text-ink-500"><X /></button>
             <div className="mt-12 flex flex-col gap-1">
               {nav.map((n) => (
-                <a key={n.to} href={n.to} onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-[15px] font-medium text-ink-700 hover:bg-ink-100">{n.label}</a>
+                <a key={n.id} href={`/#${n.id}`} onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-[15px] font-medium text-ink-700 hover:bg-ink-100">{n.label}</a>
               ))}
               <div className="mt-3 flex flex-col gap-2">
-                {isAuthed ? <Button to="/app/dashboard" onClick={() => setOpen(false)}>대시보드로 이동</Button> : (
+                {isAuthed ? (
+                  <Link to="/app/dashboard" onClick={() => setOpen(false)} className="rounded-[10px] border border-brand-300 px-4 py-2.5 text-center text-[15px] text-brand-300">대시보드로 이동</Link>
+                ) : (
                   <>
-                    <Button to="/login" variant="neutral" onClick={() => setOpen(false)}>로그인</Button>
-                    <Button to="/signup" onClick={() => setOpen(false)}>시작하기</Button>
+                    <Link to="/login" onClick={() => setOpen(false)} className="rounded-[10px] border border-ink-200 px-4 py-2.5 text-center text-[15px] text-ink-700">로그인</Link>
+                    <Link to="/signup" onClick={() => setOpen(false)} className="rounded-[10px] border border-brand-300 px-4 py-2.5 text-center text-[15px] text-brand-300">시작하기</Link>
                   </>
                 )}
               </div>
@@ -72,7 +102,7 @@ function Header() {
 function Footer() {
   return (
     <footer className="border-t border-ink-200 bg-ink-50">
-      <div className="mx-auto max-w-[1280px] px-5 py-12 sm:py-14">
+      <div className="mx-auto max-w-6xl px-6 py-12 sm:py-14">
         <div className="grid gap-10 sm:grid-cols-[1fr_auto] sm:items-start">
           <div className="max-w-md">
             <BrandLogo />
@@ -82,8 +112,8 @@ function Footer() {
           </div>
           <nav aria-label="푸터 메뉴" className="grid grid-cols-2 gap-x-10 gap-y-3 text-[13px] font-medium sm:grid-cols-3">
             <Link to="/about" className="text-ink-600 hover:text-brand-500">서비스 소개</Link>
-            <a href="/#features" className="text-ink-600 hover:text-brand-500">주요 기능</a>
-            <a href="/#process" className="text-ink-600 hover:text-brand-500">이용 절차</a>
+            <a href="/#guide" className="text-ink-600 hover:text-brand-500">주요 기능</a>
+            <a href="/#service" className="text-ink-600 hover:text-brand-500">이용 절차</a>
             <a href="/#faq" className="text-ink-600 hover:text-brand-500">자주 묻는 질문</a>
             <Link to="/login" className="text-ink-600 hover:text-brand-500">로그인</Link>
             <Link to="/signup" className="text-ink-600 hover:text-brand-500">시작하기</Link>
@@ -105,7 +135,8 @@ export default function PublicLayout() {
   return (
     <div className="flex min-h-screen flex-col bg-white">
       <Header />
-      <main className="flex-1"><Outlet /></main>
+      {/* 헤더가 고정 64라 그만큼을 본문 위로 비워 둔다 */}
+      <main className="flex-1 pt-16"><Outlet /></main>
       <Footer />
     </div>
   )

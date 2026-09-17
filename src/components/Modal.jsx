@@ -36,8 +36,9 @@ export default function Modal({
   if (!open) return null
   const subscriptionStyle = variant === 'subscription'
   const scheduleStyle = variant === 'schedule' || variant === 'scheduleResult'
+  const casePickerStyle = variant === 'casePicker'
   const resultStyle = variant === 'scheduleResult'
-  const calmStyle = subscriptionStyle || scheduleStyle
+  const calmStyle = subscriptionStyle || scheduleStyle || casePickerStyle
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
