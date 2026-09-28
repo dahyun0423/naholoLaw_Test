@@ -27,30 +27,34 @@ import { Check, FileText, AlertTriangle, ArrowRight, ArrowLeft, ChevronRight } f
  * 사건 고르기 카드 — Figma 문서 유형 카드와 같은 컴포넌트를 쓴다.
  * 제목이 사건명, 부제가 「법원 | 사건번호」, 아래에 마지막 업데이트가 붙는다.
  */
-function CasePick({ c, sum, onPick }) {
-  const type = findType(c.typeKey)
+function CasePick({ c, onPick }) {
   return (
     <button
       type="button"
       onClick={onPick}
-      className="group relative h-[284px] w-full max-w-[320px] self-start overflow-hidden rounded-[20px] border border-ink-200 bg-surface-sub text-left transition-colors hover:border-brand-200 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+      className="group relative h-[190px] w-full self-start overflow-hidden rounded-[20px] border border-ink-200 bg-surface-sub text-left transition-[background-color,border-color,transform] duration-200 hover:z-10 hover:scale-[1.008] hover:border-brand-200 hover:bg-brand-50 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 active:scale-[0.995]"
     >
-      <img src="/figma/procedure/case-folder.svg" alt="" aria-hidden="true" className="pointer-events-none absolute left-[26px] top-[79px] h-[229px] w-[259px] max-w-none" />
+      <img
+        src="/figma/procedure/case-folder.svg"
+        alt=""
+        aria-hidden="true"
+        className="pointer-events-none absolute left-1/2 top-[54px] h-[145px] w-[164px] max-w-none -translate-x-1/2 transition-transform duration-300 ease-out group-hover:-translate-x-1/2 group-hover:-translate-y-1 group-hover:scale-[1.03]"
+      />
       <span
         aria-hidden
-        className="absolute inset-x-0 bottom-0 h-[105px] bg-[rgba(242,244,246,0.68)] backdrop-blur-[19px] transition-colors group-hover:bg-[rgba(198,225,255,0.34)]"
+        className="doctype-glass absolute inset-x-0 bottom-0 h-[62px]"
       />
 
-      <span className="absolute left-5 right-5 top-5">
-        <span className="block truncate text-[24px] font-semibold leading-snug text-ink-700 transition-colors group-hover:text-brand-400">
+      <span className="absolute left-5 right-5 top-[18px] z-10">
+        <span className="block truncate text-[20px] font-semibold leading-[1.45] text-ink-700 transition-colors group-hover:text-brand-400">
           {caseTitle(c)}
         </span>
-        <span className="mt-0.5 block truncate text-[15px] font-medium text-ink-600">
+        <span className="block truncate text-[13px] font-medium leading-[1.6] text-ink-500 transition-colors group-hover:text-brand-300">
           {[c.form?.court || '법원 미정', c.caseNo || '사건번호 없음'].join(' | ')}
         </span>
       </span>
 
-      <span className="absolute bottom-[24px] left-[30px] text-[18px] font-medium leading-[1.6] tracking-[-0.36px] text-ink-400 transition-colors group-hover:text-brand-300">
+      <span className="absolute bottom-[19px] left-5 right-5 z-10 truncate text-[14px] font-medium leading-[1.6] tracking-[-0.14px] text-ink-400 transition-colors group-hover:text-brand-300">
         마지막 업데이트: {savedAgo(c.updatedAt)}
       </span>
     </button>
@@ -65,7 +69,7 @@ const StepNum = ({ n }) => (
 )
 
 export default function Procedure() {
-  const { activeCase, activeRaw, rawCases, myCases, setActiveCaseId } = useWorkspace()
+  const { activeCase, activeRaw, rawCases, setActiveCaseId } = useWorkspace()
   // Figma 「소송절차안내」 시작 화면 — 사건이 있으면 어느 사건의 절차인지부터 고른다.
   // 절차의 **내용**은 사건마다 크게 다르지 않다. 다른 건 "지금 어디냐"뿐이다.
   // 그래서 사건이 없으면 문을 잠그지 않고, 아직 아무 칸도 지나지 않은 상태로
@@ -104,7 +108,7 @@ export default function Procedure() {
 
   if (mode === 'pick') {
     return (
-      <div className="mx-auto max-w-[1091px] space-y-6">
+      <div className="w-full space-y-6">
         <div>
           <h1 className="text-[30px] font-bold leading-[1.6] text-ink-900">소송 절차 안내</h1>
           <p className="text-[18px] font-medium leading-[1.4] tracking-[-0.36px] text-ink-700">소송 진행 단계를 한눈에 확인하고 다음 단계를 준비하세요</p>
@@ -134,10 +138,9 @@ export default function Procedure() {
 
             <ul aria-label={`${safePickPage + 1}페이지 사건 목록`} className="grid min-w-0 flex-1 gap-x-5 gap-y-6 sm:grid-cols-2 xl:grid-cols-3">
               {visiblePickCases.map((c) => (
-                <li key={c.id} className="w-full max-w-[320px]">
+                <li key={c.id} className="w-full">
                   <CasePick
                     c={c}
-                    sum={myCases.find((m) => m.id === c.id)}
                     onPick={() => { setActiveCaseId(c.id); setMode('case') }}
                   />
                 </li>

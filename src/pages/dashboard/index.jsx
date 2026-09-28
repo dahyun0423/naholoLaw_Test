@@ -91,7 +91,7 @@ export default function DashboardPage() {
           <div className="space-y-4">
             <p className="text-[14px] font-medium leading-relaxed text-ink-700">{selectedFaq.a}</p>
             <p className="rounded-xl bg-ink-50 px-4 py-3 text-[13px] font-medium leading-relaxed text-ink-600">
-              <strong className="font-semibold text-ink-800">제출 전 확인</strong><br />{selectedFaq.note}
+              <strong className="font-semibold text-ink-800">{selectedFaq.noteLabel || '제출 전 확인'}</strong><br />{selectedFaq.note}
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <Link
@@ -103,6 +103,7 @@ export default function DashboardPage() {
               </Link>
               <a
                 href={selectedFaq.source}
+                title={selectedFaq.sourceTitle}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-[13px] font-semibold text-ink-500 hover:text-brand-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"

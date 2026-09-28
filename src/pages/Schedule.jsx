@@ -173,7 +173,7 @@ export default function Schedule() {
   }
 
   const openEdit = (item) => {
-    setEditing({ caseId: item.caseId, todoId: item.id })
+    setEditing({ caseId: item.caseId, todoId: item.id, original: item })
     setManual({
       title: item.text,
       date: item.due,
@@ -201,8 +201,12 @@ export default function Schedule() {
       if (editing.caseId === manual.caseId) {
         updateTodo(editing.caseId, editing.todoId, { text: manual.title.trim(), due: manual.date, ...meta })
       } else {
+        // 장소·근거·통지서 정보는 폼에 없으니 원래 일정에서 그대로 가져간다
+        const {
+          id, text, due, done, createdAt, caseId, caseName, tone, dday, ...kept
+        } = editing.original || {}
         removeTodo(editing.caseId, editing.todoId)
-        addTodo(manual.caseId, manual.title, manual.date, { ...meta, source: 'manual' })
+        addTodo(manual.caseId, manual.title, manual.date, { ...kept, ...meta, source: kept.source || 'manual' })
       }
     } else {
       addTodo(manual.caseId, manual.title, manual.date, { ...meta, source: 'manual' })

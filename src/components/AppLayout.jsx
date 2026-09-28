@@ -7,10 +7,11 @@ import { Button, cx } from './ui.jsx'
 import SpotlightTour from './guide/SpotlightTour.jsx'
 import Modal from './Modal.jsx'
 import { requestProductTour, tourKeyForPath } from './guide/tourData.js'
+import { Bell, Menu, X } from './icons.jsx'
 import {
-  BrandLogo, Logo, Scale, FileText, Bell, Calendar, HelpCircle, LogOut, Menu, X,
-  LayoutDashboard, BookOpen, FolderOpen, CaseNew, BookMarked,
-} from './icons.jsx'
+  SideLogo, SideLogoMark, SideDashboard, SideDocument, SidePrecedent, SideProcedure,
+  SideCase, SideEvidence, SideSchedule, SideGuide, SideLogout,
+} from './sidebarIcons.jsx'
 
 const SCOPE_ACK_KEY = 'naholo_service_scope_ack_v2'
 
@@ -60,42 +61,49 @@ function ServiceScopeNotice() {
   )
 }
 
-// Figma 293:62148 기준: '메인 메뉴'와 '부가 메뉴' 두 묶음, 순서 고정
+// 배포 사이트(sololaw.site) 사이드바와 같은 묶음·순서·모양이다.
 const menuGroups = [
   {
     label: '메인 메뉴',
     items: [
-      { to: '/app/dashboard', label: '대시보드', icon: LayoutDashboard },
-      { to: '/app/documents', label: '문서 생성', icon: FileText },
-      { to: '/app/search', label: '판례 검색', icon: Scale },
-      { to: '/app/procedure', label: '절차 안내', icon: BookOpen },
+      { to: '/app/dashboard', label: '대시보드', icon: SideDashboard },
+      { to: '/app/documents', label: '문서 생성', icon: SideDocument },
+      { to: '/app/search', label: '판례 검색', icon: SidePrecedent },
+      { to: '/app/procedure', label: '절차 안내', icon: SideProcedure },
     ],
   },
   {
     label: '부가 메뉴',
     items: [
-      { to: '/app/cases', label: '사건 관리', icon: CaseNew },
-      { to: '/app/evidence', label: '증빙 자료', icon: FolderOpen },
-      // Figma는 '스케줄 관리'지만 화면 제목·투어와 맞춰 '일정 관리'로 통일한다.
-      { to: '/app/schedule', label: '일정 관리', icon: Calendar },
+      { to: '/app/cases', label: '사건 관리', icon: SideCase },
+      { to: '/app/evidence', label: '증빙 자료', icon: SideEvidence },
+      { to: '/app/schedule', label: '일정 관리', icon: SideSchedule },
     ],
   },
 ]
 
 /**
- * 두 묶음의 칸과 아래쪽 보조 칸이 같은 모양을 쓴다 — 글자 크기만 다르다.
- * 접힌 상태에서는 글자를 빼고 아이콘만 가운데 둔다.
+ * 실서비스 칸 모양: 큰 칸 48px·16px 글자, 아래쪽 작은 칸 40px·14px 글자.
+ * 선택된 칸만 파란 바탕에 흰 글자이고, 나머지는 회색 글자만 둔다.
+ * 접힌 상태에서는 글자를 빼고 정사각형 칸 가운데에 아이콘만 둔다.
  */
 const itemCls = (isActive, small, collapsed) => cx(
-  'flex w-full items-center rounded-[10px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300',
-  collapsed
-    ? 'justify-center px-0 py-3'
-    : small ? 'gap-3 px-4 py-2.5 text-[14px] tracking-[-0.28px]' : 'gap-3 px-4 py-3 text-[16px] tracking-[-0.32px]',
-  isActive ? 'bg-brand-300 font-semibold text-ink-50' : 'font-medium text-ink-500 hover:bg-ink-100',
+  'flex shrink-0 items-center overflow-hidden whitespace-nowrap rounded-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300',
+  small ? 'h-10 text-sm' : 'h-12 text-base',
+  collapsed ? cx('justify-center', small ? 'w-10' : 'w-12') : 'w-full justify-start px-4',
+  isActive ? 'bg-brand-400 text-white' : 'text-ink-500',
 )
 
+function ItemBody({ icon: Icon, label, collapsed }) {
+  return (
+    <>
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center"><Icon /></span>
+      {!collapsed && <span className="pl-3">{label}</span>}
+    </>
+  )
+}
+
 function NavItem({ item, onClick, small, collapsed }) {
-  const Icon = item.icon
   return (
     <NavLink
       to={item.to}
@@ -105,17 +113,16 @@ function NavItem({ item, onClick, small, collapsed }) {
       aria-label={collapsed ? item.label : undefined}
       className={({ isActive }) => itemCls(isActive, small, collapsed)}
     >
-      <Icon size={20} className="shrink-0" />
-      {!collapsed && item.label}
+      <ItemBody icon={item.icon} label={item.label} collapsed={collapsed} />
     </NavLink>
   )
 }
 
-function Sidebar({ onNavigate, onStartGuide, collapsed = false, onToggle }) {
+function Sidebar({ onNavigate, collapsed = false, onToggle }) {
   const { logout } = useAuth()
   const navigate = useNavigate()
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col overflow-hidden">
       {/* 로고가 접기 버튼을 겸한다 — 대시보드로 가는 길은 첫 메뉴 칸에 있다. */}
       <button
         type="button"
@@ -123,45 +130,27 @@ function Sidebar({ onNavigate, onStartGuide, collapsed = false, onToggle }) {
         aria-label={collapsed ? '메뉴 펼치기' : '메뉴 접기'}
         aria-expanded={!collapsed}
         title={collapsed ? '메뉴 펼치기' : '메뉴 접기'}
-        className="flex h-20 shrink-0 items-center justify-center rounded-xl transition-colors hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+        className="flex h-20 shrink-0 items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-300"
       >
-        {collapsed ? <Logo size={40} /> : <BrandLogo markSize={52.8} wordmarkSize={25} gap={11.52} />}
+        {collapsed ? <SideLogoMark width={40} height={40} /> : <SideLogo width={150} height={45} />}
       </button>
 
       <nav
         data-tour="main-nav"
         aria-label="앱 주요 메뉴"
-        className={cx('flex flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden pt-4', collapsed ? 'px-2' : 'px-4')}
+        className={cx('flex flex-1 flex-col items-center gap-4 overflow-y-auto overflow-x-hidden', collapsed ? 'px-2' : 'px-4')}
       >
-        {menuGroups.map((group, groupIndex) => (
-          <div
-            key={group.label}
-            className={cx(
-              'flex flex-col gap-4',
-              collapsed ? cx('gap-1', groupIndex > 0 && 'border-t border-ink-100 pt-4') : 'px-3',
-            )}
-          >
-            {!collapsed && <p className="text-[14px] font-medium leading-[1.4] text-ink-500">{group.label}</p>}
-            <div className="flex flex-col gap-1">
-              {group.items.map((m) => <NavItem key={m.to} item={m} onClick={onNavigate} collapsed={collapsed} />)}
-            </div>
+        {menuGroups.map((group) => (
+          <div key={group.label} className={cx('flex w-full flex-col items-center gap-1', collapsed ? 'px-1' : 'px-3')}>
+            {!collapsed && <p className="flex h-8 w-full shrink-0 items-center text-sm text-ink-500">{group.label}</p>}
+            {group.items.map((m) => <NavItem key={m.to} item={m} onClick={onNavigate} collapsed={collapsed} />)}
           </div>
         ))}
       </nav>
 
-      <div className={cx('flex flex-col gap-3 py-6', collapsed ? 'px-3' : 'px-4')}>
-        <button
-          type="button"
-          data-tour="guide-trigger"
-          onClick={onStartGuide}
-          title={collapsed ? '사용가이드' : undefined}
-          aria-label={collapsed ? '사용가이드' : undefined}
-          className={itemCls(false, true, collapsed)}
-        >
-          <HelpCircle size={20} className="shrink-0" />
-          {!collapsed && '사용가이드'}
-        </button>
-        <NavItem item={{ to: '/app/guide', label: '가이드 모음', icon: BookMarked }} onClick={onNavigate} small collapsed={collapsed} />
+      {/* 사용 가이드 투어는 가이드 화면의 버튼에서 시작한다. */}
+      <nav aria-label="보조 메뉴" className="flex shrink-0 flex-col items-center gap-1 px-3 py-4">
+        <NavItem item={{ to: '/app/guide', label: '가이드', icon: SideGuide }} onClick={onNavigate} small collapsed={collapsed} />
         <button
           type="button"
           onClick={() => { logout(); navigate('/') }}
@@ -169,10 +158,9 @@ function Sidebar({ onNavigate, onStartGuide, collapsed = false, onToggle }) {
           aria-label={collapsed ? '로그아웃' : undefined}
           className={itemCls(false, true, collapsed)}
         >
-          <LogOut size={20} className="shrink-0" />
-          {!collapsed && '로그아웃'}
+          <ItemBody icon={SideLogout} label="로그아웃" collapsed={collapsed} />
         </button>
-      </div>
+      </nav>
     </div>
   )
 }
@@ -288,11 +276,6 @@ export default function AppLayout() {
   const navigate = useNavigate()
   const figmaPreview = import.meta.env.DEV && new URLSearchParams(location.search).get('figma') === '1'
 
-  const startCurrentGuide = () => {
-    setMobileOpen(false)
-    window.setTimeout(() => requestProductTour(location.pathname), 80)
-  }
-
   const toggleCollapsed = () => setCollapsed((value) => {
     const next = !value
     try { localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0') } catch { /* 저장 불가 환경 */ }
@@ -313,8 +296,8 @@ export default function AppLayout() {
   return (
     <div className="min-h-screen bg-ink-50">
       {/* desktop sidebar — 로고를 눌러 접고 편다 */}
-      <aside className={cx('fixed inset-y-0 left-0 z-40 hidden border-r border-ink-100 bg-white transition-[width] duration-200 lg:block', collapsed ? 'w-20' : 'w-64')}>
-        <Sidebar onStartGuide={startCurrentGuide} collapsed={collapsed} onToggle={toggleCollapsed} />
+      <aside className={cx('fixed inset-y-0 left-0 z-40 hidden bg-white transition-[width] duration-200 lg:block', collapsed ? 'w-20' : 'w-64')}>
+        <Sidebar collapsed={collapsed} onToggle={toggleCollapsed} />
       </aside>
 
       {/* mobile drawer */}
@@ -324,7 +307,7 @@ export default function AppLayout() {
           <aside className="absolute inset-y-0 left-0 w-64 bg-white shadow-xl">
             <button onClick={() => setMobileOpen(false)} className="absolute right-3 top-6 p-1 text-ink-500"><X /></button>
             {/* 서랍은 항상 펼친 모습으로 — 좁은 화면에서 아이콘만 남길 이유가 없다 */}
-            <Sidebar onNavigate={() => setMobileOpen(false)} onStartGuide={startCurrentGuide} onToggle={() => setMobileOpen(false)} />
+            <Sidebar onNavigate={() => setMobileOpen(false)} onToggle={() => setMobileOpen(false)} />
           </aside>
         </div>
       )}

@@ -1,5 +1,7 @@
 import { FileText, Book, ArrowRight, ExternalLink } from './icons.jsx'
-import { downloadText, youtubeSearch, resources, templateFor } from '../lib/templates.js'
+import { youtubeSearch, resources, templateFor } from '../lib/templates.js'
+import { LEGAL_DOCS } from '../lib/legalDocs.js'
+import { downloadLegalDoc } from '../lib/legalDocFiles.js'
 
 // 도움 콘텐츠 모달 안에서 유형별 '실제 동작'을 제공한다.
 // item: { type: '동영상'|'템플릿'|'가이드', title, cta?, to? }
@@ -22,16 +24,17 @@ export default function HelpMedia({ item, navigate, onClose }) {
       )}
 
       {type === '템플릿' && (() => {
-        const t = templateFor(item.title)
+        const key = templateFor(item.title)
+        const doc = LEGAL_DOCS.find((d) => d.key === key)
         return (
           <button
-            onClick={() => downloadText(t.name, t.text)}
+            onClick={() => downloadLegalDoc(key)}
             className="flex w-full items-center gap-3 rounded-xl border border-brand-200 bg-brand-50/50 p-4 text-left hover:bg-brand-50"
           >
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white text-brand-500"><FileText size={20} /></span>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold text-ink-900">{t.name} 다운로드</p>
-              <p className="text-xs text-ink-500">바로 사용할 수 있는 표준 양식을 내려받습니다.</p>
+              <p className="text-sm font-bold text-ink-900">{doc.group} 양식 ({doc.name}) 워드 다운로드</p>
+              <p className="text-xs text-ink-500">법원 제출 서면 모양의 .docx 예시를 내려받아 내 사건에 맞게 고쳐 쓰세요.</p>
             </div>
             <ArrowRight size={16} className="shrink-0 text-brand-400" />
           </button>

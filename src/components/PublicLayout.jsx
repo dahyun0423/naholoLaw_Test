@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext.jsx'
 import { cx } from './ui.jsx'
 import { BrandLogo, Menu, X } from './icons.jsx'
+import LegalDocModal from './LegalDocModal.jsx'
 
 // 실서비스와 같은 네 칸이다. 모두 랜딩 한 장 안의 자리로 내려간다.
 const nav = [
@@ -43,7 +44,8 @@ function Header() {
     <header className="fixed inset-x-0 top-0 z-50 border-b border-ink-100 bg-white">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
         <Link to="/" aria-label="나홀로법에 홈" className="flex items-center gap-2">
-          <BrandLogo markSize={32} wordmarkSize={20} gap={8} />
+          {/* 배포 사이트(sololaw.site) 헤더와 같은 값: 자간 기본, 줄높이 30px */}
+          <BrandLogo markSize={32} wordmarkSize={20} gap={8} tracking="normal" leading={1.5} />
         </Link>
 
         <nav className="hidden items-center gap-8 sm:flex">
@@ -53,18 +55,18 @@ function Header() {
               <a
                 key={n.id}
                 href={onLanding ? `#${n.id}` : `/#${n.id}`}
-                className={cx('relative pb-1 text-[15px] transition-colors', on ? 'text-brand-300' : 'text-ink-400 hover:text-ink-900')}
+                className={cx('relative pb-1 text-[15px] transition-colors', on ? 'text-brand-400' : 'text-ink-400 hover:text-ink-900')}
               >
                 {n.label}
-                {on && <span className="absolute -bottom-[5px] left-0 right-0 h-px rounded-full bg-brand-300" />}
+                {on && <span className="absolute -bottom-[5px] left-0 right-0 h-px rounded-full bg-brand-400" />}
               </a>
             )
           })}
         </nav>
 
         <Link
-          to={isAuthed ? '/app/dashboard' : '/signup'}
-          className="hidden rounded-[10px] border border-brand-300 px-4 py-2 text-[15px] text-brand-300 transition-colors hover:bg-brand-50 sm:inline-flex"
+          to={isAuthed ? '/app/dashboard' : '/login'}
+          className="hidden rounded-[10px] border border-brand-400 px-4 py-2 text-[15px] text-brand-400 transition-colors sm:inline-flex"
         >
           {isAuthed ? '대시보드로 이동' : '시작하기'}
         </Link>
@@ -100,6 +102,8 @@ function Header() {
 }
 
 function Footer() {
+  // 개인정보처리방침은 가입 전에도 누구나 볼 수 있어야 한다(개인정보 보호법 제30조 공개 의무).
+  const [doc, setDoc] = useState(null)
   return (
     <footer className="border-t border-ink-200 bg-ink-50">
       <div className="mx-auto max-w-6xl px-6 py-12 sm:py-14">
@@ -124,9 +128,14 @@ function Footer() {
           <p className="mt-1.5 max-w-4xl">
             나홀로법에는 변호사나 법률사무소가 아니며 법률 자문·소송 전략·소송대리를 제공하지 않습니다. 생성 문서와 검색 결과는 참고용 초안이므로 제출 전 법원 원문 및 본인의 자료와 반드시 대조하세요. 전문적인 판단은 변호사와 상담해야 합니다.
           </p>
-          <p className="mt-4 text-ink-400">© 2026 나홀로법에. All rights reserved.</p>
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <button type="button" onClick={() => setDoc('terms')} className="text-ink-600 hover:text-brand-500">서비스 이용약관</button>
+            <button type="button" onClick={() => setDoc('privacy')} className="font-semibold text-ink-700 hover:text-brand-500">개인정보처리방침</button>
+          </div>
+          <p className="mt-2 text-ink-400">© 2026 나홀로법에. All rights reserved.</p>
         </div>
       </div>
+      <LegalDocModal docKey={doc} onClose={() => setDoc(null)} />
     </footer>
   )
 }

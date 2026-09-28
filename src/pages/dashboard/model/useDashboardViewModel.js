@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { dateLabel } from '../../../data/mock.js'
 import { caseDocs, caseEvidence, caseTodoList, caseTitle, caseUpcoming } from '../../../lib/casebook.js'
+import { savedAgo } from '../../../lib/complaint.js'
 
 const WEEKDAY_LABELS = ['월', '화', '수', '목', '금', '토', '일']
 
@@ -71,15 +72,17 @@ function buildDashboardViewModel(rawCases, activeRaw, now) {
     { id: 'evidence', label: '등록된 증거', value: `${evidenceCount}`, badge: `갑호증 ${evidenceCount}개`, to: '/app/evidence' },
   ]
 
-  const recentCases = rawCases.slice(0, 3).map((item) => {
-    const pendingCount = caseTodoList(item).filter((todo) => !todo.done).length
-    return {
+  // 최근 사건 — 활동 로그가 아니라 사건 자체를 최종 수정 순으로 보여준다.
+  const recentCases = rawCases
+    .map((item) => ({
       id: item.id,
       title: caseTitle(item),
-      status: item.status || '진행중',
-      meta: `${item.caseNo || '사건번호 없음'} · ${pendingCount ? `남은 준비 ${pendingCount}건` : '남은 준비 없음'}`,
-    }
-  })
+      status: item.status || '진행 중',
+      meta: [item.caseNo || '사건번호 없음', item.form?.court || '법원 미정', savedAgo(item.updatedAt)].join(' · '),
+      updatedAt: item.updatedAt || 0,
+    }))
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, 3)
 
   return {
     now,

@@ -80,6 +80,19 @@ body {
   word-break: keep-all;
 }
 
+/* Figma glass 원본: 별도 blur/gradient 없이 반투명 fill이 뒤의 종이·그림자와 합성된다. */
+.doctype-glass {
+  background: rgba(242, 244, 246, 0.68);
+  -webkit-backdrop-filter: blur(12px) saturate(105%);
+  backdrop-filter: blur(12px) saturate(105%);
+  transition: background 200ms ease;
+}
+
+.group:hover .doctype-glass,
+.doctype-glass[data-active='true'] {
+  background: rgba(198, 225, 255, 0.34);
+}
+
 /* thin custom scrollbar */
 ::-webkit-scrollbar {
   width: 10px;

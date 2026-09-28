@@ -1,49 +1,34 @@
-// 템플릿 보기 — 실제로 만들어진 파일을 그대로 읽는다.
+// 템플릿 보기 — 법원 서면 양식을 A4 종이 모양 그대로 보여주고, 워드 파일로 내려준다.
 //
-// 예전에는 "템플릿을 불러옵니다" 토스트만 띄우고 아무것도 보여주지 않았다.
-// 문서를 처음 쓰는 사람이 알고 싶은 건 "어떤 모양인가"인데, 그걸 못 봤다.
+// 문서를 처음 쓰는 사람이 알고 싶은 건 "어떤 모양인가"다. 그래서 글자만 늘어놓지 않고
+// 제출하는 종이처럼 제목·당사자 표시·청구취지·서명란을 배치해 보여준다.
+// 화면의 글자는 그대로 선택·복사할 수 있고, ‘워드 다운로드’는 같은 내용의 .docx 를 준다.
 //
-// 여기서 보여주는 것은 `예시/서류/`에 있는 실제 파일이다. 화면용으로 따로 만든
-// 문구가 아니라, 그대로 PDF로 구워서 내려받을 수 있는 것과 같은 글이다.
-// Vite의 `?raw`로 빌드 시점에 문자열로 가져오므로 서버 요청이 없다.
+// 원본은 src/lib/legalDocs.js 한 곳이다. 화면과 워드, 파서 시험용 PDF 가 모두 여기서 나온다.
+// 당사자는 원고 홍길동 · 피고 김철수, 번호는 실제로 쓰일 수 없는 값으로 통일했다.
 
-import { useState } from 'react'
-import { Badge, Button, cx } from './ui.jsx'
+import { useEffect, useRef, useState } from 'react'
+import { Button, cx } from './ui.jsx'
 import Modal from './Modal.jsx'
-import { FileText, Copy, Check } from './icons.jsx'
+import { Check, Copy, Download, FileText } from './icons.jsx'
+import { LEGAL_DOCS, LEGAL_DOC_GROUPS, LEGAL_DOC_CSS, toHtml, toPlainText } from '../lib/legalDocs.js'
+import { downloadLegalDoc } from '../lib/legalDocFiles.js'
 
-import complaintDeposit from '../../예시/서류/01-소장_임대차보증금반환.txt?raw'
-import complaintLoan from '../../예시/서류/02-소장_대여금(소액).txt?raw'
-import complaintTort from '../../예시/서류/03-소장_손해배상(자).txt?raw'
-import brief from '../../예시/서류/04-준비서면(2)_원상복구범위.txt?raw'
-import evidenceList from '../../예시/서류/05-증거목록_갑제1호증부터제6호증.txt?raw'
-import answer from '../../예시/서류/06-답변서.txt?raw'
-import petition from '../../예시/서류/07-기일변경신청서.txt?raw'
-import correction from '../../예시/서류/08-보정서.txt?raw'
-import demandLetter from '../../예시/서류/09-내용증명_보증금반환최고.txt?raw'
-
-const TEMPLATES = [
-  { key: 'complaint-deposit', group: '소장', name: '임대차보증금 반환', body: complaintDeposit, note: '기간 만료·목적물 인도 후 보증금을 못 받은 경우' },
-  { key: 'complaint-loan', group: '소장', name: '대여금 (소액)', body: complaintLoan, note: '소가 3,000만원 이하 — 소액사건' },
-  { key: 'complaint-tort', group: '소장', name: '손해배상(자)', body: complaintTort, note: '교통사고 — 치료비·일실수입·위자료를 나눠 적는 형태' },
-  { key: 'brief', group: '준비서면', name: '준비서면(2)', body: brief, note: '상대방 주장을 항목별로 반박하는 구조' },
-  { key: 'evidence', group: '증거목록', name: '갑 제1~6호증', body: evidenceList, note: '서증명·입증취지·작성자·작성일을 표로' },
-  { key: 'answer', group: '답변서', name: '답변서 (피고)', body: answer, note: '인정·부인·항변을 나눠 적는 구조' },
-  { key: 'petition', group: '신청서', name: '기일변경신청서', body: petition, note: '신청취지 + 신청이유' },
-  { key: 'correction', group: '신청서', name: '보정서', body: correction, note: '보정명령의 항목별로 답하는 형태' },
-  { key: 'demand', group: '소 제기 전', name: '내용증명', body: demandLetter, note: '소를 내기 전 최고 — 지연손해금 기산일의 근거가 된다' },
-]
-
-const GROUPS = [...new Set(TEMPLATES.map((t) => t.group))]
+// 문서마다 한 번만 만든다 — 목록을 오갈 때 다시 계산하지 않게
+const RENDERED = Object.fromEntries(LEGAL_DOCS.map((d) => [d.key, { html: toHtml(d), text: toPlainText(d) }]))
 
 export default function TemplateViewer({ open, onClose }) {
-  const [current, setCurrent] = useState(TEMPLATES[0].key)
+  const [current, setCurrent] = useState(LEGAL_DOCS[0].key)
   const [copied, setCopied] = useState(false)
-  const doc = TEMPLATES.find((t) => t.key === current) || TEMPLATES[0]
+  const scrollRef = useRef(null)
+  const doc = LEGAL_DOCS.find((t) => t.key === current) || LEGAL_DOCS[0]
+
+  // 다른 문서를 고르면 종이를 맨 위부터 보여준다
+  useEffect(() => { scrollRef.current?.scrollTo({ top: 0 }) }, [current])
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(doc.body)
+      await navigator.clipboard.writeText(RENDERED[doc.key].text)
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1600)
     } catch { /* 클립보드를 막아둔 브라우저 */ }
@@ -51,28 +36,40 @@ export default function TemplateViewer({ open, onClose }) {
 
   return (
     <Modal
-      open={open} onClose={onClose} maxW="max-w-[880px]"
+      open={open} onClose={onClose} maxW="max-w-[1040px]" variant="templateViewer"
       title="템플릿 보기"
-      sub="실제 법원 서식으로 만든 예시입니다. 내용은 지어낸 것이니 그대로 내지 마세요."
-      footer={<><Button variant="neutral" size="sm" onClick={copy}>{copied ? <><Check size={15} /> 복사했습니다</> : <><Copy size={15} /> 본문 복사</>}</Button><span className="flex-1" /><Button size="sm" onClick={onClose}>확인</Button></>}
+      sub="법원 제출 서면의 양식 예시입니다. 당사자·금액·날짜는 지어낸 것이니 내 사건에 맞게 바꿔 쓰세요."
+      footer={(
+        <>
+          <Button variant="neutral" size="sm" className="mr-auto min-w-[108px] gap-1.5" onClick={copy}>
+            {copied ? <><Check size={15} /> 복사함</> : <><Copy size={15} /> 본문 복사</>}
+          </Button>
+          <Button variant="neutral" size="sm" className="min-w-[132px] gap-1.5" onClick={() => downloadLegalDoc(doc.key)}>
+            <Download size={15} /> 워드 다운로드
+          </Button>
+          <Button size="sm" className="min-w-[112px]" onClick={onClose}>확인</Button>
+        </>
+      )}
     >
-      <div className="grid gap-4 sm:grid-cols-[210px_minmax(0,1fr)]">
-        <nav aria-label="템플릿 목록" className="space-y-3 sm:max-h-[52vh] sm:overflow-y-auto sm:pr-1">
-          {GROUPS.map((group) => (
-            <div key={group}>
-              <p className="mb-1 px-1 text-[11px] font-semibold text-ink-400">{group}</p>
+      <style>{LEGAL_DOC_CSS}</style>
+      <div className="grid h-full min-h-0 gap-4 sm:grid-cols-[232px_minmax(0,1fr)] sm:gap-6">
+        <nav aria-label="템플릿 목록" className="min-h-[300px] rounded-xl bg-[#f8fafc] px-2 py-[14px] sm:h-full sm:overflow-y-auto">
+          {LEGAL_DOC_GROUPS.map((group) => (
+            <div key={group} className="mb-3 last:mb-0">
+              <p className="h-[22px] px-1.5 text-[11px] font-semibold leading-5 text-[#667085]">{group}</p>
               <div className="space-y-1">
-                {TEMPLATES.filter((t) => t.group === group).map((item) => (
+                {LEGAL_DOCS.filter((t) => t.group === group).map((item) => (
                   <button
                     key={item.key}
                     type="button"
+                    aria-current={item.key === current ? 'true' : undefined}
                     onClick={() => setCurrent(item.key)}
                     className={cx(
-                      'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors',
-                      item.key === current ? 'bg-brand-50 font-semibold text-brand-600' : 'text-ink-600 hover:bg-ink-50',
+                      'flex h-[38px] w-full items-center gap-2 rounded-lg px-2.5 text-left text-[13px] transition-colors',
+                      item.key === current ? 'bg-[#eaf2ff] font-semibold text-[#2f6fed]' : 'font-medium text-[#344054] hover:bg-white',
                     )}
                   >
-                    <FileText size={14} className="shrink-0" />
+                    <FileText size={15} className="shrink-0 opacity-70" />
                     <span className="min-w-0 truncate">{item.name}</span>
                   </button>
                 ))}
@@ -81,16 +78,21 @@ export default function TemplateViewer({ open, onClose }) {
           ))}
         </nav>
 
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-[15px] font-bold text-ink-900">{doc.name}</h3>
-            <Badge tone="gray">{doc.group}</Badge>
+        <section className="flex min-h-[520px] min-w-0 flex-col sm:h-full">
+          <div className="flex items-center gap-2.5">
+            <h3 className="min-w-0 truncate text-[20px] font-semibold leading-8 text-[#1c2430]">{doc.name}</h3>
+            <span className="grid h-6 shrink-0 place-items-center rounded-full bg-[#eaf2ff] px-2.5 text-[12px] font-semibold text-[#2f6fed]">{doc.group}</span>
           </div>
-          <p className="mt-1 text-xs text-ink-500">{doc.note}</p>
-          <pre className="mt-3 max-h-[46vh] overflow-auto rounded-xl border border-ink-200 bg-ink-50 p-4 text-[12px] leading-[1.75] text-ink-700">
-            {doc.body}
-          </pre>
-        </div>
+          <p className="mt-0.5 truncate text-[13px] font-medium leading-5 text-[#667085]">{doc.desc}</p>
+
+          {/* 종이 — PDF 뷰어처럼 회색 바탕 위에 A4 한 장. 글자는 그대로 선택된다. */}
+          <div ref={scrollRef} className="mt-3 min-h-0 flex-1 overflow-auto rounded-xl bg-[#eef0f3] px-3 py-5 lg:px-8">
+            <div
+              className="mx-auto min-h-[848px] w-full max-w-[600px] bg-white px-[2.2em] pb-[3.6em] pt-[4em] text-[12px] lg:px-[3.2em] lg:text-[12.5px] shadow-[0_1px_3px_rgba(16,24,40,0.12),0_8px_24px_rgba(16,24,40,0.08)] selection:bg-[#cfe0ff]"
+              dangerouslySetInnerHTML={{ __html: RENDERED[doc.key].html }}
+            />
+          </div>
+        </section>
       </div>
     </Modal>
   )

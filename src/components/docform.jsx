@@ -11,8 +11,8 @@ import Modal from './Modal.jsx'
 import { useToast } from '../context/ToastContext.jsx'
 import { Card, Button, IconButton, Badge, Progress, inputCls, cx } from './ui.jsx'
 import {
-  Search, Star, ChevronRight, ChevronDown, Check, ArrowLeft, ArrowRight,
-  Upload, Eye, AlertTriangle, Lightbulb, Shield, HelpCircle, Trash, Plus, X, FileText, Printer, Sparkles,
+  Search, ChevronRight, ChevronDown, Check, ArrowLeft, ArrowRight,
+  Upload, Eye, AlertTriangle, Lightbulb, Shield, Trash, Plus, X, FileText, Printer, Sparkles,
 } from './icons.jsx'
 import { won, courts } from '../lib/complaint.js'
 import { missingItems } from '../lib/evidenceMatch.js'
@@ -1550,53 +1550,54 @@ export function StageBar({ stage, labels = ['유형·자가진단', '정보 입�
 /** 소장 유형 · 신청서 유형처럼 "무엇을 만들지" 고르는 목록 화면 */
 export function PickList({ heading, placeholder, items, onPick, onBack, backLabel, footNote, banner }) {
   const [q, setQ] = useState('')
-  const [faves, setFaves] = useState([])
   const list = items.filter((t) => !q.trim() || t.title.includes(q) || t.desc.includes(q) || (t.short || '').includes(q))
-  const toggleFave = (key) => setFaves((f) => (f.includes(key) ? f.filter((k) => k !== key) : [...f, key]))
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="w-full">
       {onBack && (
-        <button onClick={onBack} className="mb-4 flex items-center gap-1 text-sm font-medium text-ink-500 hover:text-ink-700">
-          <ArrowLeft size={16} /> {backLabel || '문서 종류 다시 고르기'}
+        <button onClick={onBack} className="mb-6 flex items-center gap-2.5 text-[13px] font-medium leading-[1.6] text-ink-400 hover:text-ink-600">
+          <ArrowLeft size={20} /> {backLabel || '문서 종류 다시 고르기'}
         </button>
       )}
 
       {banner}
 
-      <h2 className="text-center text-2xl font-bold text-ink-900">{heading}</h2>
-
-      <div className="relative mx-auto mt-6 max-w-2xl">
-        <input className={cx(inputCls, 'h-14 pr-12 text-base')} placeholder={placeholder} value={q} onChange={(e) => setQ(e.target.value)} />
-        <Search size={20} className="absolute right-4 top-1/2 -translate-y-1/2 text-ink-400" />
+      <div className="py-5">
+        <h2 className="text-center text-2xl font-bold leading-[1.6] tracking-[-0.01em] text-ink-900 sm:text-[30px]">{heading}</h2>
       </div>
 
-      <Card className="mt-6 p-2">
+      <div className="relative mx-auto mt-4 max-w-[727px]">
+        <input
+          className="h-[78px] w-full rounded-[14px] border border-ink-200 bg-white px-6 pr-14 text-base font-medium text-ink-700 outline-none transition placeholder:text-ink-500 focus:border-brand-300 focus:ring-4 focus:ring-brand-100 sm:text-lg"
+          placeholder={placeholder}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <Search size={24} className="absolute right-6 top-1/2 -translate-y-1/2 text-ink-500" />
+      </div>
+
+      <div className="mt-6 overflow-hidden rounded-[20px] bg-white px-6">
         {list.length === 0 && <p className="py-14 text-center text-sm text-ink-400">“{q}” 유형은 아직 준비 중이에요. 다른 검색어로 찾아보세요.</p>}
         {list.map((t, i) => (
-          <div key={t.key} className={cx('flex items-center gap-3 px-4 py-4 transition-colors hover:bg-brand-50/40', i > 0 && 'border-t border-ink-100')}>
-            <button
-              onClick={() => toggleFave(t.key)}
-              aria-label="즐겨찾기"
-              className={cx('shrink-0 p-1 transition-colors', faves.includes(t.key) ? 'text-red-400' : 'text-ink-300 hover:text-ink-400')}
-            >
-              <Star size={20} />
-            </button>
-            <button onClick={() => onPick(t.key)} className="flex flex-1 items-center gap-3 text-left">
-              <span className="flex-1">
-                <span className="flex items-center gap-1.5">
-                  <span className="text-lg font-bold text-ink-900">{t.title}</span>
-                  <HelpCircle size={15} className="text-ink-300" />
-                </span>
-                <span className="mt-0.5 block text-sm text-ink-500">{t.desc}</span>
-              </span>
-              <ChevronRight size={22} className="shrink-0 text-ink-300" />
-            </button>
-          </div>
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => onPick(t.key)}
+            className={cx(
+              'group flex w-full items-center justify-between gap-5 px-4 py-6 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-300 sm:px-10',
+              i > 0 && 'border-t border-ink-100',
+            )}
+          >
+            <span className="min-w-0 flex-1">
+              <span className="block text-lg font-semibold leading-[1.6] tracking-[-0.01em] text-ink-800 transition-[font-size,color] duration-150 group-hover:text-brand-400 sm:text-2xl sm:group-hover:text-[26px]">{t.title}</span>
+              <span className="block text-sm font-medium leading-[1.6] tracking-[-0.01em] text-ink-600 transition-[font-size] duration-150 sm:text-base sm:group-hover:text-lg">{t.desc}</span>
+            </span>
+            <ChevronRight size={24} className="shrink-0 text-ink-300 transition-[width,height,color] duration-150 group-hover:h-[26px] group-hover:w-[26px] group-hover:text-brand-400" />
+          </button>
         ))}
-      </Card>
+      </div>
 
-      {footNote && <p className="mt-6 whitespace-pre-line text-center text-[13px] leading-relaxed text-ink-400">{footNote}</p>}
+      {footNote && <p className="mt-6 whitespace-pre-line text-center text-sm font-medium leading-[1.6] tracking-[-0.01em] text-ink-400 sm:text-base">{footNote}</p>}
     </div>
   )
 }

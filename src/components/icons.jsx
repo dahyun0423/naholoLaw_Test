@@ -35,6 +35,8 @@ export const BrandLogo = ({
   markSize = 30,
   wordmarkSize = 18,
   gap = 8,
+  tracking = '-0.025em',
+  leading = 1.6,
   className = '',
 }) => (
   <span
@@ -48,8 +50,8 @@ export const BrandLogo = ({
         fontFamily: 'Paperlogy, Pretendard, sans-serif',
         fontSize: wordmarkSize,
         fontWeight: 700,
-        letterSpacing: '-0.025em',
-        lineHeight: 1.6,
+        letterSpacing: tracking,
+        lineHeight: leading,
       }}
     >
       나홀로법에
@@ -91,6 +93,7 @@ export const ChevronDown = make(<path d="m6 9 6 6 6-6" />)
 export const ChevronRight = make(<path d="m9 6 6 6-6 6" />)
 export const Plus = make(<><path d="M12 5v14M5 12h14" /></>)
 export const Upload = make(<><path d="M12 16V4" /><path d="m7 9 5-5 5 5" /><path d="M5 20h14" /></>)
+export const Download = make(<><path d="M12 4v12" /><path d="m7 11 5 5 5-5" /><path d="M5 20h14" /></>)
 export const Sparkles = make(<><path d="M12 3l1.8 4.7L18.5 9l-4.7 1.8L12 15l-1.8-4.2L5.5 9l4.7-1.3L12 3Z" /><path d="M19 14l.8 2.2 2.2.8-2.2.8L19 20l-.8-2.2-2.2-.8 2.2-.8L19 14Z" /></>)
 export const Shield = make(<><path d="M12 3 5 6v6c0 4.5 3 7.5 7 9 4-1.5 7-4.5 7-9V6l-7-3Z" /><path d="m9 12 2 2 4-4" /></>)
 export const Scroll = make(<><path d="M6 4h11a2 2 0 0 1 2 2v12a2 2 0 0 0 2 2H8a2 2 0 0 1-2-2V4Z" /><path d="M6 4a2 2 0 0 0-2 2v2h2" /><path d="M9 8h7M9 12h7M9 16h4" /></>)

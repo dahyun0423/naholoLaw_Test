@@ -27,7 +27,7 @@ import { writingTips } from '../data/mock.js'
 import { caseTitle } from '../lib/casebook.js'
 import { boardRows, groupLabel } from '../lib/docboard.js'
 import { checkDoc } from '../lib/docgate.js'
-import { ArrowRight, Check, DocFolder } from '../components/icons.jsx'
+import { ArrowRight } from '../components/icons.jsx'
 
 import calcImg from '../assets/doc/calculator.png'
 import guideImg from '../assets/doc/guidebook.png'
@@ -81,6 +81,7 @@ export default function Documents() {
   const [wizardCaseId, setWizardCaseId] = useState(null)
   const [deferCaseLink, setDeferCaseLink] = useState(false)
   const [documentCaseId, setDocumentCaseId] = useState(null)
+  const [browsingWithoutCase, setBrowsingWithoutCase] = useState(false)
   const [pendingCaseId, setPendingCaseId] = useState(null)
   const [gate, setGate] = useState(null)      // 전제가 안 맞을 때 띄우는 안내
   const [pickCase, setPickCase] = useState(false)
@@ -120,6 +121,7 @@ export default function Documents() {
   const confirmCase = () => {
     if (!pendingCaseId) return
     setDocumentCaseId(pendingCaseId)
+    setBrowsingWithoutCase(false)
     setActiveCaseId(pendingCaseId)
     setPickCase(false)
     setPendingCaseId(null)
@@ -132,6 +134,7 @@ export default function Documents() {
     if (kind !== 'complaint' || !caseId) return
     if (rawCases.some((c) => c.id === caseId)) {
       setDocumentCaseId(caseId)
+      setBrowsingWithoutCase(false)
       setActiveCaseId(caseId)
       setSelected(kind)
       setWizardCaseId(caseId)
@@ -180,6 +183,21 @@ export default function Documents() {
           <p className="text-base text-ink-500">필요한 정보를 입력하면 AI가 자동으로 법률 문서를 작성합니다</p>
         </div>
 
+        {browsingWithoutCase ? (
+          <div className="flex min-w-[320px] items-center justify-between self-start overflow-hidden rounded-lg border border-ink-200 bg-white px-4 py-2">
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[14px] font-semibold leading-[1.6] text-ink-700">사건 없이 소장 둘러보는 중</span>
+              <span className="block truncate text-[12px] font-medium leading-[1.6] text-ink-400">소장유형을 확인해보세요!</span>
+            </span>
+            <button
+              type="button"
+              onClick={openCasePicker}
+              className="shrink-0 px-2 py-2.5 text-[12px] font-medium text-brand-500 underline underline-offset-2 hover:text-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+            >
+              사건 선택하기
+            </button>
+          </div>
+        ) : (
         <div className="flex min-h-11 items-center gap-4 self-start rounded-[10px] border border-ink-200 bg-white px-4 py-2 text-[13px]">
           {documentCase && (
             <span className="mr-1 min-w-0 border-r border-ink-200 pr-4">
@@ -197,12 +215,13 @@ export default function Documents() {
           <span className="h-4 w-px bg-ink-200" />
           <button
             type="button"
-            onClick={() => { setDocumentCaseId(null); setSelected(null) }}
+            onClick={() => { setDocumentCaseId(null); setBrowsingWithoutCase(true); setSelected(null) }}
             className="text-ink-300 hover:text-ink-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
           >
             사건 없이 둘러보기
           </button>
         </div>
+        )}
       </div>
 
       {/* 사건이 있으면 해당 유형으로 바로, 없으면 유형을 자유롭게 둘러본다.
@@ -236,15 +255,16 @@ export default function Documents() {
 
           두 카드는 격자의 stretch로 같은 높이를 쓴다 — 아래 끝이 어긋나면
           섹션이 두 조각으로 읽힌다. 그래서 제목 크기·안쪽 여백도 맞춰 둔다. */}
-      <div data-guide="doc-recent" className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_291px]">
-        <RecentDocs rows={created.slice(0, RECENT_LIMIT)} total={created.length} />
+      <div data-guide="doc-recent" className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+        <RecentDocs rows={created.slice(0, RECENT_LIMIT)} />
 
-        <section className="rounded-[14px] bg-white p-6">
+        {/* 배포 사이트(sololaw.site/document) 「작성 팁」과 같은 모양 */}
+        <section className="rounded-2xl border border-ink-200 bg-white p-6">
           <h2 className="mb-4 text-lg font-bold text-ink-900">작성 팁</h2>
           <ul className="flex flex-col gap-3">
             {writingTips.map((t) => (
               <li key={t} className="flex items-start gap-2 text-sm text-ink-700">
-                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-300" />{t}
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-400" />{t}
               </li>
             ))}
           </ul>
@@ -257,7 +277,7 @@ export default function Documents() {
         onClose={() => { setPickCase(false); setPendingCaseId(null) }}
         maxW="max-w-[560px]"
         variant="casePicker"
-        title="어느 사건인가요?"
+        title="어느 사건의 문서인가요?"
         sub="고른 사건을 현재 작업 기준으로 사용합니다. 새 소장은 완성 후 따로 연결할 수 있어요."
         footer={<Button size="sm" disabled={!pendingCaseId} onClick={confirmCase}>확인</Button>}
       >
@@ -276,15 +296,14 @@ export default function Documents() {
                 )}
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[14px] font-bold text-ink-900">{caseTitle(c)}</span>
-                  <span className="block truncate text-[12px] text-ink-500">
+                  <span className={cx('block truncate text-[14px] font-semibold leading-[1.6]', on ? 'text-brand-300' : 'text-ink-700')}>{caseTitle(c)}</span>
+                  <span className={cx('block truncate text-[12px] font-medium leading-[1.6]', on ? 'text-brand-200' : 'text-ink-400')}>
                     {[c.caseNo || '사건번호 없음', c.form?.court].filter(Boolean).join(' · ')}
                   </span>
                 </span>
                 <span className="rounded-full bg-brand-50 px-2.5 py-1 text-[12px] font-semibold text-brand-500">
                   {c.status?.replace(/\s/g, '') || '진행중'}
                 </span>
-                {on && <Check size={16} className="shrink-0 text-brand-400" aria-hidden="true" />}
               </button>
             )
           })}
@@ -379,30 +398,25 @@ export default function Documents() {
 }
 
 /* ────────────────── 최근 생성 문서 ──────────────────
-   Figma 「최근 생성 문서」(1972:41038) 그대로.
+   배포 사이트(sololaw.site/document) 「최근 생성 문서」와 같은 모양.
 
-     카드   흰 면 · radius 14 · padding 24 · 제목과 표 사이 24
-     제목   18 SemiBold grey900
-     머리글 14 Medium grey600 · 문서명 / 유형 / 생성일
-     줄     폴더 26×18 + gap 12 · 위아래 8 · 안쪽 글 14 Medium grey600 · 밑선 grey100
+     카드   흰 면 · 선 grey200 · radius 16 · padding 24 · 제목 아래 16
+     제목   18 Bold grey900
+     머리글 14 grey400 · 문서명 / 유형 / 생성일 · 밑선 grey100 · 아래 8
+     줄     연파랑 네모 16 + gap 8 · 위아래 12 · 14 · 문서명 grey800 / 유형 grey500 / 생성일 grey400 · 밑선 grey50
 
-   머리글은 폴더 자리만큼 들여쓰지 않는다(피그마 그대로). 대신 두 격자의
-   고정 열 폭을 같게 두어 「유형」·「생성일」이 정확히 같은 x에서 시작한다. */
+   실서비스는 줄마다 열 폭이 글자 길이를 따라가 「유형」·「생성일」이 줄마다 흔들린다.
+   여기서는 머리글과 줄이 같은 고정 열 폭을 써서 세로로 맞춘다. */
 
-const RECENT_COLS = 'grid-cols-[minmax(0,1fr)_84px_96px] sm:grid-cols-[minmax(0,1fr)_120px_120px]'
+const RECENT_COLS = 'grid-cols-[minmax(0,1fr)_60px_84px]'
 
-function RecentDocs({ rows, total }) {
+function RecentDocs({ rows }) {
   return (
-    <section className="rounded-[14px] bg-white p-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-bold text-ink-900">최근 생성 문서</h2>
-        <Link to="/app/evidence" className="text-sm text-brand-400 hover:underline">
-          {total > rows.length ? `전체 ${total}건 보기 →` : '완성된 문서 보기 →'}
-        </Link>
-      </div>
+    <section className="rounded-2xl border border-ink-200 bg-white p-6">
+      <h2 className="mb-4 text-lg font-bold text-ink-900">최근 생성 문서</h2>
 
       <div className="flex flex-col">
-        <div className={cx('grid items-center gap-4 border-b border-ink-100 pb-2 text-sm text-ink-400', RECENT_COLS)}>
+        <div className={cx('grid gap-4 border-b border-ink-100 pb-2 text-sm text-ink-400', RECENT_COLS)}>
           <span>문서명</span>
           <span>유형</span>
           <span>생성일</span>
@@ -416,10 +430,10 @@ function RecentDocs({ rows, total }) {
                 <Link
                   to={`/app/evidence?case=${r.caseKey}`}
                   title={`${r.caseTitle} · ${r.title}`}
-                  className={cx('grid items-center gap-4 py-3 text-sm transition-colors hover:bg-ink-50', RECENT_COLS)}
+                  className={cx('grid items-center gap-4 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300', RECENT_COLS)}
                 >
-                  <span className="flex min-w-0 items-center gap-2 truncate text-ink-800">
-                    <DocFolder className="shrink-0" />
+                  <span className="flex min-w-0 items-center gap-2 text-ink-800">
+                    <span aria-hidden="true" className="h-4 w-4 shrink-0 rounded-sm bg-brand-100" />
                     <span className="truncate">{fileName(r.title)}</span>
                   </span>
                   <span className="truncate text-ink-500">{groupLabel(r.group)}</span>
@@ -442,8 +456,8 @@ function RecentDocs({ rows, total }) {
      공통  radius 20 · paddingTop 8 · gap 8 · 본문 폭 205
            제목 24 SemiBold / 설명 15 Medium / 일러스트 248×219 하단 밀착
 
-   일러스트도 variant마다 다른 그림이다(기본=회색, 호버=파랑). 두 장을 겹쳐 두고
-   opacity로 바꾼다 — 넘길 때 깜빡이지 않는다. */
+   종이 두 장과 하단 패널은 각각 독립 레이어로 둔다. hover 배경이 일러스트의
+   불투명한 바탕에 가려지지 않아 카드 전체가 하나의 파란 면으로 이어진다. */
 
 function TypeCard({ d, on, onClick }) {
   return (
@@ -451,44 +465,50 @@ function TypeCard({ d, on, onClick }) {
       type="button"
       onClick={onClick}
       className={cx(
-        'group relative flex w-full flex-col items-start gap-1 overflow-hidden rounded-2xl border p-6 text-left transition-[background-color,border-color,transform] duration-200 active:scale-[0.995]',
-        on ? 'border-brand-200 bg-brand-50' : 'border-ink-200 bg-ink-100 hover:border-brand-200 hover:bg-brand-50',
+        // 카드가 차지하는 현재 폭과 높이는 그대로 둔다. Figma의 hover variant가
+        // 248×296 → 250×298로 커지는 변화만 0.8% scale로 재현한다.
+        'group relative z-0 flex w-full flex-col items-start gap-0 overflow-hidden rounded-[20px] border p-6 text-left transition-[background-color,border-color,transform] duration-200 ease-out hover:z-10 hover:scale-[1.0081] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-2 active:scale-[0.995]',
+        on ? 'scale-[1.0081] border-brand-200 bg-[#e8f3ff]' : 'border-ink-200 bg-[#f2f4f6] hover:border-brand-200 hover:bg-[#e8f3ff]',
       )}
     >
       <span className={cx(
-        'text-lg font-bold leading-7 transition-colors duration-200',
+        'relative z-10 text-lg font-bold leading-7 transition-colors duration-200',
         on ? 'text-brand-400' : 'text-ink-700 group-hover:text-brand-400',
       )}>
         {d.title}
       </span>
       <span className={cx(
-        'text-sm leading-5 transition-colors duration-200',
+        'relative z-10 text-sm font-medium leading-5 transition-colors duration-200',
         on ? 'text-brand-300' : 'text-ink-500 group-hover:text-brand-300',
       )}>
         {d.desc}
       </span>
 
-      {/* Figma는 완성 이미지를 교체하지 않는다. 종이 두 장과 하단 반투명 판이
-          각각 움직이는 variant라서, 같은 레이어를 유지한 채 회전·이동·색만 보간한다. */}
-      <span className="relative mt-6 block aspect-[248/255] w-full overflow-hidden" aria-hidden="true">
-        <span
-          className={cx(
-            'absolute left-[27%] top-[7%] h-[76%] w-[66%] rounded-[8%] bg-[#c0cad7] transition-[left,top,transform] duration-300 ease-out',
-            on ? 'left-[23%] top-[1%] rotate-[14.22deg]' : 'rotate-[5.54deg] group-hover:left-[23%] group-hover:top-[1%] group-hover:rotate-[14.22deg]',
-          )}
-        />
-        <span
-          className={cx(
-            'absolute left-[10%] top-[6%] h-[76%] w-[66%] rounded-[8%] bg-white shadow-[0_0_22px_rgba(0,0,0,0.10)] transition-[left,top,transform] duration-300 ease-out',
-            on ? 'left-[8%] top-[2%] -rotate-[7.28deg]' : '-rotate-[4.3deg] group-hover:left-[8%] group-hover:top-[2%] group-hover:-rotate-[7.28deg]',
-          )}
-        />
-        <span
-          className={cx(
-            'absolute inset-x-0 bottom-0 h-[36.25%] rounded-b-[20px] transition-colors duration-300',
-            on ? 'bg-[rgba(198,225,255,0.34)]' : 'bg-[rgba(242,244,246,0.68)] group-hover:bg-[rgba(198,225,255,0.34)]',
-          )}
-        />
+      {/* PNG 배경을 바꾸는 대신 Figma의 종이 두 장과 하단 패널을 독립 레이어로
+          그린다. 그래야 hover 때 카드의 파란 배경이 중간에서 끊기지 않는다. */}
+      <span className="relative mt-6 block aspect-[248/240] w-full" aria-hidden="true">
+        <span className="absolute inset-x-[-24px] bottom-[-24px] top-0 overflow-hidden">
+          <span
+            className={cx(
+              'absolute left-[27%] top-[10%] h-[82%] w-[66%] rounded-[8%] bg-[#c0cad7] transition-[left,top,transform] duration-300 ease-out',
+              on
+                ? 'left-[23%] top-[7%] rotate-[14.22deg]'
+                : 'rotate-[5.54deg] group-hover:left-[23%] group-hover:top-[7%] group-hover:rotate-[14.22deg]',
+            )}
+          />
+          <span
+            className={cx(
+              'absolute left-[10%] top-[11%] h-[82%] w-[66%] rounded-[8%] bg-white shadow-[0_0_22px_rgba(0,0,0,0.10)] transition-[left,top,transform] duration-300 ease-out',
+              on
+                ? 'left-[8%] top-[8%] -rotate-[7.28deg]'
+                : '-rotate-[4.3deg] group-hover:left-[8%] group-hover:top-[8%] group-hover:-rotate-[7.28deg]',
+            )}
+          />
+          <span
+            data-active={on ? 'true' : undefined}
+            className="doctype-glass absolute inset-x-0 bottom-0 h-[41%]"
+          />
+        </span>
       </span>
     </button>
   )

@@ -86,34 +86,41 @@ export const helpContents = [
   { title: '기일변경신청서', type: '템플릿' },
 ]
 
+// 대시보드 「자주 묻는 질문」 — source는 질문 내용과 맞는 공식 안내 페이지로 바로 간다.
+//   (찾기쉬운 생활법령정보 「나홀로 민사소송」 목차의 해당 항목, 2026-09-17 확인)
 export const popularFaq = [
   {
-    q: '재판 준비서면 작성 방법은?', views: 512,
+    q: '재판 준비서면 작성 방법은?',
     a: '사건번호와 당사자를 적고, 상대방 주장 요지 → 쟁점별 내 주장과 이유 → 이를 뒷받침하는 증거 순서로 정리하세요. 준비서면에서 인용한 증거자료는 함께 제출해야 합니다.',
     note: '새로운 주장을 담았다면 상대방에게 송달될 시간을 고려해 변론기일 7일 전까지 제출하는 것이 원칙입니다.',
     to: '/app/documents', cta: '준비서면 작성하기',
-    source: 'https://www.scourt.go.kr/nm/min_1/min_1_2/min_1_2_5/min_1251/index.html',
+    source: 'https://easylaw.go.kr/CSP/CnpClsMain.laf?popMenu=ov&csmSeq=568&ccfNo=5&cciNo=3&cnpClsNo=2',
+    sourceTitle: '찾기쉬운 생활법령정보 · 준비서면의 작성방법',
   },
   {
-    q: '답변서를 추가로 제출하려면?', views: 324,
+    q: '답변서를 추가로 제출하려면?',
     a: '이미 답변서를 냈더라도 주장이나 증거를 보완할 내용이 있으면 준비서면으로 추가 제출할 수 있습니다. 기존 답변을 반복하기보다 새 쟁점, 반박 내용, 증거와의 관계를 분명히 적으세요.',
     note: '법원이 정한 제출기한이 있다면 그 기한을 우선 확인하고, 전자소송 사건은 전자소송포털의 서류제출 메뉴에서 제출합니다.',
     to: '/app/documents', cta: '추가 서면 준비하기',
-    source: 'https://ecfs.scourt.go.kr/',
+    source: 'https://easylaw.go.kr/CSP/CnpClsMain.laf?popMenu=ov&csmSeq=568&ccfNo=5&cciNo=2&cnpClsNo=1',
+    sourceTitle: '찾기쉬운 생활법령정보 · 피고의 답변서 제출',
   },
   {
-    q: '증거 제출은 왜 중요할까요?', views: 289,
+    q: '증거 제출은 왜 중요할까요?',
     a: '민사소송에서는 당사자가 자신의 주장이나 상대방에 대한 항변을 증명할 자료를 내야 합니다. 계약서·송금내역·대화기록처럼 각 자료가 어떤 사실을 증명하는지 입증취지를 함께 적어야 재판부가 쟁점과 연결해 볼 수 있습니다.',
     note: '증거는 가능하면 변론준비기일이 끝나기 전에 정리해 제출하고, 원본 보관 여부도 확인하세요.',
     to: '/app/evidence', cta: '증빙자료 정리하기',
-    source: 'https://easylaw.go.kr/CSP/CnpClsMain.laf?ccfNo=5&cciNo=3&cnpClsNo=3&csmSeq=568&menuType=cnpcls&popMenu=ov',
+    source: 'https://easylaw.go.kr/CSP/CnpClsMain.laf?popMenu=ov&csmSeq=568&ccfNo=5&cciNo=3&cnpClsNo=3',
+    sourceTitle: '찾기쉬운 생활법령정보 · 증거의 신청 및 조사',
   },
   {
-    q: '준비서면 작성 시 주의할 점은?', views: 156,
-    a: '감정적인 표현과 같은 내용의 반복을 줄이고, 쟁점마다 결론·이유·증거를 묶어 짧게 쓰세요. 소장이나 앞서 낸 준비서면과 중복되는 내용은 불필요하게 반복하지 않는 것이 원칙입니다.',
-    note: '구체적인 사실과 날짜, 금액, 증거번호가 서로 일치하는지 제출 전에 다시 확인하세요.',
-    to: '/app/documents', cta: '작성 중 문서 점검하기',
-    source: 'https://easylaw.go.kr/CSP/CnpClsMain.laf?ccfNo=5&cciNo=3&cnpClsNo=2&csmSeq=568',
+    q: '판결에 불복하려면 언제까지 항소해야 하나요?',
+    a: '제1심 판결에 불복하려면 판결서가 송달된 날부터 2주 이내에 항소장을 제1심 법원에 제출해야 합니다. 항소장에는 당사자와 원판결의 표시, 항소취지를 적으세요.',
+    note: '항소기간은 늘릴 수 없는 불변기간입니다. 선고일이 아니라 판결서를 송달받은 날을 기준으로 기한을 바로 등록해 두세요.',
+    noteLabel: '기한 확인',
+    to: '/app/schedule', cta: '항소기한 일정 등록하기',
+    source: 'https://www.law.go.kr/법령/민사소송법/제396조',
+    sourceTitle: '국가법령정보센터 · 민사소송법 제396조',
   },
 ]
 

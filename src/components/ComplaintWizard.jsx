@@ -746,14 +746,16 @@ export default function ComplaintWizard({ onExit, initialCase = null, deferCaseL
         onBack={onExit}
         footNote={'현재 지원하는 소장 유형은 계속 확대되고 있습니다.\n필요한 소장 유형을 순차적으로 추가해 나갈 예정입니다.'}
         banner={!initialCase && draft && (
-          <Card className="mb-5 flex flex-wrap items-center gap-3 border-brand-200 bg-brand-50/50 p-4">
-            <FileText size={18} className="text-brand-400" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold text-ink-900">작성하던 소장이 있어요 — {findType(draft.typeKey)?.title}</p>
-              <p className="text-xs text-ink-500">{savedAgo(draft.savedAt)} 저장 · 이어서 쓰면 입력한 내용이 그대로 복원됩니다.</p>
+          <Card className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl border-ink-100 bg-white px-6 py-4 shadow-none">
+            <FileText size={20} className="shrink-0 text-brand-400" />
+            <div className="min-w-0 flex-1 leading-[1.6]">
+              <p className="text-lg font-semibold text-ink-900">작성하던 소장이 있어요 — {findType(draft.typeKey)?.title}</p>
+              <p className="text-xs font-medium text-ink-500">{savedAgo(draft.savedAt)} 저장 · 이어서 쓰면 입력한 내용이 그대로 복원됩니다.</p>
             </div>
-            <Button size="sm" onClick={resume}>이어서 쓰기</Button>
-            <Button size="sm" variant="neutral" onClick={discard}>새로 시작</Button>
+            <div className="flex items-center gap-[13px]">
+              <Button size="sm" className="px-4" onClick={resume}>이어서 쓰기</Button>
+              <Button size="sm" variant="neutral" className="px-5 text-ink-400" onClick={discard}>새로 시작</Button>
+            </div>
           </Card>
         )}
       />
